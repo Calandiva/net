@@ -42,12 +42,17 @@
 인터넷이 없으면 웹폰트만 시스템 글꼴로 대체됩니다.
 
 ### 2. GitHub Pages
+이 저장소는 이미 `main` 에 올라가 있습니다. 남은 건 Pages 켜기 한 번뿐입니다.
+
+**Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / `(root)` → Save**
+
+1~2분 뒤 **https://calandiva.github.io/net/** 에서 열립니다.
+
+이후 수정할 때는:
 ```bash
-git remote add origin https://github.com/<사용자>/<저장소>.git
-git push -u origin main
+python build.py
+git add -A && git commit -m "메시지" && git push
 ```
-저장소 **Settings → Pages → Source: Deploy from a branch → Branch: main / (root) → Save**.
-1~2분 뒤 `https://<사용자>.github.io/<저장소>/` 에서 열립니다.
 (`.nojekyll` 이 있어 Jekyll 전처리를 건너뜁니다. 빌드 액션은 필요 없습니다.)
 
 ### 3. Vercel
