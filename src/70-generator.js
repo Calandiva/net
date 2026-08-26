@@ -146,9 +146,8 @@ function rollNet(s){
     wan:`10.${a}.${V.wan%250}`, flat:`10.${a}.10`, a
   };
   if (s.flat){
-    V.app = V.db = V.user = V.core;
-    N.app = N.db = N.user = N.flat;
-    if (!s.mgmtVlan){ V.mgmt = V.core; N.mgmt = N.flat; }
+    V.app = V.db = V.user = V.mgmt = V.core;
+    N.app = N.db = N.user = N.mgmt = N.flat;
   }
   return { N, V };
 }
@@ -230,7 +229,7 @@ function wireAll(s, N, V){
   if (s.ddos){
     const dd = mk('ddos', tier, SPINE, { name:'DDoS-01', model:rnd(T.ddos.models), bypass:pick(.85),
       vlan:V.core, th:rnd(['1Gbps / 100kpps','2Gbps / 200kpps','10Gbps / 1Mpps','40Gbps / 4Mpps']),
-      mip:N.mgmt+'.31/24' });
+      mip:N.mgmt+'.15/24' });
     up.forEach(u=>addEdge(u.id, dd.id, WANK));
     up = [dd]; tier += 1.05;
   }
@@ -280,7 +279,7 @@ function wireAll(s, N, V){
       if (s.ips){
         const ips = mk('ips', tier, SPINE, { name:'IPS-01', model:rnd(T.ips.models),
           dep:pick(.85)?'inline':'tap', act:rnd(['block','block','detect']), bypass:pick(.85),
-          vlan:V.dmz, mip:N.mgmt+'.21/24' });
+          vlan:V.dmz, mip:N.mgmt+'.14/24' });
         grp.forEach(f=>{ const e = addEdge(f.id, ips.id, FO);
           if (e) Object.assign(endProps(e, f.id), { ip:dmzGwIp+'/24', zone:'dmz', vlan:V.dmz }); });
         feed = [ips]; tier += 1.05;
@@ -296,7 +295,7 @@ function wireAll(s, N, V){
       tier += 1.2;
     } else if (k===1 && !s.dmz && s.ips){
       const ips = mk('ips', tier, SPINE, { name:'IPS-01', model:rnd(T.ips.models),
-        dep:'inline', act:'block', bypass:true, vlan:V.core, mip:N.mgmt+'.21/24' });
+        dep:'inline', act:'block', bypass:true, vlan:V.core, mip:N.mgmt+'.14/24' });
       grp.forEach(f=>addEdge(f.id, ips.id, FO));
       tier += 1.05;
     }
@@ -357,7 +356,7 @@ function wireAll(s, N, V){
   const trunkList = s.flat ? String(V.core) : [V.core,V.app,V.db,V.user,V.mgmt].join(',');
   const ssw = group('l2sw', s.srvSw, tier, SPINE, 1.3, i=>({
     name:'L2SW-SRV-0'+i, model:swModel, vlan:V.core, trunk:trunkList,
-    stp:s.stp, lacp:s.srvSw>1, mip:N.mgmt+'.'+(14+i)+'/24' }));
+    stp:s.stp, lacp:s.srvSw>1, mip:N.mgmt+'.'+(12+i)+'/24' }));
   peerLink(ssw, FO);
   fwLast.forEach(f=>ssw.forEach(x=>{ const e = addEdge(f.id, x.id, FO);
     if (e) Object.assign(endProps(e, f.id), { ip:insideNet+'.1/24', zone:'trust', vlan:V.core }); }));
@@ -407,7 +406,9 @@ function wireAll(s, N, V){
   };
   stages.forEach((grp,i)=>{
     const nh = downHopOf(i+1);
-    grp.forEach(f=>{ f.p.routes = nh ? `10.0.0.0/8 via ${nh}\n172.16.0.0/12 via ${nh}` : ''; });
+    /* 내부 대역만 아래로 보낸다. DMZ(172.16/12)는 1·2단에 직접 붙어 있고,
+       그보다 아래 단에서는 기본 경로로 위쪽에 도달하므로 정적 경로를 주면 루프가 된다. */
+    grp.forEach(f=>{ f.p.routes = nh ? `10.0.0.0/8 via ${nh}` : ''; });
   });
   if (s.core && !s.flat) l3.forEach(x=>x.p.defgw = insideNet+'.1');
   fwe.forEach(f=>{
@@ -459,7 +460,7 @@ function wireAll(s, N, V){
   const SCAN = N.db+'.100';
   const dbs = group('rdb', Math.max(1,s.db), tier, DATA, 1.05, i=>({
     name:'DB-0'+i, eng:dbSet.eng, model:dbSet.model,
-    ip:N.db+'.'+(20+i)+'/24', gw:dbGw, vlan:dbVlan, zone:'trust',
+    ip:N.db+'.'+(40+i)+'/24', gw:dbGw, vlan:dbVlan, zone:'trust',
     svc:dbSet.port+',22', dbha:s.db>1?dbSet.dbha:'none', sync:dbSet.sync,
     vip:s.db>1?SCAN:'', role:i===1?'pri':(['rac','tac'].includes(dbSet.dbha)?'both':'sec'),
     ha:s.db>1 ? (['rac','tac','group','patroni'].includes(dbSet.dbha)?'aa':'as') : 'none',
@@ -475,7 +476,7 @@ function wireAll(s, N, V){
     const stg = mk('storage', tier, DATA, { name:'STG-01', model:rnd(T.storage.models), proto,
       raid:rnd(['6','10','dp','5']), cap:rnd(['40TB','60TB','120TB','240TB','480TB']),
       mpio:true, ha:'aa', svc:proto==='nfs'?'2049':'3260',
-      ip:mgmtNet+'.50/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust' });
+      ip:mgmtNet+'.70/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust' });
     dbs.forEach(d=>{ addEdge(d.id, stg.id, proto==='fc'?FC:CU); d.p.store = stg.id; });
     ssw.forEach(x=>addEdge(x.id, stg.id, CU));
     tier += 1.2;
@@ -485,9 +486,9 @@ function wireAll(s, N, V){
   let sideT = appTier;
   if (s.cache){
     const ch = group('cache', pick(.8)?2:1, sideT, SIDE, 0.95, i=>({
-      name:'REDIS-0'+i, model:rnd(T.cache.models), ip:N.app+'.'+(40+i)+'/24', gw:appGw,
+      name:'REDIS-0'+i, model:rnd(T.cache.models), ip:N.app+'.'+(50+i)+'/24', gw:appGw,
       vlan:appVlan, zone:'trust', svc:'6379', ha:'as', prio:110-(i-1)*10,
-      vip:N.app+'.140', persist:pick(.6) }));
+      vip:N.app+'.149', persist:pick(.6) }));
     haPair(ch);
     if (ch.length<2) ch.forEach(c=>{ c.p.ha='none'; c.p.vip=''; });
     ch.forEach(c=>ssw.forEach(x=>addEdge(x.id, c.id, CU)));
@@ -497,20 +498,20 @@ function wireAll(s, N, V){
   if (s.nosql){
     const cnt = rint(3,5);
     const ns = group('nosql', cnt, sideT, SIDE, 0.85, i=>({
-      name:'NOSQL-0'+i, model:rnd(T.nosql.models), ip:N.db+'.'+(50+i)+'/24', gw:dbGw,
+      name:'NOSQL-0'+i, model:rnd(T.nosql.models), ip:N.db+'.'+(60+i)+'/24', gw:dbGw,
       vlan:dbVlan, zone:'trust', svc:'27017', repl:cnt, ha:'clu' }));
     ns.forEach(x=>ssw.forEach(y=>addEdge(y.id, x.id, CU)));
     sideT += 1.2;
   }
   if (s.proxy){
     const px = mk('proxy', sideT, SIDE, { name:'PROXY-01', model:rnd(T.proxy.models),
-      dir:'fwd', ip:mgmtNet+'.70/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust', svc:'3128,8080' });
+      dir:'fwd', ip:mgmtNet+'.71/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust', svc:'3128,8080' });
     ssw.forEach(x=>addEdge(x.id, px.id, CU));
     sideT += 1.1;
   }
   if (s.ad){
     const ad = mk('ad', sideT, SIDE, { name:'AD-01', model:rnd(T.ad.models),
-      ip:mgmtNet+'.71/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust', svc:'389,636,88', ha:'none' });
+      ip:mgmtNet+'.72/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust', svc:'389,636,88', ha:'none' });
     ssw.forEach(x=>addEdge(x.id, ad.id, CU));
     sideT += 1.1;
   }
@@ -528,13 +529,13 @@ function wireAll(s, N, V){
     const u = mk('client', appTier + (i-1)*1.05, USER, {
       name: s.user>1 ? 'USER-LAN-0'+i : 'USER-LAN',
       model: rnd(['사무실 PC 대역','업무용 단말','콜센터 단말','현장 단말','임원/개발망','교육장 단말']),
-      ip:N.user+'.'+(50+i*10)+'/24', gw:userGw, vlan:userVlan, zone:'trust', cnt:rint(20,600) });
+      ip:N.user+'.'+(150+i*5)+'/24', gw:userGw, vlan:userVlan, zone:'trust', cnt:rint(20,600) });
     ssw.forEach(x=>addEdge(x.id, u.id, CU));
     users.push(u);
   }
   if (s.nac){
     const nac = mk('nac', appTier + Math.max(1,s.user)*1.05, USER, { name:'NAC-01', model:rnd(T.nac.models),
-      ip:mgmtNet+'.60/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust',
+      ip:mgmtNet+'.73/24', gw:mgmtGw, vlan:mgmtVln, zone:mgmtOwn?'mgmt':'trust',
       kind:rnd(['8021x','arp','agent']) });
     ssw.forEach(x=>addEdge(x.id, nac.id, CU));
   }
@@ -558,10 +559,10 @@ function wireAll(s, N, V){
 
   /* ── 관리망 ── */
   const mgmtList = [];
-  if (s.bastion) mgmtList.push(['bastion','BAS-01', 20, { svc:'22,3389', mfa:pick(.9), rec:pick(.85) }]);
-  if (s.nms)     mgmtList.push(['nms','NMS-01', 21, { svc:'161,443' }]);
-  if (s.siem)    mgmtList.push(['siem','SIEM-01', 22, { svc:'514,9200', ret:rnd(['3개월','6개월','1년','3년']) }]);
-  if (s.backup)  mgmtList.push(['backup','BKP-01', 23, {
+  if (s.bastion) mgmtList.push(['bastion','BAS-01', 81, { svc:'22,3389', mfa:pick(.9), rec:pick(.85) }]);
+  if (s.nms)     mgmtList.push(['nms','NMS-01', 82, { svc:'161,443' }]);
+  if (s.siem)    mgmtList.push(['siem','SIEM-01', 83, { svc:'514,9200', ret:rnd(['3개월','6개월','1년','3년']) }]);
+  if (s.backup)  mgmtList.push(['backup','BKP-01', 84, {
     sched:rnd(['일 1회 전체','일 1회 전체 + 4시간 증분','주 1회 전체 + 일 증분']),
     rpo:rnd(['1시간','4시간','24시간']), offsite:pick(.5) }]);
   const mgmtNodes = mgmtList.map(([ty,name,host,extra],i)=>{
@@ -581,7 +582,7 @@ function wireAll(s, N, V){
   if (users[0] && entry) F('사용자망 → 서비스', users[0], entry, lbs.length||webs.length ? 443 : 8080);
   if (webs[0] && apps[0]) F('WEB → 앱 계층', webs[0], apps[0], parseInt(String(apps[0].p.svc).split(',')[0])||8080);
   if (apps[0] && dbs[0])  F('앱 → DB', apps[0], dbs[0], parseInt(dbSet.port));
-  if (s.cache && apps[0]) F('앱 → 캐시', apps[0], N.app+'.140', 6379);
+  if (s.cache && apps[0]) F('앱 → 캐시', apps[0], N.app+'.149', 6379);
   if (mgmtNodes[0] && (apps[0]||dbs[0])) F('관리 접근 (SSH)', mgmtNodes[0], apps[0]||dbs[0], 22);
   if (users[0]) F('사용자망 → 인터넷', users[0], N.ext+'.1', 443);
   if (users[1] && dbs[0]) F('제2 사용자망 → DB', users[1], dbs[0], parseInt(dbSet.port));
@@ -600,12 +601,38 @@ function wireAll(s, N, V){
       { sz:'trust', dz:'mgmt',  s:'any', d:'any', sv:'161,514,9200',   act:'allow' }
     ] : []; });
   });
-  S.n.filter(n=>n.ty==='fw').forEach(f=>autoFwRules(f));
+  autoFwAll();
 }
 
-/* ── 방화벽 정책 자동 생성 ─────────────────────────────────────────────── */
+/* ── 방화벽 정책 자동 생성 ───────────────────────────────────────────────
+   체인이 길면 차단은 "안쪽 방화벽부터" 발견된다. 방화벽별로 한 번씩 돌면
+   바깥쪽 단은 차례가 지나 버리므로, 전체를 한 덩어리로 놓고 변화가 없을
+   때까지 반복한다. */
+function autoFwAll(maxRounds){
+  const flows = () => (S.f||[]).filter(x=>x.on!==false);
+  for (let round=0; round < (maxRounds||120); round++){
+    const t = buildTopo();
+    let changed = false;
+    for (const f of flows()){
+      const r = trace(t, f);
+      if (r.ok) continue;
+      const bad = r.hops.find(hp=>hp.k==='fail' && hp.sz && nodeById(hp.nid));
+      if (!bad) continue;
+      const fw = nodeById(bad.nid);
+      if (!fw || fw.ty!=='fw') continue;
+      fw.p.rules = Array.isArray(fw.p.rules) ? fw.p.rules : [];
+      const nr = { sz:bad.sz, dz:bad.dz, s:'any', d:'any', sv:String(bad.port), act:'allow' };
+      if (fw.p.rules.some(x=>x.sz===nr.sz && x.dz===nr.dz && x.sv===nr.sv && x.act==='allow')) continue;
+      const denyAt = fw.p.rules.findIndex(x=>x.act==='deny');
+      if (denyAt>=0) fw.p.rules.splice(denyAt, 0, nr); else fw.p.rules.push(nr);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+}
+/* 인스펙터의 "경로 자동 허용" 버튼 — 이 방화벽만 손본다 */
 function autoFwRules(fw){
-  for (let round=0; round<30; round++){
+  for (let round=0; round<40; round++){
     const t = buildTopo();
     let changed = false;
     for (const f of (S.f||[]).filter(x=>x.on!==false)){

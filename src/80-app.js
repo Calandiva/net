@@ -12,22 +12,28 @@ const closeModal = ()=>$('#modal').classList.remove('on');
 /* ── 랜덤 구성도 ───────────────────────────────────────────────────────── */
 function openRandom(){
   openModal('레퍼런스 구성도 생성', `
-    <p>실제 데이터센터 표준 설계를 따르는 구성도를 만듭니다. IP·VLAN·존·방화벽 정책·이중화·LB 풀·검증 플로우가 모두 채워진 상태로 생성되며, 생성 직후 자동 검증을 통과합니다.</p>
+    <p>실제 데이터센터 설계를 따르는 구성도를 만듭니다. 누를 때마다 <b>규모·장비 조합·연결 방식·주소 체계가 새로 굴려집니다</b>.
+       조립한 뒤 검증을 돌려 통과할 때까지 다시 굴리므로, 결과는 매번 다르지만 통신은 항상 성립합니다.
+       IP·VLAN·보안존·방화벽 정책·이중화·LB 풀·검증 플로우가 모두 채워진 채로 나옵니다.</p>
     <div class="tplgrid">
-      ${PROFILES.map(p=>`<button class="tpl" data-p="${p.key}"><b>${esc(p.name)}</b><span>${esc(p.desc)}</span>
-        <em>WEB ${p.web} · WAS ${p.was} · ${p.dualFw?'2단 방화벽':'단일 방화벽'}${p.waf?' · WAF':''}${p.ips?' · IPS':''}${p.ddos?' · DDoS':''}</em></button>`).join('')}
-      <button class="tpl" data-p="*"><b>완전 랜덤</b><span>위 프로파일 중 하나를 무작위로 고르고 대역·제품·알고리즘·DB 이중화 방식을 매번 다르게 조합합니다.</span><em>매번 다른 결과</em></button>
+      ${PROFILES.map(p=>`<button class="tpl" data-p="${p.key}"><b>${esc(p.name)}</b><span>${esc(p.desc)}</span></button>`).join('')}
+      <button class="tpl" data-p="*"><b>아무거나</b><span>위 성향 중 하나를 무작위로 고릅니다. 낮은 확률로 극단적인 형태도 섞입니다.</span>
+        <em>가장 다양함</em></button>
     </div>`);
   $$('#modalBody .tpl').forEach(b=>b.onclick=()=>{
     const k = b.dataset.p;
     snapshot();
-    const doc = genRandom(k==='*'?null:k);
+    const doc = genRandom(k==='*' ? null : k);
+    if (!doc){ toast('생성에 실패했습니다. 다시 시도해 주세요.','bad'); return; }
     S = doc; $('#docname').value = S.t;
-    UI.sel=null; UI.focus=null; UI.trace=null; UI.traceId=null; UI.spof=null;
+    UI.sel=null; UI.selSet=new Set(); UI.focus=null; UI.trace=null; UI.traceId=null; UI.spof=null;
     closeModal(); afterEdit(); fitView();
     const res = validateAll();
     const err = res.issues.filter(i=>i.lv==='e').length;
-    toast(err ? `생성 완료 — 오류 ${err}건 (검증 탭 확인)` : `생성 완료 — ${S.n.length}개 장비, 전체 플로우 정상`, err?'':'good');
+    const fw  = S.n.filter(n=>n.ty==='fw').length;
+    const srv = S.n.filter(n=>['was','k8s','web'].includes(n.ty)).length;
+    toast(err ? `생성 완료 — 오류 ${err}건 (검증 탭 확인)`
+              : `생성 완료 — 장비 ${S.n.length}대 · 방화벽 ${fw} · 서버 ${srv} · 전체 플로우 정상`, err?'':'good');
   });
 }
 

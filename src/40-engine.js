@@ -438,7 +438,7 @@ function trace(t, flow){
 
   /* 같은 세그먼트에 목적지가 있으면 L2 직접 전달, 아니면 게이트웨이로 */
   let guard = 0;
-  while (guard++ < 32){
+  while (guard++ < 64){
     const myIfs = (t.byNode.get(curNode.id)||[]);
     // 방화벽은 목적지 판정 전에 DNAT 를 먼저 적용한다 (공인 IP -> 내부 서버)
     if (curNode.ty==='fw' && curNode.p.mode!=='tp'){
