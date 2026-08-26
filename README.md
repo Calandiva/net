@@ -69,7 +69,7 @@ Netlify, S3+CloudFront, Nginx, 사내 웹서버 — `index.html` 하나만 올�
 | **URL 복사** | `…/index.html#N1.eJyt…` | 링크만 보내면 상대방 화면에 그대로 재현 |
 | **저장 → 압축 텍스트** | `N1.eJyt…` 한 줄 | 메신저·이슈·위키에 붙여넣기 |
 | **저장 → JSON** | 사람이 읽고 편집 가능 | 형상관리(Git) 에 커밋, 리뷰 |
-| **저장 → .nfg 파일** | 압축 텍스트 파일 | 오프라인 보관 |
+| **저장 → .txt 파일** | 압축 텍스트 한 줄 | 오프라인 보관 |
 | **불러오기** | 위 넷 중 무엇이든 | 형식 자동 판별 |
 
 ### URL 인코딩 규칙
@@ -129,16 +129,17 @@ LB 풀·검증 플로우가 모두 채워진 상태이며, **생성 직후 검�
 ## 소스 구조
 
 ```
-src/00-head.html    디자인 토큰 · 스타일
-src/10-body.html    화면 마크업
-src/20-catalog.js   장비 카탈로그 (31종, 제품별 동작 모델)
-src/30-core.js      상태 모델 · IP 유틸 · URL 코덱 · 실행취소
-src/40-engine.js    토폴로지 해석 · 포워딩 시뮬레이션 · 검증 · SPOF
-src/50-render.js    SVG 렌더링 · 팬/줌 · 패치 케이블 라우팅
-src/60-ui.js        속성 인스펙터 · 검증/플로우/레이어/이중화/URL 패널
-src/70-generator.js 레퍼런스 아키텍처 생성 · IP 자동할당 · 정책 자동생성
-src/80-app.js       툴바 · 저장/불러오기 · 도움말 · 부팅
-build.py            위 파일을 index.html 하나로 묶음
+src/00-head.htmlpart  디자인 토큰 · 스타일
+src/10-body.htmlpart  화면 마크업
+src/20-catalog.js     장비 카탈로그 (31종, 제품별 동작 모델 + 설명)
+src/30-core.js        상태 모델 · IP 유틸 · URL 코덱 · 실행취소
+src/40-engine.js      토폴로지 해석 · 포워딩 시뮬레이션 · 검증 · SPOF
+src/50-render.js      SVG 렌더링 · 포트 체계 · 드래그/선택/줌 · 어시스트 툴팁
+src/55-context.js     우클릭 메뉴 · 복사/붙여넣기 · 정렬
+src/60-ui.js          속성 인스펙터 · 검증/플로우/레이어/이중화/URL 패널
+src/70-generator.js   레퍼런스 아키텍처 생성 · IP 자동할당 · 정책 자동생성
+src/80-app.js         툴바 · 저장/불러오기 · 도움말 · 단축키 · 부팅
+build.py              위 파일을 index.html 하나로 묶음
 ```
 
 수정 후 `python build.py` 를 실행하면 `index.html` 이 다시 만들어집니다.
@@ -147,8 +148,9 @@ build.py            위 파일을 index.html 하나로 묶음
 
 ## 단축키
 
-`V` 선택 · `L` 연결 · `F` 장애 주입 · `Del` 삭제 · `0` 화면맞춤 · `R` 랜덤 ·
-`Enter` 검증 · `Ctrl+S` 저장 · `Ctrl+O` 불러오기 · `Ctrl+Z` 실행취소
+`V` 선택 · `L` 연결 · `F` 장애 주입 · `방향키` 이동(`Shift` 4칸) · `Del` 삭제 · `F2` 이름변경 ·
+`0` 화면맞춤 · `R` 랜덤 · `Enter` 검증 · `Ctrl+A/C/V/D` 전체선택·복사·붙여넣기·복제 ·
+`Ctrl+S` 저장 · `Ctrl+O` 불러오기 · `Ctrl+Z` 실행취소 · `Esc` 취소
 
 
 ---
