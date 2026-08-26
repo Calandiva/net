@@ -282,6 +282,7 @@ function buildNode(n, focusSet){
     transform:`translate(${r.x},${r.y})`, 'data-n':n.id });
   if (isSel(n.id)) g.appendChild(el('rect',{ class:'nhalo', x:-4, y:-4, width:r.w+8, height:r.h+8, rx:10 }));
   g.appendChild(el('rect',{ class:'nbody', width:r.w, height:r.h, rx:7 }));
+  g.appendChild(el('rect',{ class:'nhover', width:r.w, height:r.h, rx:7, fill:'var(--acc)' }));
   g.appendChild(el('rect',{ class:'nband', x:1.2, y:1.2, width:r.w-2.4, height:3.4, rx:2, fill:ly.c, opacity:n.p.down?.35:.95 }));
 
   const ic = el('g',{ transform:'translate(8,12) scale(0.86)', fill:'none', stroke:ly.c,
@@ -327,6 +328,7 @@ function buildNode(n, focusSet){
     const grp = el('g',{ class:'portg'+(used[s]?' has':''), transform:`translate(${px},${py})`,
       'data-port':s, 'data-n':n.id });
     grp.appendChild(el('circle',{ class:'porthit', r:11, fill:'transparent' }));
+    grp.appendChild(el('circle',{ class:'porthalo', r:9, fill:ROLE[s].c }));
     grp.appendChild(el('path',{ class:'portmark', d:dd, fill:ROLE[s].c }));
     g.appendChild(grp);
   });

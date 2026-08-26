@@ -77,6 +77,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .brand b{font-weight:700;font-size:14px;letter-spacing:-.2px}
 .brand span{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.06em}
 #main{display:grid;grid-template-columns:auto 1fr auto;min-height:0;position:relative}
+/* 열을 고정해 둔다. 팔레트/도크를 display:none 으로 감추면 자동배치가 밀려
+   캔버스가 auto 열로 들어가 폭이 0 이 되어 버린다. */
+#palette{grid-column:1}
+#stage{grid-column:2}
+#dock{grid-column:3}
 
 /* 버튼 / 컨트롤 */
 .btn{
@@ -169,12 +174,23 @@ label.ck{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px}
 .zonebox{fill:var(--acc-soft);opacity:.4;stroke:var(--acc-line);stroke-dasharray:6 4}
 .zonelbl{font:600 10px var(--mono);fill:var(--acc)}
 
-/* 포트 (상하좌우 의미) */
+/* 포트 (상하좌우 의미) — 크기는 그대로 두고 제자리에서 음영으로만 강조한다.
+   SVG 는 transform-box 기본값이 view-box 라서 CSS transform 을 쓰면
+   요소가 화면 중심 기준으로 확대되며 엉뚱한 자리로 튄다. 그래서 쓰지 않는다. */
 .portg{cursor:crosshair}
-.portg .portmark{opacity:.26;transition:opacity .12s,transform .12s;transform-origin:center}
+.portg .porthalo{opacity:0;transition:opacity .12s}
+.portg .portmark{opacity:.26;transition:opacity .12s}
 .portg.has .portmark{opacity:.85}
 .node:hover .portg .portmark,.node.sel .portg .portmark{opacity:1}
-.portg:hover .portmark{opacity:1;transform:scale(1.5)}
+.portg:hover .porthalo{opacity:.22}
+.portg:hover .portmark{opacity:1}
+
+/* 노드 호버 — 자리 이동 없이 음영 + 테두리만 */
+.node .nhover{opacity:0;transition:opacity .12s;pointer-events:none}
+.node:hover .nhover{opacity:.10}
+.node:hover .nbody{stroke:var(--acc-line)}
+.node.sel:hover .nbody{stroke:var(--acc)}
+.linkhit:hover{stroke:var(--acc);stroke-opacity:.16}
 #stage.grab{cursor:grab}
 #stage.panning{cursor:grabbing}
 #stage.linking{cursor:crosshair}
@@ -408,6 +424,7 @@ label.ck{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px}
 @media (max-width:1100px){#dock{width:304px}#palette{width:170px}}
 @media (max-width:820px){
   #main{grid-template-columns:1fr}
+  #palette,#stage,#dock{grid-column:1}
   #palette{position:absolute;left:0;top:0;bottom:0;z-index:20;box-shadow:var(--shadow)}
   #dock{position:absolute;right:0;top:0;bottom:0;z-index:20;width:min(340px,92vw);box-shadow:var(--shadow)}
   #minihelp{display:none}
