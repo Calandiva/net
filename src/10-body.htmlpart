@@ -1,0 +1,89 @@
+<div id="app">
+  <header id="top">
+    <div class="brand"><b>NetForge</b><span>망구성도 v1</span></div>
+    <input type="text" id="docname" style="width:150px" value="새 구성도" aria-label="구성도 이름">
+    <div class="sep"></div>
+    <div class="seg" id="modeseg" role="group" aria-label="편집 모드">
+      <button data-mode="select" class="on" title="선택 / 이동 (V)">선택</button>
+      <button data-mode="link" title="연결선 그리기 (L)">연결</button>
+      <button data-mode="fault" title="장애 주입 - 노드/링크 클릭 (F)">장애</button>
+    </div>
+    <div class="sep"></div>
+    <button class="btn cu" id="btnRandom" title="검증을 통과하는 실제형 구성도 자동 생성 (R)">랜덤 구성도</button>
+    <button class="btn pri" id="btnValidate" title="전체 검증 실행 (Enter)">검증 실행</button>
+    <button class="btn" id="btnAutoIP" title="세그먼트별 IP 자동 할당">IP 자동할당</button>
+    <button class="btn" id="btnFit" title="화면 맞춤 (0)">맞춤</button>
+    <div class="spacer"></div>
+    <button class="btn icon" id="btnUndo" title="실행취소 (Ctrl+Z)">&#8630;</button>
+    <button class="btn icon" id="btnRedo" title="다시실행 (Ctrl+Shift+Z)">&#8631;</button>
+    <div class="sep"></div>
+    <button class="btn" id="btnShare" title="URL 복사 - 구성 전체가 URL에 들어있습니다">URL 복사</button>
+    <button class="btn" id="btnExport" title="구성을 텍스트/파일로 저장 (Ctrl+S)">저장</button>
+    <button class="btn" id="btnImport" title="텍스트/파일에서 구성 불러오기 (Ctrl+O)">불러오기</button>
+    <button class="btn" id="btnHelp" title="사용법 / 인코딩 규칙 / 모델링 근거">도움말</button>
+    <button class="btn icon" id="btnTheme" title="라이트/다크 전환">&#9681;</button>
+  </header>
+
+  <div id="main">
+    <aside id="palette" aria-label="장비 팔레트"></aside>
+
+    <div id="stage">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="gsmall" width="16" height="16" patternUnits="userSpaceOnUse">
+            <path d="M16 0H0V16" fill="none" stroke="var(--grid)" stroke-width="1"/>
+          </pattern>
+          <pattern id="gbig" width="80" height="80" patternUnits="userSpaceOnUse">
+            <rect width="80" height="80" fill="url(#gsmall)"/>
+            <path d="M80 0H0V80" fill="none" stroke="var(--grid-b)" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect id="gridrect" x="-20000" y="-20000" width="40000" height="40000" fill="url(#gbig)"/>
+        <g id="world">
+          <g id="gZones"></g>
+          <g id="gLinks"></g>
+          <g id="gFlow"></g>
+          <g id="gNodes"></g>
+          <g id="gOverlay"></g>
+        </g>
+      </svg>
+      <div id="zoomctl">
+        <button class="btn icon" id="btnZin" title="확대">+</button>
+        <button class="btn icon" id="btnZout" title="축소">&#8722;</button>
+        <button class="btn icon" id="btnPal" title="팔레트 토글">&#9776;</button>
+        <button class="btn icon" id="btnDock" title="패널 토글">&#9707;</button>
+      </div>
+      <div id="hud"><span id="hudZoom">100%</span><span id="hudCnt">0 노드 / 0 링크</span><span id="hudSel"></span></div>
+      <div id="minihelp"><b>▲</b> 위=업링크 <b>▼</b> 아래=다운링크 <b>◆</b> 좌우=피어 &middot; 포트에서 끌면 연결 &middot; 빈 곳 드래그=범위선택 &middot; Space+드래그=화면이동 &middot; 우클릭=메뉴</div>
+    </div>
+
+    <aside id="dock">
+      <nav id="tabs" role="tablist">
+        <button data-pane="insp" class="on">속성</button>
+        <button data-pane="val">검증<span class="cnt" id="cntVal">0</span></button>
+        <button data-pane="flow">플로우<span class="cnt" id="cntFlow">0</span></button>
+        <button data-pane="layer">레이어</button>
+        <button data-pane="ha">이중화</button>
+        <button data-pane="url">URL</button>
+      </nav>
+      <div class="pane on" id="pane-insp"></div>
+      <div class="pane" id="pane-val"></div>
+      <div class="pane" id="pane-flow"></div>
+      <div class="pane" id="pane-layer"></div>
+      <div class="pane" id="pane-ha"></div>
+      <div class="pane" id="pane-url"></div>
+    </aside>
+  </div>
+</div>
+
+<div id="tip" role="tooltip"></div>
+<div id="ctx" role="menu"></div>
+<div id="quick">
+  <input type="text" id="quickInput" placeholder="장비 이름 입력 · ↑↓ 선택 · Enter 배치" aria-label="장비 검색">
+  <div id="quickList"></div>
+</div>
+<div id="toast"></div>
+<div id="modal"><div class="box">
+  <header><h3 id="modalTitle"></h3><div class="spacer"></div><button class="btn sm" id="modalClose">닫기</button></header>
+  <div class="c" id="modalBody"></div>
+</div></div>
