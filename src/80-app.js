@@ -146,7 +146,31 @@ function openHelp(){
 </tbody></table></div>
 <p>포트는 두 장비의 상대 위치에서 자동으로 정해집니다. 특정 포트에서 끌어 연결하거나 우클릭 메뉴에서 고르면 그 선택이 고정되고, “포트 자동 배치로 되돌리기”로 해제할 수 있습니다. 한 면에 여러 회선이 붙으면 패치 패널처럼 자리를 나눠 겹치지 않게 그립니다.</p>
 
-<h4>3. 네트워크 구간(세그먼트)이 만들어지는 규칙</h4>
+<h4>3. 학습 과정 (100단계)</h4>
+<p>상단 <b>학습</b> 버튼 또는 오른쪽 <b>학습</b> 탭. 장비 한 대 놓기에서 시작해 10개 장으로 난이도가 올라갑니다.</p>
+<div class="tblwrap"><table>
+<thead><tr><th>장</th><th>주제</th><th>배우는 것</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>기초</td><td>배치 · 연결 · IP · 포트 · 끊긴 원인 읽기</td></tr>
+<tr><td>2</td><td>주소와 구간</td><td>서브넷 · VLAN · 존 · 사설/공인 · 주소 계획</td></tr>
+<tr><td>3</td><td>라우팅</td><td>정적 · 기본 경로 · SVI · 넥스트홉 · 루프 · 동적 라우팅</td></tr>
+<tr><td>4</td><td>방화벽</td><td>존 · implicit deny · first-match · 포트 제한 · 다단</td></tr>
+<tr><td>5</td><td>NAT 와 경계망</td><td>SNAT · DNAT · 포트 변환 · 프록시 · DNS · 서비스 공개</td></tr>
+<tr><td>6</td><td>부하분산</td><td>VIP · 풀 · 헬스체크 · 알고리즘 · 지속성 · 비대칭 경로</td></tr>
+<tr><td>7</td><td>이중화</td><td>VRRP · A/S · 이중 결선 · 하트비트 · SPOF 제거</td></tr>
+<tr><td>8</td><td>데이터 계층</td><td>복제 방식별 RPO/RTO · SCAN VIP · MPIO · 캐시 · 백업</td></tr>
+<tr><td>9</td><td>보안 심화</td><td>IPS · fail-open · WAF · DMZ · 관리망 · 배스천 · 망분리</td></tr>
+<tr><td>10</td><td>종합 설계</td><td>3-Tier · 무결점 · 고장 수리 · 대규모 · 무중단 · 졸업 과제</td></tr>
+</tbody></table></div>
+<ul>
+  <li>과제를 고르면 캔버스가 <b>시작 상태</b>로 바뀝니다. 빈 화면부터 만드는 과제도 있고, 일부러 <b>고장난 구성</b>을 넘겨받아 고치는 과제도 있습니다.</li>
+  <li>조건은 만드는 동안 <b>실시간으로 체크</b>됩니다. ○ 가 ✓ 로 바뀌는지 보면서 진행하세요.</li>
+  <li><b>채점하기</b> — 필수 조건을 모두 채우면 통과(70점), 추가 조건까지 채우면 100점입니다. 등급은 S/A/B/C/D.</li>
+  <li>진행 상황은 브라우저에 남습니다. 사라져도 상관없다면 아무 과제나 골라 바로 시작해도 됩니다.</li>
+  <li>막히면 <b>힌트</b>를 펼치거나, 검증 탭에서 무엇이 걸리는지 확인하거나, 랜덤 구성도를 만들어 구조를 참고하세요.</li>
+</ul>
+
+<h4>4. 네트워크 구간(세그먼트)이 만들어지는 규칙</h4>
 <ul>
   <li>L2 스위치·인라인 IPS·브리지 WAF·투명모드 방화벽은 <b>투과 장비</b>로 보고, 이들을 건너 연결된 링크를 하나의 <b>브로드캐스트 도메인</b>으로 묶습니다.</li>
   <li>같은 도메인이라도 포트의 <b>VLAN 이 다르면 다른 구간</b>이 됩니다 (액세스 포트 모델).</li>
@@ -156,7 +180,7 @@ function openHelp(){
   <li><b>FC</b>·<b>HA 하트비트</b> 매체의 링크는 IP 를 갖지 않는 물리 경로로만 취급합니다.</li>
 </ul>
 
-<h4>4. 포워딩 시뮬레이션이 따르는 실제 동작</h4>
+<h4>5. 포워딩 시뮬레이션이 따르는 실제 동작</h4>
 <div class="tblwrap"><table>
 <thead><tr><th>영역</th><th>구현한 동작</th><th>근거가 된 실제 제품/표준</th></tr></thead>
 <tbody>
@@ -172,7 +196,7 @@ function openHelp(){
 </tbody></table></div>
 <p class="muted">단방향 포워딩만 계산합니다. 상태 기반 방화벽의 리턴 트래픽은 허용된 것으로 간주합니다.</p>
 
-<h4>5. 무엇을 검증하나</h4>
+<h4>6. 무엇을 검증하나</h4>
 <ul>
   <li><b>연결성</b> — 미연결 노드, 링크 단절, 투과 장비 다운, L2 경로 부재</li>
   <li><b>주소</b> — IP 미설정, IP 충돌, 구간 서브넷 불일치, 게이트웨이 대역 오류·응답 없음</li>
@@ -183,7 +207,7 @@ function openHelp(){
   <li><b>SPOF 분석</b> — 모든 장비·링크를 하나씩 다운시켜 어떤 플로우가 끊기는지 전수 계산</li>
 </ul>
 
-<h4>6. 저장 · 불러오기 · 배포</h4>
+<h4>7. 저장 · 불러오기 · 배포</h4>
 <ul>
   <li><b>저장</b> — 압축 텍스트 한 줄(<code>.txt</code>), 읽을 수 있는 JSON, 전체 URL 셋 중에서 고를 수 있습니다. 모두 순수 텍스트라 메신저·이슈트래커·형상관리에 그대로 붙여 넣을 수 있습니다.</li>
   <li><b>불러오기</b> — 위 셋 중 아무거나 붙여넣거나 파일을 선택하면 됩니다. 형식은 자동으로 판별합니다.</li>
@@ -191,7 +215,7 @@ function openHelp(){
   <li><b>로컬 실행</b> — 파일을 더블클릭해 <code>file://</code> 로 열어도 모든 기능이 동작합니다. 이 경우 주소창 자동 갱신이 브라우저에 따라 제한될 수 있는데, 저장 버튼으로 텍스트를 뽑으면 동일하게 보존됩니다. 인터넷이 없으면 웹폰트만 시스템 글꼴로 대체됩니다.</li>
 </ul>
 
-<h4>7. URL 인코딩 규칙</h4>
+<h4>8. URL 인코딩 규칙</h4>
 <ul>
   <li>노드·링크·플로우·화면상태까지 <b>모든 정보</b>가 URL 해시에 들어갑니다. 서버 저장소가 없습니다.</li>
   <li>정규화: 키 이름을 제거하고 <code>노드=[타입번호,x,y,속성]</code>, <code>링크=[a인덱스,b인덱스,매체]</code>. 노드 참조는 배열 인덱스로 치환하고 타입 기본값과 같은 속성은 생략합니다.</li>
@@ -225,6 +249,7 @@ function initToolbar(){
   $('#btnExport').onclick   = openExport;
   $('#btnImport').onclick   = openImport;
   $('#btnHelp').onclick     = openHelp;
+  $('#btnTut').onclick      = ()=>{ switchTab('tut'); $('#dock').classList.remove('hide'); };
   $('#modalClose').onclick  = closeModal;
   $('#modal').onclick       = ev=>{ if (ev.target.id==='modal') closeModal(); };
   $('#docname').onchange    = ()=>{ S.t = $('#docname').value; scheduleUrl(); };

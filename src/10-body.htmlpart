@@ -20,6 +20,7 @@
     <button class="btn" id="btnShare" title="URL 복사 - 구성 전체가 URL에 들어있습니다">URL 복사</button>
     <button class="btn" id="btnExport" title="구성을 텍스트/파일로 저장 (Ctrl+S)">저장</button>
     <button class="btn" id="btnImport" title="텍스트/파일에서 구성 불러오기 (Ctrl+O)">불러오기</button>
+    <button class="btn" id="btnTut" title="100단계 학습 과정">학습</button>
     <button class="btn" id="btnHelp" title="사용법 / 인코딩 규칙 / 모델링 근거">도움말</button>
     <button class="btn icon" id="btnTheme" title="라이트/다크 전환">&#9681;</button>
   </header>
@@ -60,6 +61,7 @@
     <aside id="dock">
       <nav id="tabs" role="tablist">
         <button data-pane="insp" class="on">속성</button>
+        <button data-pane="tut">학습<span class="cnt" id="cntTut">0</span></button>
         <button data-pane="val">검증<span class="cnt" id="cntVal">0</span></button>
         <button data-pane="flow">플로우<span class="cnt" id="cntFlow">0</span></button>
         <button data-pane="layer">레이어</button>
@@ -67,6 +69,7 @@
         <button data-pane="url">URL</button>
       </nav>
       <div class="pane on" id="pane-insp"></div>
+      <div class="pane" id="pane-tut"></div>
       <div class="pane" id="pane-val"></div>
       <div class="pane" id="pane-flow"></div>
       <div class="pane" id="pane-layer"></div>
