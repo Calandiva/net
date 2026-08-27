@@ -173,6 +173,8 @@ src/55-context.js     우클릭 메뉴 · 복사/붙여넣기 · 정렬
 src/60-ui.js          속성 인스펙터 · 검증/플로우/레이어/이중화/URL 패널
 src/70-generator.js   레퍼런스 아키텍처 생성 · IP 자동할당 · 정책 자동생성
 src/80-app.js         툴바 · 저장/불러오기 · 도움말 · 단축키 · 부팅
+src/85-tutorial.js     100단계 과제 정의 · 채점 기준 · 점수 계산
+src/86-tutorial-ui.js  학습 탭 (목록 · 안내 · 실시간 체크 · 채점)
 build.py              위 파일을 index.html 하나로 묶음
 ```
 
