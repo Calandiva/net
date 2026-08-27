@@ -1,0 +1,543 @@
+// 진입점 — 초기화, 입력, 게임 루프, 상태 전환.
+// 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
+
+import {
+  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
+} from './config.js';
+import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
+import { buildBuildings, doorOutside, floorLabel } from './world/buildings.js';
+import { WorldMap, buildOverview } from './world/map.js';
+import { makeInterior, floorList } from './world/interior.js';
+import { Actors } from './world/actors.js';
+import { Camera } from './render/camera.js';
+import { Scene } from './render/scene.js';
+import { UI_COLOR } from './render/palette.js';
+import { drawBuildingLabels, drawRoomLabels, drawText } from './ui/labels.js';
+import { drawHud, bakeOverview, panel } from './ui/hud.js';
+import { drawEnding, drawGallery } from './ui/ending.js';
+import { toggleFullscreen, onFullscreenChange } from './ui/fullscreen.js';
+import { GameState } from './game/state.js';
+import { GIZMOS, indexIndoorGizmos, outdoorGizmos } from './game/gizmos.js';
+import { evaluateEnding } from './game/endings.js';
+
+const S = TILE.size;
+const state = {
+  mode: 'outdoor',
+  player: { x: 0, y: 0, dir: 'down', moving: false, anim: 0 },
+  prompt: '', toasts: [],
+  showHelp: true, showMinimap: true, showGallery: false,
+  interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
+  picker: null, placeName: '', startPos: { x: 0, y: 0 },
+};
+
+const keys = new Set();
+let canvas, ctx, cam, map, buildings, scene, actors, minimap, indoorIndex;
+let lastTime = 0;
+
+// ── 초기화 ──────────────────────────────────────────────────────────────
+function init() {
+  canvas = document.getElementById('game');
+  ctx = canvas.getContext('2d', { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+
+  buildings = buildBuildings();
+  map = new WorldMap(buildings);
+  scene = new Scene(map, buildings);
+  actors = new Actors(map);
+  state.actors = actors;   // 그리는 쪽에서도 쓴다
+  cam = new Camera();
+  state.game = new GameState();
+  indoorIndex = indexIndoorGizmos();
+
+  // 길 위의 물건들을 걸어갈 수 있는 칸에 앉힌다
+  state.outdoorGizmos = outdoorGizmos().map((g) => {
+    const [tx, ty] = project([g.at.lon, g.at.lat]);
+    const spot = nearestWalkable(Math.round(tx), Math.round(ty));
+    return { ...g, tx: spot.x, ty: spot.y };
+  });
+
+  // 목적지 — 양촌공단 한가운데
+  const goalRegion = map.regions.find((r) => GAME.goalRegions.includes(r.id));
+  const gb = pathBounds(goalRegion.path);
+  state.goalPoint = {
+    x: ((gb.minX + gb.maxX) / 2) * S,
+    y: ((gb.minY + gb.maxY) / 2) * S,
+  };
+
+  // 출발점 — 구래역 앞. 역을 못 찾으면 좌표로 떨어진다.
+  const startBuilding = buildings.list.find((b) => b.name === PLAYER.startPlace);
+  const startTile = startBuilding
+    ? doorOutside(startBuilding)
+    : nearestWalkable(...project([PLAYER.startLon, PLAYER.startLat]).map(Math.round));
+  const start = nearestWalkable(startTile.x, startTile.y);
+  state.startPos = { x: start.x * S + S / 2, y: start.y * S + S / 2 };
+  state.player.x = state.startPos.x;
+  state.player.y = state.startPos.y;
+
+  minimap = bakeOverview(buildOverview(map, UI.minimapScale));
+  state.minimap = minimap;
+
+  window.addEventListener('resize', resize);
+  onFullscreenChange(resize);
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+  window.addEventListener('blur', () => keys.clear());
+  canvas.addEventListener('pointerdown', () => { if (state.showHelp) state.showHelp = false; });
+
+  // 전체화면 버튼 (키보드 없는 환경용)
+  const fsButton = document.getElementById('fs');
+  if (fsButton) {
+    fsButton.addEventListener('click', () => toggleFullscreen(document.documentElement));
+  }
+  const boot = document.getElementById('boot');
+  if (boot) boot.remove();
+
+  exposeDebugHandle();
+  resize();
+  cam.snap(state.player.x, state.player.y);
+  requestAnimationFrame(loop);
+}
+
+// 지도 밖이나 벽이면 근처의 걸을 수 있는 칸을 찾는다 (나선 탐색)
+function nearestWalkable(tx, ty) {
+  if (!map.isSolid(tx, ty)) return { x: tx, y: ty };
+  for (let r = 1; r < 40; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        if (!map.isSolid(tx + dx, ty + dy)) return { x: tx + dx, y: ty + dy };
+      }
+    }
+  }
+  return { x: tx, y: ty };
+}
+
+function resize() {
+  const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1);
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  cam.resize(w, h);
+}
+
+// ── 입력 ────────────────────────────────────────────────────────────────
+function onKeyDown(e) {
+  if (e.repeat) { keys.add(e.code); return; }
+  keys.add(e.code);
+
+  if (KEYS.fullscreen.includes(e.code)) { toggleFullscreen(document.documentElement); e.preventDefault(); return; }
+  if (KEYS.map.includes(e.code)) { state.showMinimap = !state.showMinimap; return; }
+  if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
+  if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+  if (KEYS.zoomIn.includes(e.code)) { cam.setZoom(cam.zoom + 1, window.innerWidth, window.innerHeight); return; }
+  if (KEYS.zoomOut.includes(e.code)) { cam.setZoom(cam.zoom - 1, window.innerWidth, window.innerHeight); return; }
+  if (e.code === 'Escape') { state.picker = null; state.showGallery = false; state.showHelp = false; return; }
+
+  if (state.game.ending) {
+    if (e.code === 'KeyR') restart();
+    return;
+  }
+  if (state.showHelp) { state.showHelp = false; return; }
+
+  if (state.picker) {
+    if (KEYS.up.includes(e.code)) state.picker.index = Math.max(0, state.picker.index - 1);
+    else if (KEYS.down.includes(e.code)) {
+      state.picker.index = Math.min(state.picker.floors.length - 1, state.picker.index + 1);
+    } else if (KEYS.interact.includes(e.code)) {
+      changeFloor(state.picker.floors[state.picker.index]);
+      state.picker = null;
+    }
+    e.preventDefault();
+    return;
+  }
+
+  if (KEYS.interact.includes(e.code)) { interact(); e.preventDefault(); }
+}
+
+function axis(negKeys, posKeys) {
+  const neg = negKeys.some((k) => keys.has(k));
+  const pos = posKeys.some((k) => keys.has(k));
+  return (pos ? 1 : 0) - (neg ? 1 : 0);
+}
+
+// ── 루프 ────────────────────────────────────────────────────────────────
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
+  lastTime = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  const g = state.game;
+  if (g.ending) return;
+  if (state.showHelp || state.showGallery || state.picker) return;
+
+  g.tick(dt);
+  if (state.exitCooldown > 0) state.exitCooldown -= dt;
+
+  movePlayer(dt);
+
+  if (state.mode === 'outdoor') {
+    const view = cam.visibleTiles(2);
+    const c0x = Math.floor(view.x0 / TILE.chunk), c1x = Math.floor(view.x1 / TILE.chunk);
+    const c0y = Math.floor(view.y0 / TILE.chunk), c1y = Math.floor(view.y1 / TILE.chunk);
+    actors.ensure(c0x, c0y, c1x, c1y);
+    actors.update(dt, c0x, c0y, c1x, c1y);
+    cam.follow(state.player.x, state.player.y, dt);
+    updatePlaceName();
+    checkGoal();
+  } else {
+    cam.follow(state.player.x, state.player.y, dt,
+      { w: state.interior.w * S, h: state.interior.h * S });
+    state.placeName = `${state.interiorBuilding.name} · ${floorLabel(state.floor)}`;
+  }
+
+  updatePrompt();
+
+  for (const t of state.toasts) t.life -= dt;
+  state.toasts = state.toasts.filter((t) => t.life > 0);
+}
+
+function movePlayer(dt) {
+  const p = state.player;
+  const dx = axis(KEYS.left, KEYS.right);
+  const dy = axis(KEYS.up, KEYS.down);
+  p.moving = dx !== 0 || dy !== 0;
+  if (!p.moving) return;
+
+  const running = KEYS.run.some((k) => keys.has(k));
+  const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
+  const len = Math.hypot(dx, dy) || 1;
+  const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
+
+  if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+  else if (dy !== 0) p.dir = dy > 0 ? 'down' : 'up';
+
+  p.anim += dt * (running ? 1.6 : 1);
+
+  if (!blocked(p.x + vx, p.y)) p.x += vx;
+  if (!blocked(p.x, p.y + vy)) p.y += vy;
+}
+
+// 발밑 상자로 충돌을 본다
+function blocked(x, y) {
+  const hw = PLAYER.width / 2, hh = PLAYER.height;
+  const corners = [
+    [x - hw, y - hh], [x + hw, y - hh], [x - hw, y], [x + hw, y],
+  ];
+  for (const [cx, cy] of corners) {
+    const tx = Math.floor(cx / S), ty = Math.floor(cy / S);
+    if (state.mode === 'interior') {
+      if (state.interior.isSolid(tx, ty)) return true;
+    } else if (map.isSolid(tx, ty)) return true;
+  }
+  return false;
+}
+
+// ── 상호작용 ────────────────────────────────────────────────────────────
+function nearestOutdoorTarget() {
+  const p = state.player;
+  const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S);
+
+  // 물건
+  for (const g of state.outdoorGizmos) {
+    const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+    if (d < GAME.interactRadius && !(g.once && state.game.used.has(g.id))) {
+      return { type: 'gizmo', gizmo: g, label: g.name };
+    }
+  }
+  // 고양이
+  const cat = actors.nearestCat(p.x, p.y, GAME.petRadius);
+  if (cat && !state.game.used.has('cat:' + cat.id)) {
+    return { type: 'cat', cat, label: '고양이' };
+  }
+  // 건물 출입구
+  let best = null, bestD = BUILDING.enterRadius;
+  for (const b of buildings.index.query(ptx - 3, pty - 3, ptx + 3, pty + 3)) {
+    const d = Math.hypot((b.door.x + 0.5) * S - p.x, (b.door.y + 0.5) * S - p.y);
+    if (d < bestD) { bestD = d; best = b; }
+  }
+  if (best && state.exitCooldown <= 0) {
+    return { type: 'enter', building: best, label: best.name };
+  }
+  return null;
+}
+
+function nearestInteriorTarget() {
+  const p = state.player;
+  const tx = Math.floor(p.x / S), ty = Math.floor(p.y / S);
+  const it = state.interior;
+
+  for (const g of state.interiorGizmos) {
+    const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+    if (d < GAME.interactRadius && !(g.once && state.game.used.has(g.id))) {
+      return { type: 'gizmo', gizmo: g, label: g.name };
+    }
+  }
+  const here = it.tileAt(tx, ty);
+  if (here === IN.EXIT) return { type: 'exit', label: '나가기' };
+  if (here === IN.STAIR_UP) return { type: 'stair', delta: 1, label: '올라가기' };
+  if (here === IN.STAIR_DOWN) return { type: 'stair', delta: -1, label: '내려가기' };
+  if (here === IN.ELEVATOR) return { type: 'elevator', label: '엘리베이터' };
+  return null;
+}
+
+function updatePrompt() {
+  const t = state.mode === 'outdoor' ? nearestOutdoorTarget() : nearestInteriorTarget();
+  state.target = t;
+  if (!t) { state.prompt = ''; return; }
+  const verb = t.type === 'enter' ? '들어가기'
+    : t.type === 'exit' ? '나가기'
+    : t.type === 'cat' ? '쓰다듬기'
+    : t.type === 'stair' ? t.label
+    : t.type === 'elevator' ? '층 고르기'
+    : '만지기';
+  state.prompt = `Space  ${verb} — ${t.label}`;
+}
+
+function interact() {
+  const t = state.target;
+  if (!t) return;
+  switch (t.type) {
+    case 'enter': return enterBuilding(t.building);
+    case 'exit': return exitBuilding();
+    case 'stair': return changeFloor(nextFloor(state.floor, t.delta));
+    case 'elevator': return openPicker();
+    case 'cat': return petCat(t.cat);
+    case 'gizmo': return useGizmo(t.gizmo);
+  }
+}
+
+function petCat(cat) {
+  state.game.used.add('cat:' + cat.id);
+  state.game.bump('cat');
+  state.game.set('cat_' + state.game.count('cat'), '고양이를 쓰다듬었다');
+  toast(`고양이를 쓰다듬었다 (${state.game.count('cat')})`);
+  checkImmediateEnding();
+}
+
+function useGizmo(g) {
+  const ctxObj = {
+    toast,
+    rideTo: (stationName) => rideTo(stationName),
+  };
+  state.game.used.add(g.id);
+  g.effect(state.game, ctxObj);
+  toast(g.text);
+  checkImmediateEnding();
+}
+
+function toast(text) {
+  state.toasts.unshift({ text, life: UI.toastSeconds });
+  if (state.toasts.length > 3) state.toasts.pop();
+}
+
+// ── 건물 출입 · 층 이동 ─────────────────────────────────────────────────
+function enterBuilding(b) {
+  state.interiorBuilding = b;
+  const floors = floorList(b);
+  setFloor(b, floors.includes(1) ? 1 : floors[0], 'spawn');
+  state.mode = 'interior';
+  cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
+  toast(`${b.name} · ${floorLabel(state.floor)}`);
+}
+
+function setFloor(b, floor, place) {
+  state.floor = floor;
+  state.interior = makeInterior(b, floor);
+  state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
+    const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
+      || state.interior.spawn;
+    return { ...g, tx: slot.x, ty: slot.y };
+  });
+
+  let spot;
+  if (place === 'spawn') spot = state.interior.spawn;
+  else if (place === 'up') spot = below(state.interior.stairs.down || state.interior.stairs.elevator);
+  else if (place === 'down') spot = below(state.interior.stairs.up || state.interior.stairs.elevator);
+  else spot = below(state.interior.stairs.elevator) || state.interior.spawn;
+  state.player.x = (spot.x + 0.5) * S;
+  state.player.y = (spot.y + 0.9) * S; // 타일 경계에 딱 걸치지 않게 (발밑 기준)
+}
+
+function below(pos) {
+  return pos ? { x: pos.x, y: pos.y + 1 } : null;
+}
+
+function nextFloor(floor, delta) {
+  const floors = floorList(state.interiorBuilding);
+  const i = floors.indexOf(floor);
+  return floors[Math.max(0, Math.min(floors.length - 1, i + delta))];
+}
+
+function changeFloor(floor) {
+  if (floor === state.floor) return;
+  const dir = floor > state.floor ? 'up' : 'down';
+  setFloor(state.interiorBuilding, floor, dir);
+  cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
+  toast(`${state.interiorBuilding.name} · ${floorLabel(floor)}`);
+}
+
+function openPicker() {
+  const floors = floorList(state.interiorBuilding);
+  state.picker = { floors, index: Math.max(0, floors.indexOf(state.floor)) };
+}
+
+function exitBuilding() {
+  const b = state.interiorBuilding;
+  const out = doorOutside(b);
+  state.mode = 'outdoor';
+  state.player.x = (out.x + 0.5) * S;
+  state.player.y = (out.y + 0.7) * S;
+  state.interior = null;
+  state.interiorGizmos = [];
+  state.floor = 1;
+  state.exitCooldown = INTERIOR.exitPause;
+  cam.snap(state.player.x, state.player.y);
+}
+
+// 지하철로 다른 역까지
+function rideTo(stationName) {
+  const target = buildings.list.find((b) => b.name === stationName);
+  if (!target) return;
+  const out = doorOutside(target);
+  state.mode = 'outdoor';
+  state.interior = null;
+  state.interiorGizmos = [];
+  state.interiorBuilding = null;
+  state.floor = 1;
+  state.player.x = (out.x + 0.5) * S;
+  state.player.y = (out.y + 0.7) * S;
+  state.exitCooldown = INTERIOR.exitPause;
+  state.game.clock += 4 * 60; // 4분
+  cam.snap(state.player.x, state.player.y);
+  toast(`${stationName} 도착`);
+}
+
+// ── 결말 ────────────────────────────────────────────────────────────────
+function updatePlaceName() {
+  const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
+  state.placeName = map.regionNameAt(tx, ty) || '김포 들녘';
+}
+
+function checkGoal() {
+  const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
+  for (const r of map.regionIndex.queryPoint(tx, ty)) {
+    if (!GAME.goalRegions.includes(r.id)) continue;
+    if (pointInside(tx, ty, r.path)) { finish('goal'); return; }
+  }
+}
+
+function pointInside(px, py, path) {
+  let inside = false;
+  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+    const [xi, yi] = path[i], [xj, yj] = path[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-12) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function checkImmediateEnding() { finish('any'); }
+
+function finish(where) {
+  if (state.game.ending) return;
+  const e = evaluateEnding(state.game, where);
+  if (!e) return;
+  state.game.ending = e;
+  state.game.discover(e.id);
+}
+
+function restart() {
+  state.game = new GameState();
+  state.mode = 'outdoor';
+  state.interior = null;
+  state.interiorGizmos = [];
+  state.interiorBuilding = null;
+  state.toasts = [];
+  state.showGallery = false;
+  state.player.x = state.startPos.x;
+  state.player.y = state.startPos.y;
+  state.player.dir = 'down';
+  cam.snap(state.player.x, state.player.y);
+}
+
+// ── 그리기 ──────────────────────────────────────────────────────────────
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = UI_COLOR.sky;
+  ctx.fillRect(0, 0, W, H);
+
+  if (state.mode === 'outdoor') {
+    scene.drawOutdoor(ctx, cam, state);
+    drawBuildingLabels(ctx, cam, map, state.player);
+  } else {
+    scene.drawInterior(ctx, cam, state);
+    drawRoomLabels(ctx, cam, state.interior);
+  }
+
+  drawHud(ctx, state);
+  if (state.picker) drawPicker();
+  // 목록을 열면 결말 화면 대신 목록만 보여 준다
+  if (state.showGallery) drawGallery(ctx, state);
+  else if (state.game.ending) drawEnding(ctx, state);
+}
+
+function drawPicker() {
+  const W = ctx.canvas.width / (window.devicePixelRatio > 1 ? 1 : 1);
+  const floors = state.picker.floors;
+  const h = Math.min(280, floors.length * 24 + 40);
+  const x = 40, y = 120;
+  panel(ctx, x, y, 150, h);
+  drawText(ctx, '층 선택', x + 16, y + 26, { size: 14, color: UI_COLOR.accent });
+  const visible = Math.floor((h - 40) / 24);
+  const from = Math.max(0, Math.min(floors.length - visible, state.picker.index - 2));
+  for (let i = from; i < Math.min(floors.length, from + visible); i++) {
+    const sel = i === state.picker.index;
+    drawText(ctx, `${sel ? '▶ ' : '   '}${floorLabel(floors[i])}`,
+      x + 16, y + 52 + (i - from) * 24,
+      { size: 13, color: sel ? UI_COLOR.text : UI_COLOR.textDim });
+  }
+}
+
+// 개발·점검용 손잡이. 콘솔에서 __gurae 로 세계를 들여다볼 수 있다.
+function exposeDebugHandle() {
+  if (typeof window === 'undefined') return;
+  window.__gurae = {
+    state, cam,
+    get map() { return map; },
+    get buildings() { return buildings; },
+    // 타일 좌표로 순간이동 (실외)
+    tp(tx, ty) {
+      state.mode = 'outdoor';
+      state.interior = null;
+      state.player.x = (tx + 0.5) * S;
+      state.player.y = (ty + 0.7) * S;
+      cam.snap(state.player.x, state.player.y);
+    },
+    // 이름으로 건물 앞까지
+    goto(name) {
+      const b = buildings.list.find((x) => x.name === name);
+      if (!b) return false;
+      const out = doorOutside(b);
+      window.__gurae.tp(out.x, out.y);
+      return true;
+    },
+    interact,
+  };
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+}

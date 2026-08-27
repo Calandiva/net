@@ -1,3 +1,5 @@
 netforge.bundle.js
 __pycache__/
 .DS_Store
+node_modules/
+sy/tools/osm-cache.json

@@ -1,0 +1,4809 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="김포 구래동에서 양촌공단까지 걸어가는 탑뷰 도트 어드벤처. 무엇을 건드리느냐로 결말이 갈린다.">
+<title>〈구래〉 — 구래동에서 양촌공단까지</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #10131a; color: #f4f1ea;
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #game {
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  #fs {
+    position: fixed; right: 12px; bottom: 44px; z-index: 5;
+    width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.22);
+    background: rgba(28,26,33,.82); color: #f4f1ea; font-size: 15px;
+    border-radius: 4px; cursor: pointer;
+  }
+  #fs:hover { background: rgba(60,56,70,.9); }
+  #boot {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; background: #10131a; z-index: 10;
+  }
+  #boot b { font-size: 22px; letter-spacing: .04em; }
+  #boot span { font-size: 12px; color: #b9b3a8; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<button id="fs" title="전체화면 (F)">⛶</button>
+<div id="boot"><b>〈구래〉</b><span>구래동을 짓는 중…</span></div>
+<script>
+'use strict';
+
+const __M = Object.create(null);
+
+// ── config.js ─────────────────────────────
+(function () {
+  // 〈구래〉 — 모든 조정 가능한 값은 이 파일에 모은다. 다른 파일에 숫자를 직접 적지 않는다.
+
+  // ── 시드 ────────────────────────────────────────────────────────────────
+  // 절차적 생성(스프라이트, 지면 변주, 건물 이름, 실내 배치)은 전부 이 시드에서 파생된다.
+  // 같은 시드면 언제나 같은 결과가 나온다.
+  const SEED = 'gurae-2026';
+
+  // ── 좌표계 ──────────────────────────────────────────────────────────────
+  // 실제 위경도(WGS84)를 타일 좌표로 옮기는 기준. 지도 데이터를 갈아끼울 때 여기만 바꾼다.
+  const GEO = {
+    // 김포시 구래동 ~ 양촌읍(양곡·학운산업단지)을 감싸는 영역
+    south: 37.6150,
+    north: 37.6700,
+    west: 126.5820,
+    east: 126.6560,
+    // 타일 하나가 실제 몇 미터인가
+    metersPerTile: 2.5,
+    // 위도 1도 / 경도 1도의 미터 환산 (중위도 근사)
+    metersPerLat: 110990,
+    metersPerLon: 88150, // 위도 37.64° 기준
+  };
+
+  // ── 타일 / 청크 ─────────────────────────────────────────────────────────
+  const TILE = {
+    size: 16,      // 타일 한 변의 픽셀 수
+    chunk: 32,     // 청크 한 변의 타일 수
+    chunkCacheMax: 40, // 캔버스로 구워 둘 청크 최대 개수 (메모리 상한)
+  };
+
+  // ── 지면 종류 ───────────────────────────────────────────────────────────
+  // 값은 청크 배열에 그대로 들어가므로 0~255 안에서 유지한다.
+  const GROUND = {
+    FIELD: 0,      // 논밭
+    GRASS: 1,      // 풀밭
+    DIRT: 2,       // 흙길
+    ROAD: 3,       // 차도
+    SIDEWALK: 4,   // 보도
+    CROSSWALK: 5,  // 횡단보도
+    PLAZA: 6,      // 광장 / 포장블럭
+    WATER: 7,      // 물
+    SAND: 8,       // 하천변 모래
+    PARKING: 9,    // 주차장
+    YARD: 10,      // 공단 포장 마당
+    FLOOR: 11,     // 건물 바닥(외곽 데크)
+    TRACK: 12,     // 공원 산책로
+    ROAD_LINE: 13, // 차도 중앙선
+  };
+
+  // 통과할 수 없는 지면
+  const GROUND_SOLID = [GROUND.WATER];
+
+  // ── 소품 ────────────────────────────────────────────────────────────────
+  const PROP = {
+    NONE: 0,
+    TREE: 1,       // 가로수 / 숲
+    BUSH: 2,
+    LAMP: 3,       // 가로등
+    BENCH: 4,
+    SIGN: 5,       // 표지판
+    HYDRANT: 6,
+    PLANTER: 7,    // 화분
+    FENCE: 8,      // 울타리
+    ROCK: 9,
+    FLOWER: 10,    // 꽃 (통과 가능)
+    VENDING: 11,   // 자판기
+  };
+
+  // 통과할 수 없는 소품
+  const PROP_SOLID = [PROP.TREE, PROP.LAMP, PROP.BENCH, PROP.SIGN,
+    PROP.HYDRANT, PROP.PLANTER, PROP.FENCE, PROP.ROCK, PROP.VENDING];
+
+  // 지면별 소품 등장 확률과 후보 (절차적 채움)
+  const PROP_RULES = {
+    [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.ROCK] },
+    [GROUND.FIELD]: { rate: 0.004, pick: [PROP.ROCK, PROP.BUSH] },
+    [GROUND.SIDEWALK]: { rate: 0.03, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
+    [GROUND.PLAZA]: { rate: 0.02, pick: [PROP.BENCH, PROP.PLANTER, PROP.LAMP] },
+    [GROUND.TRACK]: { rate: 0.04, pick: [PROP.BENCH, PROP.LAMP, PROP.BUSH] },
+    [GROUND.SAND]: { rate: 0.02, pick: [PROP.ROCK, PROP.BUSH] },
+    [GROUND.DIRT]: { rate: 0.02, pick: [PROP.BUSH, PROP.ROCK] },
+  };
+
+  // ── 도로 ────────────────────────────────────────────────────────────────
+  // 등급별 차도 폭(타일)과 양쪽 보도 폭(타일)
+  const ROAD_CLASS = {
+    expressway: { width: 7, sidewalk: 0, crossing: false },  // 자동차전용도로
+    arterial:   { width: 6, sidewalk: 2, crossing: true },   // 대로
+    main:       { width: 4, sidewalk: 2, crossing: true },   // 간선
+    local:      { width: 3, sidewalk: 1, crossing: true },   // 이면도로
+    alley:      { width: 2, sidewalk: 0, crossing: false },  // 골목
+    path:       { width: 2, sidewalk: 0, crossing: false, ground: GROUND.TRACK }, // 산책로
+  };
+
+  // ── 플레이어 ────────────────────────────────────────────────────────────
+  const PLAYER = {
+    walkSpeed: 78,     // 픽셀/초 (타일 16px 기준 약 4.9칸/초)
+    runMultiplier: 2.1,
+    width: 8,          // 충돌 상자 (픽셀)
+    height: 6,         // 발밑 상자. 도트 게임 특유의 "발만 부딪히는" 감각
+    drawWidth: 14,
+    drawHeight: 20,
+    animFps: 7,
+    startPlace: '구래역',  // 이 건물 출입구 앞에서 시작한다
+    startLon: 126.6285,    // 그 건물을 못 찾았을 때 쓰는 좌표
+    startLat: 37.6437,
+  };
+
+  // ── 카메라 ──────────────────────────────────────────────────────────────
+  const CAMERA = {
+    zoom: 2,           // 기본 확대율 (정수 유지 — 도트가 뭉개지지 않게)
+    zoomMin: 2,
+    zoomMax: 5,
+    lerp: 0.16,        // 따라가는 부드러움 (0~1)
+    deadzone: 6,       // 이 픽셀 안에서는 카메라가 움직이지 않는다
+  };
+
+  // ── 렌더 ────────────────────────────────────────────────────────────────
+  const RENDER = {
+    maxDpr: 2,             // 고DPI 상한
+    labelMaxDistance: 260, // 이름표를 그릴 최대 거리(월드 픽셀)
+    labelMax: 14,          // 한 화면에 그릴 이름표 최대 개수
+    nightless: true,       // 낮 고정 (시간대 연출 없음)
+    shadowAlpha: 0.18,
+  };
+
+  // ── 건물 ────────────────────────────────────────────────────────────────
+  const BUILDING = {
+    minTiles: 3,           // 건물 한 변 최소 타일
+    wallHeightPerFloor: 5, // 층당 벽 높이(픽셀) — 탑뷰지만 살짝 입체로 보이게
+    wallHeightMax: 46,
+    doorProbeRadius: 40,   // 출입구 방향을 정할 때 도로를 찾는 반경(타일)
+    enterRadius: 27,       // 출입구에 이만큼(픽셀) 다가가면 진입 가능
+  };
+
+  // 건물 종류. 색·실내 구성·이름 규칙이 여기에 묶인다.
+  const KIND = {
+    APARTMENT: 'apartment',   // 아파트 동
+    HOUSE: 'house',           // 단독·빌라
+    SHOP: 'shop',             // 상가
+    TOWER: 'tower',           // 주상복합 / 오피스텔
+    MART: 'mart',             // 대형 상업시설
+    SCHOOL: 'school',
+    PUBLIC: 'public',         // 관공서
+    STATION: 'station',       // 지하철역
+    FACTORY: 'factory',       // 공장
+    WAREHOUSE: 'warehouse',
+    CHURCH: 'church',
+    HOSPITAL: 'hospital',
+    PARK_FACILITY: 'park',    // 공원 관리동·정자
+    FARMHOUSE: 'farmhouse',   // 농가·창고
+  };
+
+  // ── 실내 ────────────────────────────────────────────────────────────────
+  const INTERIOR = {
+    scale: 1.6,        // 외관 footprint 대비 실내 크기 배율 (안이 더 넓다)
+    minW: 15, minH: 15,   // 복도 + 위아래 방 한 줄이 들어갈 최소 크기
+    maxW: 44, maxH: 32,
+    corridorWidth: 3,
+    minRoom: 4,        // 방 한 변 최소 타일
+    elevatorFrom: 6,   // 이 층수 이상이면 계단 대신 엘리베이터
+    exitPause: 0.25,   // 나간 직후 다시 들어가지 않도록 두는 시간(초)
+  };
+
+  // 실내 타일
+  const IN = {
+    VOID: 0, FLOOR: 1, WALL: 2, EXIT: 3, STAIR_UP: 4, STAIR_DOWN: 5,
+    ELEVATOR: 6, COUNTER: 7, SHELF: 8, DESK: 9, PLANT: 10, RUG: 11,
+    WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
+  };
+  const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
+    IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE];
+
+  // ── NPC ────────────────────────────────────────────────────────────────
+  const NPC = {
+    perChunk: 2,       // 청크당 최대 인원
+    speed: 26,
+    wanderRadius: 90,  // 태어난 자리에서 이 픽셀 이상 벗어나지 않는다
+    spawnGrounds: [GROUND.SIDEWALK, GROUND.PLAZA, GROUND.TRACK],
+  };
+
+  // ── UI ─────────────────────────────────────────────────────────────────
+  const UI = {
+    font: '"Galmuri11", "DungGeunMo", "NeoDunggeunmo", "Apple SD Gothic Neo", sans-serif',
+    labelSize: 11,
+    hudSize: 12,
+    minimapSize: 148,   // 미니맵 한 변(px)
+    minimapScale: 10,   // 미니맵 픽셀 1개가 담는 타일 수
+    toastSeconds: 2.6,
+  };
+
+  // ── 조작 ────────────────────────────────────────────────────────────────
+  const KEYS = {
+    up: ['ArrowUp', 'KeyW'],
+    down: ['ArrowDown', 'KeyS'],
+    left: ['ArrowLeft', 'KeyA'],
+    right: ['ArrowRight', 'KeyD'],
+    run: ['ShiftLeft', 'ShiftRight'],
+    interact: ['Space', 'Enter', 'KeyE'],
+    fullscreen: ['KeyF'],
+    map: ['KeyM'],
+    help: ['KeyH', 'Slash'],
+    zoomIn: ['Equal', 'NumpadAdd'],
+    zoomOut: ['Minus', 'NumpadSubtract'],
+  };
+
+  // ── 게임 규칙 ───────────────────────────────────────────────────────────
+  // 구래동에서 출발해 양촌공단에 닿으면 끝난다. 도중에 무엇을 건드렸느냐로 결말이 갈린다.
+  const GAME = {
+    startClock: 8 * 3600 + 10 * 60,  // 시작 시각 08:10
+    deadline: 9 * 3600,              // 이 시각을 넘기면 지각
+    timeScale: 6,                    // 실제 1초 = 게임 6초
+    goalRegions: ['yangchon-ind', 'hagun-ind'], // 여기에 발을 들이면 도착
+    goalName: '양촌공단',
+    interactRadius: 27,              // 물건에 이만큼(픽셀) 다가가면 만질 수 있다
+    petRadius: 28,                   // 고양이
+  };
+
+  // ── 저장 ────────────────────────────────────────────────────────────────
+  const SAVE = {
+    key: 'sy-gurae-save-v1',
+    intervalSeconds: 5,
+  };
+
+  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.NPC = NPC; __M.UI = UI; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
+})();
+
+// ── util/rng.js ─────────────────────────────
+(function () {
+  // 시드 기반 난수 · 노이즈. 절차적 생성물이 항상 같은 모습으로 재현되도록 하는 토대.
+
+  // 문자열/숫자 조각들을 32비트 정수 해시 하나로 섞는다.
+  function hash32(...parts) {
+    let h = 0x811c9dc5;
+    for (const part of parts) {
+      const s = typeof part === 'string' ? part : String(part);
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      h = Math.imul(h ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  // mulberry32 — 짧고 품질이 충분한 결정적 난수기.
+  function makeRng(...seedParts) {
+    let a = hash32(...seedParts);
+    const rng = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    // 편의 함수들
+    rng.int = (min, max) => min + Math.floor(rng() * (max - min + 1));
+    rng.range = (min, max) => min + rng() * (max - min);
+    rng.pick = (arr) => arr[Math.floor(rng() * arr.length) % arr.length];
+    rng.chance = (p) => rng() < p;
+    rng.shuffle = (arr) => {
+      const out = arr.slice();
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    };
+    return rng;
+  }
+
+  // 시드 문자열들을 노이즈용 정수 시드 하나로 미리 굳혀 둔다.
+  // 노이즈 함수는 픽셀마다 불리므로 문자열을 만들지 않는 것이 중요하다.
+  function seedOf(...parts) { return hash32(...parts); }
+
+  // 정수 좌표 해시 (0~1). 문자열을 거치지 않는다.
+  function noiseAt(seed, x, y) {
+    let h = seed ^ 0x9e3779b9;
+    h = Math.imul(h ^ (x | 0), 0x85ebca6b);
+    h ^= h >>> 13;
+    h = Math.imul(h ^ (y | 0), 0xc2b2ae35);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+
+  // 격자 보간 밸류 노이즈. scale 이 클수록 완만하다.
+  function valueNoise(seed, x, y, scale) {
+    const fx = x / scale, fy = y / scale;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = smooth(fx - x0), ty = smooth(fy - y0);
+    const n00 = noiseAt(seed, x0, y0);
+    const n10 = noiseAt(seed, x0 + 1, y0);
+    const n01 = noiseAt(seed, x0, y0 + 1);
+    const n11 = noiseAt(seed, x0 + 1, y0 + 1);
+    return lerp(lerp(n00, n10, tx), lerp(n01, n11, tx), ty);
+  }
+
+  // 여러 옥타브를 겹쳐 자연스러운 얼룩을 만든다.
+  function fbm(seed, x, y, scale, octaves = 3) {
+    let sum = 0, amp = 1, norm = 0, s = scale, sd = seed;
+    for (let i = 0; i < octaves; i++) {
+      sum += valueNoise(sd, x, y, s) * amp;
+      norm += amp;
+      amp *= 0.5;
+      s *= 0.5;
+      sd = (Math.imul(sd, 0x27d4eb2d) ^ 0x165667b1) >>> 0;
+    }
+    return sum / norm;
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smooth(t) { return t * t * (3 - 2 * t); }
+  function clamp(v, min, max) { return v < min ? min : v > max ? max : v; }
+
+  __M.hash32 = hash32; __M.makeRng = makeRng; __M.seedOf = seedOf; __M.noiseAt = noiseAt; __M.valueNoise = valueNoise; __M.fbm = fbm; __M.lerp = lerp; __M.smooth = smooth; __M.clamp = clamp;
+})();
+
+// ── world/geo.js ─────────────────────────────
+(function () {
+  // 위경도(WGS84) ↔ 타일 좌표 변환만 담당한다.
+  // 지역 데이터는 전부 실제 좌표로 적고, 게임 안에서 쓰는 순간 여기를 통과한다.
+  // 지도 API에서 받은 데이터를 그대로 얹어도 이 파일만 통하면 된다.
+
+  const { GEO, TILE } = __M;
+
+  // 영역 전체 크기 (타일)
+  const WORLD_W = Math.round(
+    ((GEO.east - GEO.west) * GEO.metersPerLon) / GEO.metersPerTile);
+  const WORLD_H = Math.round(
+    ((GEO.north - GEO.south) * GEO.metersPerLat) / GEO.metersPerTile);
+
+  // 영역 전체 크기 (픽셀)
+  const WORLD_PX_W = WORLD_W * TILE.size;
+  const WORLD_PX_H = WORLD_H * TILE.size;
+
+  // 경도 → 타일 x
+  function lonToTx(lon) {
+    return ((lon - GEO.west) * GEO.metersPerLon) / GEO.metersPerTile;
+  }
+  // 위도 → 타일 y (화면은 위쪽이 북쪽)
+  function latToTy(lat) {
+    return ((GEO.north - lat) * GEO.metersPerLat) / GEO.metersPerTile;
+  }
+  // [경도, 위도] → [타일x, 타일y]
+  function project([lon, lat]) {
+    return [lonToTx(lon), latToTy(lat)];
+  }
+  // 폴리곤/폴리라인 통째로 변환
+  function projectPath(path) {
+    return path.map(project);
+  }
+  // 타일 → 위경도 (디버그·좌표 표시용)
+  function tileToLonLat(tx, ty) {
+    return [
+      GEO.west + (tx * GEO.metersPerTile) / GEO.metersPerLon,
+      GEO.north - (ty * GEO.metersPerTile) / GEO.metersPerLat,
+    ];
+  }
+  // 미터 → 타일
+  function metersToTiles(m) { return m / GEO.metersPerTile; }
+
+  // 폴리곤(타일 좌표)의 경계 상자
+  function pathBounds(path) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of path) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return { minX, minY, maxX, maxY };
+  }
+
+  // 점이 폴리곤 안에 있는가 (ray casting)
+  function pointInPath(px, py, path) {
+    let inside = false;
+    for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+      const [xi, yi] = path[i], [xj, yj] = path[j];
+      if ((yi > py) !== (yj > py) &&
+          px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-12) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  // 점과 선분 사이 거리 (도로 폭 계산에 쓴다)
+  function distToSegment(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const cx = ax + t * dx, cy = ay + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  __M.WORLD_W = WORLD_W; __M.WORLD_H = WORLD_H; __M.WORLD_PX_W = WORLD_PX_W; __M.WORLD_PX_H = WORLD_PX_H; __M.lonToTx = lonToTx; __M.latToTy = latToTy; __M.project = project; __M.projectPath = projectPath; __M.tileToLonLat = tileToLonLat; __M.metersToTiles = metersToTiles; __M.pathBounds = pathBounds; __M.pointInPath = pointInPath; __M.distToSegment = distToSegment;
+})();
+
+// ── render/palette.js ─────────────────────────────
+(function () {
+  // 색. 여기 값만 바꾸면 게임 전체 톤이 바뀐다.
+  // 도트 톤은 채도를 조금 낮추고 명도 차이로 구분한다 — 눈이 덜 피로하다.
+
+  const { GROUND, PROP, KIND, IN } = __M;
+
+  // ── 지면 ────────────────────────────────────────────────────────────────
+  const GROUND_COLOR = {
+    [GROUND.FIELD]: '#c3cf85',
+    [GROUND.GRASS]: '#8cc069',
+    [GROUND.DIRT]: '#c0a578',
+    [GROUND.ROAD]: '#6d6f78',
+    [GROUND.SIDEWALK]: '#c7c1b3',
+    [GROUND.CROSSWALK]: '#d8d4c8',
+    [GROUND.PLAZA]: '#d9d1bf',
+    [GROUND.WATER]: '#6cb2d6',
+    [GROUND.SAND]: '#e0d3a4',
+    [GROUND.PARKING]: '#87878f',
+    [GROUND.YARD]: '#a6a29a',
+    [GROUND.FLOOR]: '#b9b2a6',
+    [GROUND.TRACK]: '#cfa47f',
+    [GROUND.ROAD_LINE]: '#6d6f78',
+  };
+
+  // 타일마다 살짝 흔들 밝기 폭 (0 이면 단색)
+  const GROUND_JITTER = {
+    [GROUND.FIELD]: 0.10,
+    [GROUND.GRASS]: 0.09,
+    [GROUND.DIRT]: 0.08,
+    [GROUND.ROAD]: 0.04,
+    [GROUND.SIDEWALK]: 0.05,
+    [GROUND.CROSSWALK]: 0.02,
+    [GROUND.PLAZA]: 0.05,
+    [GROUND.WATER]: 0.07,
+    [GROUND.SAND]: 0.07,
+    [GROUND.PARKING]: 0.04,
+    [GROUND.YARD]: 0.05,
+    [GROUND.FLOOR]: 0.03,
+    [GROUND.TRACK]: 0.06,
+    [GROUND.ROAD_LINE]: 0.03,
+  };
+
+  // ── 소품 ────────────────────────────────────────────────────────────────
+  const PROP_COLOR = {
+    [PROP.TREE]: { leaf: '#4e9147', leafHi: '#6cb35f', trunk: '#7a5a3a' },
+    [PROP.BUSH]: { leaf: '#5aa055', leafHi: '#7cbd6e' },
+    [PROP.LAMP]: { pole: '#8e8e96', head: '#f2e6a8' },
+    [PROP.BENCH]: { wood: '#b07a4c', leg: '#7d7d85' },
+    [PROP.SIGN]: { pole: '#8e8e96', board: '#4f7fbf', text: '#f2f2f0' },
+    [PROP.HYDRANT]: { body: '#cf5b52', cap: '#e6e6e6' },
+    [PROP.PLANTER]: { pot: '#b1705a', leaf: '#5aa055' },
+    [PROP.FENCE]: { wood: '#9b8a6a' },
+    [PROP.ROCK]: { body: '#9a9a95', hi: '#b8b8b2' },
+    [PROP.FLOWER]: { stem: '#5aa055', petal: ['#f2a2c0', '#f6e07a', '#e88a6a', '#c8a8ee'] },
+    [PROP.VENDING]: { body: '#cf5b52', glass: '#8fd2e6' },
+  };
+
+  // ── 건물 ────────────────────────────────────────────────────────────────
+  // wall 옆벽 · roof 옥상 · trim 테두리 · accent 간판/창문
+  const BUILDING_COLOR = {
+    [KIND.APARTMENT]: { wall: '#e9e1d3', roof: '#b7c2ce', trim: '#9aa4b0', accent: '#8fb8d8' },
+    [KIND.HOUSE]: { wall: '#efe4d2', roof: '#d0806a', trim: '#a8624f', accent: '#8fb8d8' },
+    [KIND.SHOP]: { wall: '#f0e6d6', roof: '#dcb05f', trim: '#b58840', accent: '#e2705f' },
+    [KIND.TOWER]: { wall: '#dfe6ec', roof: '#93a9bd', trim: '#7c93a8', accent: '#6fa8d8' },
+    [KIND.MART]: { wall: '#f2e2dc', roof: '#d1756c', trim: '#a95a52', accent: '#f2c14e' },
+    [KIND.SCHOOL]: { wall: '#f0e6c8', roof: '#c9b071', trim: '#a08c50', accent: '#7fb87f' },
+    [KIND.PUBLIC]: { wall: '#e4ecf2', roof: '#9ebbd2', trim: '#7d9cb5', accent: '#5f8fc0' },
+    [KIND.STATION]: { wall: '#dfe9f2', roof: '#7fa5c6', trim: '#5f85a8', accent: '#f2c14e' },
+    [KIND.FACTORY]: { wall: '#d8dade', roof: '#a9b1b8', trim: '#8b939a', accent: '#6f8fa8' },
+    [KIND.WAREHOUSE]: { wall: '#d2d6d8', roof: '#98a2a8', trim: '#7c868c', accent: '#8a949a' },
+    [KIND.CHURCH]: { wall: '#efe8f2', roof: '#b2a4c4', trim: '#8e80a2', accent: '#d8c46a' },
+    [KIND.HOSPITAL]: { wall: '#f2f2f0', roof: '#cfd6da', trim: '#a8b0b4', accent: '#e2655c' },
+    [KIND.PARK_FACILITY]: { wall: '#e8d9bd', roof: '#b57f4e', trim: '#8a5f39', accent: '#5aa055' },
+    [KIND.FARMHOUSE]: { wall: '#e4dcc6', roof: '#9aa88c', trim: '#7d8a72', accent: '#c9d8e0' },
+  };
+
+  // ── 실내 ────────────────────────────────────────────────────────────────
+  const INTERIOR_COLOR = {
+    [IN.VOID]: '#1c1a21',
+    [IN.FLOOR]: '#e2d6bf',
+    [IN.WALL]: '#a8927a',
+    [IN.EXIT]: '#8fd08a',
+    [IN.STAIR_UP]: '#c9b892',
+    [IN.STAIR_DOWN]: '#a89878',
+    [IN.ELEVATOR]: '#9fb6c9',
+    [IN.COUNTER]: '#c08b5c',
+    [IN.SHELF]: '#b08a62',
+    [IN.DESK]: '#c2a077',
+    [IN.PLANT]: '#5aa055',
+    [IN.RUG]: '#d9a2a2',
+    [IN.WINDOW]: '#a8d8ea',
+    [IN.BED]: '#dcd2e2',
+    [IN.TABLE]: '#cba97e',
+    [IN.MACHINE]: '#93a2ac',
+  };
+
+  // ── 인물 ────────────────────────────────────────────────────────────────
+  const PLAYER_COLOR = {
+    skin: '#f2cfa8', hair: '#3c2f2a', top: '#e2705f', bottom: '#4a5a78',
+    shoe: '#2f2f38', outline: '#2a2028',
+  };
+
+  // NPC 옷 색 후보 — 시드로 골라 쓴다
+  const NPC_COLORS = {
+    hair: ['#3c2f2a', '#5a4030', '#20202a', '#7a5a3a', '#a06a4a'],
+    top: ['#8fb8d8', '#e2a0b8', '#8fc48a', '#f2c14e', '#c8a8ee', '#e88a6a', '#dfe6ec'],
+    bottom: ['#4a5a78', '#5a5a62', '#7a6a52', '#3c4a5a'],
+  };
+
+  // ── UI ─────────────────────────────────────────────────────────────────
+  const UI_COLOR = {
+    panel: 'rgba(28, 26, 33, 0.82)',
+    panelEdge: 'rgba(255, 255, 255, 0.16)',
+    text: '#f4f1ea',
+    textDim: '#b9b3a8',
+    accent: '#f2c14e',
+    label: '#fffdf6',
+    labelShadow: 'rgba(20, 18, 24, 0.85)',
+    labelLandmark: '#ffe9a8',
+    minimapEdge: 'rgba(255,255,255,0.25)',
+    player: '#e2705f',
+    sky: '#9fd0e8',
+  };
+
+  // ── 색 계산 도구 ────────────────────────────────────────────────────────
+  function hexToRgb(hex) {
+    const v = parseInt(hex.slice(1), 16);
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  }
+
+  function rgbToHex([r, g, b]) {
+    const c = (n) => Math.max(0, Math.min(255, Math.round(n)));
+    return '#' + ((1 << 24) + (c(r) << 16) + (c(g) << 8) + c(b)).toString(16).slice(1);
+  }
+
+  // amount > 0 밝게, < 0 어둡게
+  function shade(hex, amount) {
+    const [r, g, b] = hexToRgb(hex);
+    const t = amount > 0 ? 255 : 0;
+    const p = Math.abs(amount);
+    return rgbToHex([r + (t - r) * p, g + (t - g) * p, b + (t - b) * p]);
+  }
+
+  function mix(a, b, t) {
+    const A = hexToRgb(a), B = hexToRgb(b);
+    return rgbToHex([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
+  }
+
+  __M.GROUND_COLOR = GROUND_COLOR; __M.GROUND_JITTER = GROUND_JITTER; __M.PROP_COLOR = PROP_COLOR; __M.BUILDING_COLOR = BUILDING_COLOR; __M.INTERIOR_COLOR = INTERIOR_COLOR; __M.PLAYER_COLOR = PLAYER_COLOR; __M.NPC_COLORS = NPC_COLORS; __M.UI_COLOR = UI_COLOR; __M.hexToRgb = hexToRgb; __M.rgbToHex = rgbToHex; __M.shade = shade; __M.mix = mix;
+})();
+
+// ── world/spatial.js ─────────────────────────────
+(function () {
+  // 균일 격자 공간 인덱스. 도로 · 건물 · 구역을 "이 근처에 뭐가 있나" 로 빠르게 찾는다.
+  // 청크를 그릴 때마다 전체 목록을 훑지 않기 위한 것.
+
+  class GridIndex {
+    constructor(cellTiles) {
+      this.cell = cellTiles;
+      this.map = new Map();
+    }
+
+    _key(cx, cy) { return cx * 100000 + cy; }
+
+    // 경계 상자(타일 좌표)를 차지하는 모든 칸에 넣는다.
+    insert(item, minX, minY, maxX, maxY) {
+      const c = this.cell;
+      const x0 = Math.floor(minX / c), x1 = Math.floor(maxX / c);
+      const y0 = Math.floor(minY / c), y1 = Math.floor(maxY / c);
+      for (let cy = y0; cy <= y1; cy++) {
+        for (let cx = x0; cx <= x1; cx++) {
+          const k = this._key(cx, cy);
+          let bucket = this.map.get(k);
+          if (!bucket) this.map.set(k, (bucket = []));
+          bucket.push(item);
+        }
+      }
+    }
+
+    // 경계 상자와 겹칠 수 있는 항목들 (중복 없이)
+    query(minX, minY, maxX, maxY) {
+      const c = this.cell;
+      const x0 = Math.floor(minX / c), x1 = Math.floor(maxX / c);
+      const y0 = Math.floor(minY / c), y1 = Math.floor(maxY / c);
+      const seen = new Set();
+      const out = [];
+      for (let cy = y0; cy <= y1; cy++) {
+        for (let cx = x0; cx <= x1; cx++) {
+          const bucket = this.map.get(this._key(cx, cy));
+          if (!bucket) continue;
+          for (const item of bucket) {
+            if (seen.has(item)) continue;
+            seen.add(item);
+            out.push(item);
+          }
+        }
+      }
+      return out;
+    }
+
+    queryPoint(x, y) { return this.query(x, y, x, y); }
+  }
+
+  // 두 사각형(타일 좌표, [x,y,w,h])이 margin 만큼 여유를 두고 겹치는가
+  function rectsOverlap(a, b, margin = 0) {
+    return !(a.x + a.w + margin <= b.x || b.x + b.w + margin <= a.x ||
+             a.y + a.h + margin <= b.y || b.y + b.h + margin <= a.y);
+  }
+
+  __M.GridIndex = GridIndex; __M.rectsOverlap = rectsOverlap;
+})();
+
+// ── world/data/names.js ─────────────────────────────
+(function () {
+  // 절차적으로 만들어지는 상호·건물 이름 재료.
+  // 실제 상호가 아니라 김포 신도시 상가 간판에서 흔한 낱말을 조합한 것이다.
+
+  const SHOP_PREFIX = [
+    '한강', '구래', '금빛', '해든', '온담', '푸른', '들꽃', '나루', '햇살', '솔뫼',
+    '가온', '너울', '별빛', '단비', '하람', '초록', '바람', '아침', '달빛', '이레',
+  ];
+
+  const SHOP_SUFFIX = {
+    food: ['분식', '김밥', '칼국수', '순대국', '치킨', '족발', '떡볶이', '만두', '국수', '고깃집'],
+    cafe: ['커피', '베이커리', '카페', '디저트', '빙수', '토스트'],
+    life: ['편의점', '세탁소', '문구', '철물', '미용실', '약국', '안경', '반찬가게', '꽃집', '떡집'],
+    study: ['학원', '수학교습소', '영어교실', '피아노', '태권도', '미술학원', '독서실'],
+    care: ['의원', '치과', '한의원', '동물병원', '피부과'],
+    office: ['부동산', '공인중개사', '세무회계', '법무사', '스튜디오', '디자인'],
+  };
+
+  const SHOP_MIX = ['food', 'food', 'cafe', 'life', 'life', 'study', 'care', 'office'];
+
+  // 층수가 있는 상가 건물 이름
+  const BUILDING_SUFFIX = ['프라자', '타워', '스퀘어', '빌딩', '센터', '아케이드'];
+
+  // 아파트 마을 이름 뒤에 붙는 것
+  const APT_UNIT = '동';
+
+  // 공장 이름 재료
+  const FACTORY_PREFIX = ['대한', '한성', '금강', '태영', '신흥', '동보', '삼정',
+    '우신', '평화', '광명', '유일', '성진'];
+  const FACTORY_SUFFIX = ['정밀', '금속', '산업', '테크', '기계', '물류', '화학',
+    '전자', '포장', '플라스틱'];
+  const FACTORY_TAIL = ['공장', '제1공장', '제2공장', '물류센터', '자재창고'];
+
+  // 농가·창고
+  const RURAL_NAME = ['농막', '비닐하우스 관리동', '창고', '축사', '농기계 보관동', '정미소'];
+
+  // 실내 방 이름
+  const ROOM_NAMES = {
+    school: ['1반', '2반', '3반', '교무실', '과학실', '음악실', '미술실', '컴퓨터실', '도서실', '급식실'],
+    public: ['민원실', '총무팀', '주민자치', '상담실', '회의실', '문서고', '숙직실'],
+    office: ['사무실', '회의실', '탕비실', '자료실', '대표실'],
+    factory: ['조립1라인', '조립2라인', '도장실', '검사실', '자재창고', '탈의실', '식당'],
+    hospital: ['접수', '진료실', '처치실', '주사실', '물리치료실', '검사실'],
+    station: ['대합실', '매표소', '역무실', '유실물센터', '편의점', '화장실'],
+    apartment: ['호'],
+  };
+
+  __M.SHOP_PREFIX = SHOP_PREFIX; __M.SHOP_SUFFIX = SHOP_SUFFIX; __M.SHOP_MIX = SHOP_MIX; __M.BUILDING_SUFFIX = BUILDING_SUFFIX; __M.APT_UNIT = APT_UNIT; __M.FACTORY_PREFIX = FACTORY_PREFIX; __M.FACTORY_SUFFIX = FACTORY_SUFFIX; __M.FACTORY_TAIL = FACTORY_TAIL; __M.RURAL_NAME = RURAL_NAME; __M.ROOM_NAMES = ROOM_NAMES;
+})();
+
+// ── world/data/regions.js ─────────────────────────────
+(function () {
+  // 지면 구역. 좌표는 [경도, 위도], 배열 뒤쪽이 앞쪽을 덮어쓴다.
+  // kind 는 render/palette.js 와 world/map.js 가 함께 해석한다.
+  //   city 시가지 · field 논밭 · industrial 공단 · park 공원 · forest 산 · water 물 · sand 하천변
+
+  const { GROUND } = __M;
+
+  const REGIONS = [
+    {
+      id: 'gahyeon', name: '가현산', kind: 'forest', ground: GROUND.GRASS,
+      propRate: 0.42, label: true,
+      path: [[126.6130, 37.6700], [126.6560, 37.6700], [126.6540, 37.6600],
+        [126.6350, 37.6558], [126.6180, 37.6600], [126.6120, 37.6655]],
+    },
+    {
+      id: 'gurae', name: '구래동', kind: 'city', ground: GROUND.GRASS, label: true,
+      path: [[126.6180, 37.6545], [126.6360, 37.6558], [126.6430, 37.6500],
+        [126.6395, 37.6400], [126.6255, 37.6355], [126.6155, 37.6415],
+        [126.6150, 37.6500]],
+    },
+    {
+      id: 'masan', name: '마산동', kind: 'city', ground: GROUND.GRASS, label: true,
+      path: [[126.6360, 37.6472], [126.6512, 37.6455], [126.6520, 37.6350],
+        [126.6390, 37.6318], [126.6318, 37.6392]],
+    },
+    {
+      id: 'yanggok', name: '양촌읍 양곡', kind: 'city', ground: GROUND.GRASS, label: true,
+      path: [[126.5980, 37.6622], [126.6122, 37.6610], [126.6168, 37.6520],
+        [126.6150, 37.6455], [126.5985, 37.6470]],
+    },
+    {
+      id: 'yangchon-ind', name: '김포양촌일반산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.5860, 37.6472], [126.6092, 37.6456], [126.6096, 37.6330],
+        [126.5865, 37.6344]],
+    },
+    {
+      id: 'hagun-ind', name: '학운산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.5990, 37.6312], [126.6202, 37.6300], [126.6192, 37.6200],
+        [126.5980, 37.6212]],
+    },
+    {
+      id: 'gurae-park', name: '구래근린공원', kind: 'park', ground: GROUND.GRASS,
+      propRate: 0.16, label: true,
+      path: [[126.6252, 37.6486], [126.6312, 37.6482], [126.6314, 37.6438],
+        [126.6254, 37.6442]],
+    },
+    {
+      id: 'hosu-park', name: '한강신도시 호수공원', kind: 'park', ground: GROUND.GRASS,
+      propRate: 0.14, label: true,
+      path: [[126.6318, 37.6458], [126.6428, 37.6450], [126.6432, 37.6400],
+        [126.6322, 37.6408]],
+    },
+    {
+      id: 'masan-park', name: '마산근린공원', kind: 'park', ground: GROUND.GRASS,
+      propRate: 0.18, label: true,
+      path: [[126.6432, 37.6392], [126.6492, 37.6388], [126.6490, 37.6350],
+        [126.6430, 37.6354]],
+    },
+    {
+      id: 'hosu', name: '호수', kind: 'water', ground: GROUND.WATER, label: true,
+      path: [[126.6344, 37.6442], [126.6406, 37.6436], [126.6409, 37.6414],
+        [126.6347, 37.6420]],
+    },
+    {
+      id: 'yangchon-res', name: '양촌저수지', kind: 'water', ground: GROUND.WATER,
+      label: true,
+      path: [[126.6038, 37.6392], [126.6092, 37.6388], [126.6090, 37.6358],
+        [126.6036, 37.6362]],
+    },
+  ];
+
+  // 하천·수로. 폴리라인 + 폭(미터). 양쪽에 모래톱이 생긴다.
+  const WATERWAYS = [
+    {
+      name: '나진포천', width: 26,
+      path: [[126.5820, 37.6268], [126.6050, 37.6238], [126.6250, 37.6218],
+        [126.6450, 37.6232], [126.6560, 37.6252]],
+    },
+    {
+      name: '용수로', width: 8,
+      path: [[126.6100, 37.6330], [126.6120, 37.6270], [126.6180, 37.6230]],
+    },
+    {
+      name: '용수로', width: 8,
+      path: [[126.6250, 37.6350], [126.6270, 37.6280], [126.6300, 37.6230]],
+    },
+    {
+      name: '양촌천', width: 12,
+      path: [[126.6060, 37.6480], [126.6040, 37.6400], [126.6060, 37.6330],
+        [126.6110, 37.6270]],
+    },
+  ];
+
+  __M.REGIONS = REGIONS; __M.WATERWAYS = WATERWAYS;
+})();
+
+// ── world/data/roads.js ─────────────────────────────
+(function () {
+  // 이름 있는 도로. cls 는 config.js 의 ROAD_CLASS 키.
+  // 이면도로·골목은 districts.js 규칙으로 절차 생성되므로 여기에 적지 않는다.
+
+  const ROADS = [
+    {
+      name: '김포한강로', cls: 'expressway',
+      path: [[126.5820, 37.6332], [126.6000, 37.6318], [126.6250, 37.6300],
+        [126.6450, 37.6306], [126.6560, 37.6322]],
+    },
+    {
+      name: '김포대로', cls: 'arterial',
+      path: [[126.5880, 37.6612], [126.6050, 37.6562], [126.6200, 37.6524],
+        [126.6382, 37.6522], [126.6520, 37.6482], [126.6560, 37.6456]],
+    },
+    {
+      name: '한강신도시로', cls: 'arterial',
+      path: [[126.6148, 37.6472], [126.6280, 37.6464], [126.6400, 37.6442],
+        [126.6504, 37.6400]],
+    },
+    {
+      name: '구래로', cls: 'main',
+      path: [[126.6284, 37.6546], [126.6285, 37.6440], [126.6292, 37.6358]],
+    },
+    {
+      name: '마산로', cls: 'main',
+      path: [[126.6398, 37.6474], [126.6410, 37.6390], [126.6422, 37.6326]],
+    },
+    {
+      name: '양촌로', cls: 'main',
+      path: [[126.6032, 37.6584], [126.6118, 37.6542], [126.6182, 37.6502],
+        [126.6252, 37.6480]],
+    },
+    {
+      name: '학운로', cls: 'main',
+      path: [[126.5896, 37.6424], [126.6020, 37.6410], [126.6092, 37.6390],
+        [126.6124, 37.6330], [126.6104, 37.6262], [126.6062, 37.6228]],
+    },
+    {
+      name: '양곡로', cls: 'main',
+      path: [[126.6004, 37.6604], [126.6046, 37.6540], [126.6082, 37.6494],
+        [126.6096, 37.6456]],
+    },
+    {
+      name: '누산로', cls: 'local',
+      path: [[126.6196, 37.6352], [126.6300, 37.6324], [126.6424, 37.6302]],
+    },
+    {
+      name: '대포로', cls: 'local',
+      path: [[126.5942, 37.6302], [126.6052, 37.6282], [126.6156, 37.6262],
+        [126.6260, 37.6252]],
+    },
+    {
+      name: '김포한강8로', cls: 'local',
+      path: [[126.6160, 37.6504], [126.6300, 37.6508], [126.6402, 37.6482]],
+    },
+    {
+      name: '김포한강9로', cls: 'local',
+      path: [[126.6198, 37.6422], [126.6330, 37.6416], [126.6424, 37.6396]],
+    },
+    {
+      name: '구래역로', cls: 'local',
+      path: [[126.6236, 37.6452], [126.6286, 37.6448], [126.6340, 37.6452]],
+    },
+    {
+      name: '산단1로', cls: 'local',
+      path: [[126.5880, 37.6448], [126.6080, 37.6436]],
+    },
+    {
+      name: '산단2로', cls: 'local',
+      path: [[126.5884, 37.6376], [126.6086, 37.6362]],
+    },
+    {
+      name: '학운1로', cls: 'local',
+      path: [[126.5992, 37.6272], [126.6194, 37.6258]],
+    },
+    {
+      name: '호수공원 산책로', cls: 'path',
+      path: [[126.6326, 37.6452], [126.6420, 37.6444], [126.6424, 37.6406],
+        [126.6330, 37.6412], [126.6326, 37.6452]],
+    },
+    {
+      name: '구래근린공원 산책로', cls: 'path',
+      path: [[126.6258, 37.6480], [126.6306, 37.6477], [126.6308, 37.6446],
+        [126.6260, 37.6448], [126.6258, 37.6480]],
+    },
+  ];
+
+  __M.ROADS = ROADS;
+})();
+
+// ── world/data/districts.js ─────────────────────────────
+(function () {
+  // 블록 채움 규칙. 폴리곤 하나가 "이 구역은 이런 식으로 채워진다"를 뜻한다.
+  // world/blocks.js 가 이 규칙을 읽어 이면도로 격자와 건물을 결정적으로 만들어 낸다.
+  //
+  // 스키마
+  //   kind    apartment 아파트단지 · commercial 상가 · house 단독/빌라
+  //           · industrial 공장 · rural 농가
+  //   block   블록 한 칸 크기 (미터). 블록 격자는 타일 축(동서남북)에 맞춘다 —
+  //           이름 있는 도로만 실제 방위각대로 비스듬히 지나간다.
+  //   street  블록 사이 도로 등급 (config.js ROAD_CLASS 키)
+  //   fill    종류별 세부 규칙. 크기는 전부 미터.
+
+  const DISTRICTS = [
+    // ── 구래동 아파트 단지 ──────────────────────────────────────────
+    {
+      id: 'hosu-maeul', name: '호수마을', kind: 'apartment',
+      block: { w: 130, h: 105 }, street: 'local',
+      fill: { bw: 62, bh: 15, gap: 26, floors: [15, 25], start: 101 },
+      path: [[126.6300, 37.6484], [126.6392, 37.6478], [126.6388, 37.6444],
+        [126.6300, 37.6450]],
+    },
+    {
+      id: 'hangaram-maeul', name: '한가람마을', kind: 'apartment',
+      block: { w: 130, h: 105 }, street: 'local',
+      fill: { bw: 58, bh: 15, gap: 24, floors: [12, 22], start: 101 },
+      path: [[126.6188, 37.6522], [126.6282, 37.6526], [126.6280, 37.6486],
+        [126.6190, 37.6482]],
+    },
+    {
+      id: 'chungsong-maeul', name: '청송마을', kind: 'apartment',
+      block: { w: 125, h: 100 }, street: 'local',
+      fill: { bw: 56, bh: 15, gap: 24, floors: [10, 20], start: 101 },
+      path: [[126.6156, 37.6480], [126.6246, 37.6478], [126.6242, 37.6430],
+        [126.6158, 37.6434]],
+    },
+    {
+      id: 'eunyeoul-maeul', name: '은여울마을', kind: 'apartment',
+      block: { w: 125, h: 100 }, street: 'local',
+      fill: { bw: 58, bh: 15, gap: 25, floors: [12, 24], start: 101 },
+      path: [[126.6330, 37.6406], [126.6422, 37.6398], [126.6416, 37.6358],
+        [126.6328, 37.6366]],
+    },
+    {
+      id: 'solteo-maeul', name: '솔터마을', kind: 'apartment',
+      block: { w: 130, h: 100 }, street: 'local',
+      fill: { bw: 60, bh: 15, gap: 26, floors: [14, 26], start: 101 },
+      path: [[126.6428, 37.6452], [126.6508, 37.6444], [126.6502, 37.6396],
+        [126.6426, 37.6404]],
+    },
+
+    // ── 상가 ───────────────────────────────────────────────────────
+    {
+      id: 'gurae-rodeo', name: '구래역 로데오거리', kind: 'commercial',
+      block: { w: 80, h: 62 }, street: 'alley',
+      fill: { depth: 14, minW: 8, maxW: 16, floors: [2, 7] },
+      path: [[126.6246, 37.6434], [126.6332, 37.6428], [126.6328, 37.6394],
+        [126.6244, 37.6400]],
+    },
+    {
+      id: 'gurae-north', name: '구래역 북측상가', kind: 'commercial',
+      block: { w: 78, h: 60 }, street: 'alley',
+      fill: { depth: 13, minW: 8, maxW: 15, floors: [2, 5] },
+      path: [[126.6250, 37.6472], [126.6302, 37.6470], [126.6300, 37.6446],
+        [126.6248, 37.6448]],
+    },
+    {
+      id: 'masan-sanggwon', name: '마산역 상가', kind: 'commercial',
+      block: { w: 78, h: 60 }, street: 'alley',
+      fill: { depth: 13, minW: 8, maxW: 15, floors: [2, 6] },
+      path: [[126.6368, 37.6414], [126.6434, 37.6408], [126.6430, 37.6378],
+        [126.6366, 37.6384]],
+    },
+    {
+      id: 'yanggok-sijang', name: '양곡 시가지 상가', kind: 'commercial',
+      block: { w: 76, h: 58 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 14, floors: [2, 4] },
+      path: [[126.6028, 37.6568], [126.6088, 37.6564], [126.6084, 37.6534],
+        [126.6026, 37.6538]],
+    },
+
+    // ── 단독·빌라 ──────────────────────────────────────────────────
+    {
+      id: 'yanggok-house', name: '양곡 주택가', kind: 'house',
+      block: { w: 62, h: 52 }, street: 'alley',
+      fill: { size: 15, jitter: 4, floors: [2, 5] },
+      path: [[126.5992, 37.6602], [126.6112, 37.6594], [126.6106, 37.6520],
+        [126.5996, 37.6526]],
+    },
+    {
+      id: 'gurae-house', name: '구래 단독주택지', kind: 'house',
+      block: { w: 60, h: 50 }, street: 'alley',
+      fill: { size: 14, jitter: 4, floors: [2, 4] },
+      path: [[126.6160, 37.6422], [126.6252, 37.6416], [126.6248, 37.6380],
+        [126.6158, 37.6386]],
+    },
+
+    // ── 공단 ───────────────────────────────────────────────────────
+    {
+      id: 'yangchon-a', name: '양촌산단 A블록', kind: 'industrial',
+      block: { w: 210, h: 150 }, street: 'local',
+      fill: { minW: 60, maxW: 130, minH: 40, maxH: 78, floors: [1, 3] },
+      path: [[126.5876, 37.6462], [126.6082, 37.6450], [126.6078, 37.6392],
+        [126.5878, 37.6402]],
+    },
+    {
+      id: 'yangchon-b', name: '양촌산단 B블록', kind: 'industrial',
+      block: { w: 200, h: 140 }, street: 'local',
+      fill: { minW: 55, maxW: 120, minH: 38, maxH: 70, floors: [1, 3] },
+      path: [[126.5880, 37.6384], [126.6084, 37.6372], [126.6082, 37.6336],
+        [126.5882, 37.6348]],
+    },
+    {
+      id: 'hagun', name: '학운산업단지', kind: 'industrial',
+      block: { w: 205, h: 150 }, street: 'local',
+      fill: { minW: 58, maxW: 125, minH: 40, maxH: 74, floors: [1, 3] },
+      path: [[126.6000, 37.6302], [126.6192, 37.6292], [126.6184, 37.6222],
+        [126.5994, 37.6230]],
+    },
+
+    // ── 농촌 마을 ──────────────────────────────────────────────────
+    {
+      id: 'daepo-ri', name: '대포리', kind: 'rural',
+      block: { w: 150, h: 130 }, street: 'alley',
+      fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.55 },
+      path: [[126.6140, 37.6302], [126.6224, 37.6296], [126.6218, 37.6258],
+        [126.6136, 37.6264]],
+    },
+    {
+      id: 'nusan-ri', name: '누산리', kind: 'rural',
+      block: { w: 150, h: 130 }, street: 'alley',
+      fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.5 },
+      path: [[126.6300, 37.6352], [126.6392, 37.6346], [126.6388, 37.6308],
+        [126.6296, 37.6314]],
+    },
+    {
+      id: 'heungsin-ri', name: '흥신리', kind: 'rural',
+      block: { w: 150, h: 130 }, street: 'alley',
+      fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.5 },
+      path: [[126.5900, 37.6300], [126.5990, 37.6294], [126.5986, 37.6256],
+        [126.5896, 37.6262]],
+    },
+    {
+      id: 'hangaram-2', name: '한가람마을', kind: 'apartment',
+      block: { w: 128, h: 102 }, street: 'local',
+      fill: { bw: 58, bh: 15, gap: 25, floors: [13, 23], start: 201 },
+      path: [[126.6290, 37.6550], [126.6392, 37.6540], [126.6386, 37.6488],
+        [126.6288, 37.6494]],
+    },
+    {
+      id: 'naru-maeul', name: '나루마을', kind: 'apartment',
+      block: { w: 125, h: 100 }, street: 'local',
+      fill: { bw: 56, bh: 15, gap: 24, floors: [11, 21], start: 101 },
+      path: [[126.6356, 37.6472], [126.6428, 37.6464], [126.6424, 37.6418],
+        [126.6352, 37.6426]],
+    },
+    {
+      id: 'gurae-north-house', name: '구래 북측 주택가', kind: 'house',
+      block: { w: 60, h: 50 }, street: 'alley',
+      fill: { size: 14, jitter: 4, floors: [2, 5] },
+      path: [[126.6182, 37.6558], [126.6288, 37.6554], [126.6286, 37.6524],
+        [126.6186, 37.6528]],
+    },
+    {
+      id: 'masan-house', name: '마산 남측 주택가', kind: 'house',
+      block: { w: 60, h: 50 }, street: 'alley',
+      fill: { size: 14, jitter: 4, floors: [2, 4] },
+      path: [[126.6390, 37.6362], [126.6472, 37.6354], [126.6468, 37.6322],
+        [126.6386, 37.6330]],
+    },
+    {
+      id: 'gurae-station-shops', name: '구래역 앞 상가', kind: 'commercial',
+      block: { w: 78, h: 60 }, street: 'alley',
+      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
+      path: [[126.6250, 37.6450], [126.6334, 37.6444], [126.6330, 37.6428],
+        [126.6248, 37.6434]],
+    },
+  ];
+
+  __M.DISTRICTS = DISTRICTS;
+})();
+
+// ── world/data/places.js ─────────────────────────────
+(function () {
+  // 개별 랜드마크 건물. 나머지 건물은 districts.js 규칙으로 절차 생성된다.
+  //
+  // 스키마
+  //   name    표시 이름
+  //   kind    config.js 의 KIND 값
+  //   lon,lat 건물 중심 좌표
+  //   w,h     가로·세로 (미터)
+  //   floors  지상 층수, basement 지하 층수
+  //   note    실내 안내판에 뜨는 한 줄
+  //   metro   지하철역이면 { line, order } — 역끼리 이동할 때 쓴다
+
+  const { KIND } = __M;
+
+  const PLACES = [
+    // ── 김포골드라인 역 ──────────────────────────────────────────────
+    { name: '구래역', kind: KIND.STATION, lon: 126.6285, lat: 37.6437,
+      w: 30, h: 20, floors: 1, basement: 2, note: '김포골드라인 · 양촌 ↔ 마산',
+      metro: { line: '김포골드라인', order: 2 } },
+    { name: '마산역', kind: KIND.STATION, lon: 126.6398, lat: 37.6396,
+      w: 26, h: 18, floors: 1, basement: 2, note: '김포골드라인 · 구래 ↔ 장기',
+      metro: { line: '김포골드라인', order: 3 } },
+    { name: '양촌역', kind: KIND.STATION, lon: 126.6135, lat: 37.6484,
+      w: 26, h: 18, floors: 1, basement: 2, note: '김포골드라인 종점 · 산업단지 방면',
+      metro: { line: '김포골드라인', order: 1 } },
+
+    // ── 관공서 ─────────────────────────────────────────────────────
+    { name: '구래동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6262, lat: 37.6462,
+      w: 40, h: 24, floors: 4, basement: 1, note: '민원실은 1층입니다' },
+    { name: '마산동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6412, lat: 37.6420,
+      w: 32, h: 20, floors: 3, basement: 0 },
+    { name: '양촌읍 행정복지센터', kind: KIND.PUBLIC, lon: 126.6046, lat: 37.6552,
+      w: 36, h: 22, floors: 3, basement: 0 },
+    { name: '구래우체국', kind: KIND.PUBLIC, lon: 126.6250, lat: 37.6440,
+      w: 24, h: 18, floors: 2, basement: 0 },
+    { name: '구래파출소', kind: KIND.PUBLIC, lon: 126.6242, lat: 37.6455,
+      w: 20, h: 14, floors: 2, basement: 0 },
+    { name: '양촌119안전센터', kind: KIND.PUBLIC, lon: 126.6090, lat: 37.6520,
+      w: 30, h: 20, floors: 3, basement: 0, note: '차고 안쪽은 관계자 외 출입금지' },
+    { name: '구래도서관', kind: KIND.PUBLIC, lon: 126.6296, lat: 37.6470,
+      w: 34, h: 26, floors: 3, basement: 1, note: '3층 열람실 · 2층 어린이자료실' },
+    { name: '김포양촌산업단지 관리사무소', kind: KIND.PUBLIC, lon: 126.5980, lat: 37.6412,
+      w: 30, h: 20, floors: 3, basement: 0 },
+
+    // ── 학교 ───────────────────────────────────────────────────────
+    { name: '구래초등학교', kind: KIND.SCHOOL, lon: 126.6222, lat: 37.6484,
+      w: 80, h: 24, floors: 4, basement: 0 },
+    { name: '구래중학교', kind: KIND.SCHOOL, lon: 126.6206, lat: 37.6448,
+      w: 72, h: 22, floors: 4, basement: 0 },
+    { name: '마산초등학교', kind: KIND.SCHOOL, lon: 126.6450, lat: 37.6414,
+      w: 76, h: 24, floors: 4, basement: 0 },
+    { name: '양곡고등학교', kind: KIND.SCHOOL, lon: 126.6070, lat: 37.6558,
+      w: 84, h: 26, floors: 5, basement: 0, note: '급식실은 지상 1층 끝' },
+    { name: '양촌초등학교', kind: KIND.SCHOOL, lon: 126.6022, lat: 37.6520,
+      w: 70, h: 22, floors: 4, basement: 0 },
+
+    // ── 상업 ───────────────────────────────────────────────────────
+    { name: '한강마트 구래점', kind: KIND.MART, lon: 126.6302, lat: 37.6428,
+      w: 70, h: 50, floors: 3, basement: 1, note: '지하 1층 주차 · 3층 푸드코트' },
+    { name: '양촌농협 하나로마트', kind: KIND.MART, lon: 126.6060, lat: 37.6532,
+      w: 46, h: 30, floors: 2, basement: 0 },
+    { name: '구래 시네마', kind: KIND.TOWER, lon: 126.6272, lat: 37.6425,
+      w: 40, h: 30, floors: 6, basement: 1, note: '상영관은 4층부터' },
+    { name: '구래역 스퀘어', kind: KIND.TOWER, lon: 126.6268, lat: 37.6446,
+      w: 32, h: 30, floors: 18, basement: 2, note: '1~3층 상가 · 4층부터 오피스텔' },
+    { name: '한강 센트럴타워', kind: KIND.TOWER, lon: 126.6312, lat: 37.6452,
+      w: 30, h: 28, floors: 20, basement: 2 },
+    { name: '로데오 아케이드', kind: KIND.SHOP, lon: 126.6292, lat: 37.6412,
+      w: 46, h: 22, floors: 4, basement: 0, note: '2층 전체가 학원가' },
+
+    // ── 그 밖 ──────────────────────────────────────────────────────
+    { name: '한강종합병원', kind: KIND.HOSPITAL, lon: 126.6322, lat: 37.6486,
+      w: 50, h: 36, floors: 7, basement: 2, note: '응급실 24시간' },
+    { name: '구래중앙교회', kind: KIND.CHURCH, lon: 126.6230, lat: 37.6510,
+      w: 34, h: 24, floors: 3, basement: 1 },
+    { name: '호수공원 전망데크', kind: KIND.PARK_FACILITY, lon: 126.6356, lat: 37.6452,
+      w: 14, h: 10, floors: 1, basement: 0, note: '호수 건너편이 마산동입니다' },
+    { name: '가현산 정자', kind: KIND.PARK_FACILITY, lon: 126.6300, lat: 37.6598,
+      w: 12, h: 12, floors: 1, basement: 0, note: '여기서 신도시가 다 보인다' },
+    { name: '대한정밀 제1공장', kind: KIND.FACTORY, lon: 126.5936, lat: 37.6440,
+      w: 110, h: 60, floors: 2, basement: 0 },
+    { name: '한성물류 김포센터', kind: KIND.WAREHOUSE, lon: 126.6046, lat: 37.6250,
+      w: 130, h: 70, floors: 2, basement: 0 },
+  ];
+
+  __M.PLACES = PLACES;
+})();
+
+// ── world/data/index.js ─────────────────────────────
+(function () {
+  // 지역 데이터 모음. 다른 코드는 이 파일만 import 한다.
+  // OSM 에서 구운 데이터로 갈아끼울 때도 여기서 import 대상만 바꾸면 된다.
+
+  const { REGIONS, WATERWAYS } = __M;
+  const { ROADS } = __M;
+  const { DISTRICTS } = __M;
+  const { PLACES } = __M;
+
+  const WORLD_DATA = { REGIONS, WATERWAYS, ROADS, DISTRICTS, PLACES };
+
+  __M.WORLD_DATA = WORLD_DATA;
+})();
+
+// ── world/blocks.js ─────────────────────────────
+(function () {
+  // districts.js 규칙 → 이면도로 + 건물 목록.
+  // "핵심 지점은 손으로, 사이는 절차적으로" 의 절차적 부분이 여기다.
+  // 같은 시드면 언제나 같은 블록이 나온다.
+
+  const { SEED, KIND, ROAD_CLASS } = __M;
+  const { projectPath, pathBounds, pointInPath, metersToTiles } = __M;
+  const { makeRng } = __M;
+  const { DISTRICTS } = __M;
+  const {
+    SHOP_PREFIX, SHOP_SUFFIX, SHOP_MIX, BUILDING_SUFFIX,
+    FACTORY_PREFIX, FACTORY_SUFFIX, FACTORY_TAIL, RURAL_NAME,
+  } = __M;
+
+  const T = metersToTiles; // 미터 → 타일
+
+  // 상호 하나 짓기
+  function makeShopName(rng, category) {
+    const cat = category || rng.pick(SHOP_MIX);
+    return rng.pick(SHOP_PREFIX) + rng.pick(SHOP_SUFFIX[cat]);
+  }
+
+  // 폴리곤 안쪽을 따라 도로 선을 잘라 낸다.
+  // 밖으로 삐져나온 부분은 버리고 안쪽 구간만 폴리라인으로 남긴다.
+  function clipLineToPath(fixed, from, to, path, horizontal, step = 3) {
+    const runs = [];
+    let current = null;
+    for (let t = from; t <= to; t += step) {
+      const x = horizontal ? t : fixed;
+      const y = horizontal ? fixed : t;
+      if (pointInPath(x, y, path)) {
+        if (!current) current = [[x, y]];
+        else current.push([x, y]);
+      } else if (current) {
+        if (current.length > 1) runs.push(current);
+        current = null;
+      }
+    }
+    if (current && current.length > 1) runs.push(current);
+    return runs;
+  }
+
+  // 블록 한 칸을 건물로 채운다. 종류별로 규칙이 다르다.
+  function fillBlock(district, rect, rng, out) {
+    const f = district.fill;
+    // 블록 바닥 — 아파트 단지 마당과 상가 뒷마당은 포장되어 있다
+    if (district.kind === 'apartment') {
+      out.areas.push({ ...rect, ground: 'parking' });
+    } else if (district.kind === 'commercial') {
+      out.areas.push({ ...rect, ground: 'plaza' });
+    }
+    switch (district.kind) {
+      case 'apartment': return fillApartment(district, rect, rng, out, f);
+      case 'commercial': return fillCommercial(district, rect, rng, out, f);
+      case 'house': return fillHouse(district, rect, rng, out, f);
+      case 'industrial': return fillIndustrial(district, rect, rng, out, f);
+      case 'rural': return fillRural(district, rect, rng, out, f);
+    }
+  }
+
+  // 아파트 — 긴 판상형 동을 줄지어 놓고 번호를 매긴다.
+  function fillApartment(d, rect, rng, out, f) {
+    const bw = Math.round(T(f.bw)), bh = Math.round(T(f.bh));
+    const gap = Math.round(T(f.gap));
+    const rowPitch = bh + gap;
+    for (let y = rect.y + 2; y + bh <= rect.y + rect.h - 2; y += rowPitch) {
+      for (let x = rect.x + 2; x + bw <= rect.x + rect.w - 2; x += bw + Math.round(gap * 0.6)) {
+        const n = f.start + out.aptCount[d.id]++;
+        out.buildings.push({
+          name: `${d.name} ${n}동`, kind: KIND.APARTMENT,
+          x, y, w: bw, h: bh,
+          floors: rng.int(f.floors[0], f.floors[1]), basement: 1,
+          districtId: d.id,
+        });
+      }
+    }
+  }
+
+  // 상가 — 블록 가장자리를 따라 좁고 깊은 건물을 붙여 세운다.
+  function fillCommercial(d, rect, rng, out, f) {
+    const depth = Math.max(3, Math.round(T(f.depth)));
+    const minW = Math.max(3, Math.round(T(f.minW)));
+    const maxW = Math.max(minW + 1, Math.round(T(f.maxW)));
+    const edges = [
+      { horizontal: true, y: rect.y, dir: 1 },
+      { horizontal: true, y: rect.y + rect.h - depth, dir: -1 },
+      { horizontal: false, x: rect.x, dir: 1 },
+      { horizontal: false, x: rect.x + rect.w - depth, dir: -1 },
+    ];
+    for (const e of edges) {
+      if (e.horizontal) {
+        for (let x = rect.x; x + minW <= rect.x + rect.w; ) {
+          const w = rng.int(minW, Math.min(maxW, rect.x + rect.w - x));
+          if (w < minW) break;
+          if (rng.chance(0.86)) pushShop(d, rng, out, x, e.y, w, depth, f);
+          x += w + (rng.chance(0.25) ? 1 : 0);
+        }
+      } else {
+        for (let y = rect.y + depth; y + minW <= rect.y + rect.h - depth; ) {
+          const h = rng.int(minW, Math.min(maxW, rect.y + rect.h - depth - y));
+          if (h < minW) break;
+          if (rng.chance(0.8)) pushShop(d, rng, out, e.x, y, depth, h, f);
+          y += h + (rng.chance(0.25) ? 1 : 0);
+        }
+      }
+    }
+
+    // 블록 안쪽에도 한 줄 더 — 로데오거리처럼 골목 안까지 가게가 들어찬다
+    const innerX = rect.x + depth + 2, innerY = rect.y + depth + 2;
+    const innerW = rect.w - (depth + 2) * 2, innerH = rect.h - (depth + 2) * 2;
+    if (innerW >= minW && innerH >= 4) {
+      for (let x = innerX; x + minW <= innerX + innerW; ) {
+        const w = rng.int(minW, Math.min(maxW, innerX + innerW - x));
+        if (w < minW) break;
+        if (rng.chance(0.7)) {
+          pushShop(d, rng, out, x, innerY, w, Math.min(innerH, depth), f);
+        }
+        x += w + 1;
+      }
+    }
+  }
+
+  function pushShop(d, rng, out, x, y, w, h, f) {
+    const floors = rng.int(f.floors[0], f.floors[1]);
+    // 층이 있으면 건물 이름, 단층이면 가게 이름이 곧 건물 이름
+    const name = floors >= 3
+      ? rng.pick(SHOP_PREFIX) + rng.pick(BUILDING_SUFFIX)
+      : makeShopName(rng);
+    out.buildings.push({
+      name, kind: KIND.SHOP, x, y, w, h,
+      floors, basement: floors >= 5 ? 1 : 0, districtId: d.id,
+    });
+  }
+
+  // 단독·빌라 — 작은 네모를 격자로 흩는다.
+  function fillHouse(d, rect, rng, out, f) {
+    const size = Math.max(3, Math.round(T(f.size)));
+    const jitter = Math.round(T(f.jitter));
+    const pitch = size + Math.max(2, Math.round(jitter * 0.8));
+    for (let y = rect.y + 1; y + size <= rect.y + rect.h - 1; y += pitch) {
+      for (let x = rect.x + 1; x + size <= rect.x + rect.w - 1; x += pitch) {
+        if (!rng.chance(0.82)) continue;
+        const w = size + rng.int(-1, 2), h = size + rng.int(-1, 1);
+        const floors = rng.int(f.floors[0], f.floors[1]);
+        out.buildings.push({
+          name: rng.pick(SHOP_PREFIX) + (floors >= 3 ? '빌라' : '주택'),
+          kind: KIND.HOUSE, x, y, w: Math.max(3, w), h: Math.max(3, h),
+          floors, basement: 0, districtId: d.id,
+        });
+      }
+    }
+  }
+
+  // 공장 — 블록 하나에 큰 건물 한둘.
+  function fillIndustrial(d, rect, rng, out, f) {
+    const count = rng.int(1, 2);
+    let cursorY = rect.y + 3;
+    for (let i = 0; i < count; i++) {
+      const w = Math.round(T(rng.range(f.minW, f.maxW)));
+      const h = Math.round(T(rng.range(f.minH, f.maxH)));
+      if (cursorY + h > rect.y + rect.h - 3) break;
+      const x = rect.x + rng.int(2, Math.max(2, rect.w - w - 2));
+      const warehouse = rng.chance(0.3);
+      out.buildings.push({
+        name: rng.pick(FACTORY_PREFIX) + rng.pick(FACTORY_SUFFIX) + ' ' + rng.pick(FACTORY_TAIL),
+        kind: warehouse ? KIND.WAREHOUSE : KIND.FACTORY,
+        x, y: cursorY, w, h,
+        floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
+      });
+      cursorY += h + Math.round(T(30));
+    }
+  }
+
+  // 농가 — 드문드문.
+  function fillRural(d, rect, rng, out, f) {
+    const size = Math.max(3, Math.round(T(f.size)));
+    const pitch = size + Math.round(T(f.jitter)) + 6;
+    for (let y = rect.y + 2; y + size <= rect.y + rect.h - 2; y += pitch) {
+      for (let x = rect.x + 2; x + size <= rect.x + rect.w - 2; x += pitch) {
+        if (!rng.chance(f.rate)) continue;
+        out.buildings.push({
+          name: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
+          x: x + rng.int(0, 3), y: y + rng.int(0, 3),
+          w: size + rng.int(-1, 3), h: size + rng.int(-1, 1),
+          floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
+        });
+      }
+    }
+  }
+
+  // 모든 구역을 펼친다. 게임 시작 때 한 번만 돈다.
+  function expandDistricts() {
+    const out = { roads: [], buildings: [], areas: [], aptCount: {} };
+
+    for (const d of DISTRICTS) {
+      const path = projectPath(d.path);
+      const b = pathBounds(path);
+      const rng = makeRng(SEED, 'district', d.id);
+      out.aptCount[d.id] = 0;
+
+      const streetW = ROAD_CLASS[d.street].width + ROAD_CLASS[d.street].sidewalk * 2;
+      const pitchX = Math.round(T(d.block.w)) + streetW;
+      const pitchY = Math.round(T(d.block.h)) + streetW;
+      const x0 = Math.floor(b.minX), y0 = Math.floor(b.minY);
+
+      // 블록 사이 길 — 구역 안쪽 구간만 남긴다
+      for (let x = x0; x <= b.maxX; x += pitchX) {
+        for (const run of clipLineToPath(x, y0, b.maxY, path, false)) {
+          out.roads.push({ name: '', cls: d.street, tiles: run, districtId: d.id });
+        }
+      }
+      for (let y = y0; y <= b.maxY; y += pitchY) {
+        for (const run of clipLineToPath(y, x0, b.maxX, path, true)) {
+          out.roads.push({ name: '', cls: d.street, tiles: run, districtId: d.id });
+        }
+      }
+
+      // 블록 안쪽 채우기
+      for (let y = y0; y <= b.maxY; y += pitchY) {
+        for (let x = x0; x <= b.maxX; x += pitchX) {
+          // 길 폭 + 여유 한 칸만큼 안으로 들여 놓는다. 건물이 길에 닿으면 버려진다.
+          const inset = Math.ceil(streetW / 2) + 2;
+          const rect = {
+            x: x + inset, y: y + inset,
+            w: pitchX - inset * 2, h: pitchY - inset * 2,
+          };
+          const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+          // 블록 중심과 네 귀퉁이 중 셋 이상이 구역 안에 있어야 채운다
+          let inside = pointInPath(cx, cy, path) ? 1 : 0;
+          for (const [px, py] of [[rect.x, rect.y], [rect.x + rect.w, rect.y],
+            [rect.x, rect.y + rect.h], [rect.x + rect.w, rect.y + rect.h]]) {
+            if (pointInPath(px, py, path)) inside++;
+          }
+          if (inside < 3) continue;
+          fillBlock(d, rect, rng, out);
+        }
+      }
+    }
+    delete out.aptCount;
+    return out;
+  }
+
+  __M.makeShopName = makeShopName; __M.expandDistricts = expandDistricts;
+})();
+
+// ── world/buildings.js ─────────────────────────────
+(function () {
+  // 건물 정의 · 배치 · 출입구. 실내 생성은 world/interior.js 가 맡는다.
+  //
+  // 랜드마크(places.js)를 먼저 놓고, 절차 생성 건물은 이미 놓인 건물이나
+  // 도로와 겹치면 버린다. 그래서 데이터에 손을 대도 지도가 깨지지 않는다.
+
+  const { SEED, BUILDING, KIND, TILE } = __M;
+  const { project, projectPath, metersToTiles } = __M;
+  const { GridIndex, rectsOverlap } = __M;
+  const { makeRng } = __M;
+  const { expandDistricts } = __M;
+  const { PLACES } = __M;
+  const { ROADS } = __M;
+  const { ROAD_CLASS } = __M;
+
+  // 도로 선분 인덱스 — 건물이 길 위에 올라앉지 않게 막는 데 쓴다.
+  // 청크 래스터라이즈에서도 같은 인덱스를 재사용한다.
+  function buildRoadIndex(generatedRoads) {
+    const index = new GridIndex(TILE.chunk);
+    const all = [];
+    const add = (name, cls, tiles) => {
+      const spec = ROAD_CLASS[cls];
+      const half = spec.width / 2 + spec.sidewalk;
+      let travelled = 0; // 도로 시작점부터의 누적 길이 — 횡단보도 간격에 쓴다
+      for (let i = 0; i < tiles.length - 1; i++) {
+        const [ax, ay] = tiles[i], [bx, by] = tiles[i + 1];
+        const seg = { name, cls, spec, half, ax, ay, bx, by, dist0: travelled };
+        travelled += Math.hypot(bx - ax, by - ay);
+        all.push(seg);
+        index.insert(seg,
+          Math.min(ax, bx) - half - 2, Math.min(ay, by) - half - 2,
+          Math.max(ax, bx) + half + 2, Math.max(ay, by) + half + 2);
+      }
+    };
+    for (const road of ROADS) add(road.name, road.cls, projectPath(road.path));
+    for (const road of generatedRoads) add(road.name, road.cls, road.tiles);
+    return { index, all };
+  }
+
+  // 선분이 사각형(여유 pad 포함)을 지나가는가 — 굵은 선 vs 상자 간이 판정
+  function segmentHitsRect(seg, rect, pad) {
+    const minX = rect.x - pad, minY = rect.y - pad;
+    const maxX = rect.x + rect.w + pad, maxY = rect.y + rect.h + pad;
+    let { ax, ay, bx, by } = seg;
+    // 양 끝이 한쪽으로 완전히 벗어나 있으면 안 만난다
+    if ((ax < minX && bx < minX) || (ax > maxX && bx > maxX)) return false;
+    if ((ay < minY && by < minY) || (ay > maxY && by > maxY)) return false;
+    // 끝점이 안에 있으면 만난다
+    if (ax >= minX && ax <= maxX && ay >= minY && ay <= maxY) return true;
+    if (bx >= minX && bx <= maxX && by >= minY && by <= maxY) return true;
+    // 나머지는 선분-슬랩 교차
+    const dx = bx - ax, dy = by - ay;
+    let t0 = 0, t1 = 1;
+    for (const [p, q] of [[-dx, ax - minX], [dx, maxX - ax], [-dy, ay - minY], [dy, maxY - ay]]) {
+      if (p === 0) { if (q < 0) return false; continue; }
+      const r = q / p;
+      if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+      else { if (r < t0) return false; if (r < t1) t1 = r; }
+    }
+    return true;
+  }
+
+  // 출입구 자리 정하기: 가장 가까운 길 쪽 벽 한가운데
+  function placeDoor(rect, roads, rng) {
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    const r = BUILDING.doorProbeRadius;
+    const near = roads.index.query(cx - r, cy - r, cx + r, cy + r);
+    let best = null, bestD = Infinity;
+    for (const seg of near) {
+      // 선분 위에서 건물 중심에 가장 가까운 점
+      const dx = seg.bx - seg.ax, dy = seg.by - seg.ay;
+      const len2 = dx * dx + dy * dy || 1;
+      let t = ((cx - seg.ax) * dx + (cy - seg.ay) * dy) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const px = seg.ax + t * dx, py = seg.ay + t * dy;
+      const d = Math.hypot(px - cx, py - cy);
+      if (d < bestD) { bestD = d; best = { px, py }; }
+    }
+
+    let dir = 'S';
+    if (best) {
+      const vx = best.px - cx, vy = best.py - cy;
+      if (Math.abs(vx) > Math.abs(vy)) dir = vx > 0 ? 'E' : 'W';
+      else dir = vy > 0 ? 'S' : 'N';
+    }
+
+    // 벽 가운데에서 살짝 흔들어 배치 (전부 정가운데면 심심하다)
+    const jx = rect.w > 6 ? rng.int(-1, 1) : 0;
+    const jy = rect.h > 6 ? rng.int(-1, 1) : 0;
+    switch (dir) {
+      case 'N': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y, dir };
+      case 'S': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y + rect.h - 1, dir };
+      case 'W': return { x: rect.x, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
+      default: return { x: rect.x + rect.w - 1, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
+    }
+  }
+
+  // 문 앞(건물 바깥) 한 칸 — 나올 때 여기에 선다
+  function doorOutside(b) {
+    switch (b.door.dir) {
+      case 'N': return { x: b.door.x, y: b.door.y - 1 };
+      case 'S': return { x: b.door.x, y: b.door.y + 1 };
+      case 'W': return { x: b.door.x - 1, y: b.door.y };
+      default: return { x: b.door.x + 1, y: b.door.y };
+    }
+  }
+
+  let nextId = 1;
+
+  function makeBuilding(spec, roads, index, placed) {
+    const rect = { x: spec.x, y: spec.y, w: spec.w, h: spec.h };
+    if (rect.w < BUILDING.minTiles || rect.h < BUILDING.minTiles) return null;
+
+    // 이미 놓인 건물과 겹치면 버린다
+    for (const other of index.query(rect.x - 2, rect.y - 2,
+        rect.x + rect.w + 2, rect.y + rect.h + 2)) {
+      if (rectsOverlap(rect, other, 1)) return null;
+    }
+    // 길 위에 올라앉아도 버린다
+    if (!spec.landmark) {
+      const near = roads.index.query(rect.x - 8, rect.y - 8, rect.x + rect.w + 8, rect.y + rect.h + 8);
+      for (const seg of near) {
+        if (segmentHitsRect(seg, rect, seg.half + 0.5)) return null;
+      }
+    }
+
+    const rng = makeRng(SEED, 'building', spec.name, rect.x, rect.y);
+    const b = {
+      id: nextId++,
+      name: spec.name, kind: spec.kind,
+      x: rect.x, y: rect.y, w: rect.w, h: rect.h,
+      floors: Math.max(1, spec.floors | 0),
+      basement: spec.basement | 0,
+      note: spec.note || '',
+      metro: spec.metro || null,
+      districtId: spec.districtId || null,
+      seed: rng.int(0, 0xffff),
+      landmark: !!spec.landmark,
+    };
+    b.door = placeDoor(rect, roads, rng);
+    placed.push(b);
+    index.insert(b, b.x, b.y, b.x + b.w, b.y + b.h);
+    return b;
+  }
+
+  // 세상의 모든 건물을 만든다. 시작할 때 한 번.
+  function buildBuildings() {
+    const districts = expandDistricts();
+    const roads = buildRoadIndex(districts.roads);
+    const index = new GridIndex(TILE.chunk);
+    const placed = [];
+
+    // 1) 랜드마크 먼저 — 이쪽이 우선권을 갖는다
+    for (const p of PLACES) {
+      const [tx, ty] = project([p.lon, p.lat]);
+      const w = Math.max(BUILDING.minTiles, Math.round(metersToTiles(p.w)));
+      const h = Math.max(BUILDING.minTiles, Math.round(metersToTiles(p.h)));
+      makeBuilding({
+        ...p, landmark: true,
+        x: Math.round(tx - w / 2), y: Math.round(ty - h / 2), w, h,
+      }, roads, index, placed);
+    }
+
+    // 2) 절차 생성 건물
+    for (const spec of districts.buildings) {
+      makeBuilding(spec, roads, index, placed);
+    }
+
+    // 출입구 → 건물 찾기
+    const doorIndex = new Map();
+    for (const b of placed) doorIndex.set(b.door.y * 1000000 + b.door.x, b);
+
+    return { list: placed, index, doorIndex, roads,
+      generatedRoads: districts.roads, areas: districts.areas };
+  }
+
+  // 타일 한 칸을 차지한 건물 (없으면 null)
+  function buildingAtTile(buildings, tx, ty) {
+    for (const b of buildings.index.queryPoint(tx, ty)) {
+      if (tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h) return b;
+    }
+    return null;
+  }
+
+  // 층 이름 (지하 표기)
+  function floorLabel(floor) {
+    return floor < 0 ? `지하 ${-floor}층` : `${floor}층`;
+  }
+
+  // 건물이 몇 층부터 몇 층까지 있는가
+  function floorRange(b) {
+    return { min: b.basement ? -b.basement : 1, max: b.floors };
+  }
+
+  const BUILDING_KINDS = KIND;
+
+  __M.buildRoadIndex = buildRoadIndex; __M.doorOutside = doorOutside; __M.buildBuildings = buildBuildings; __M.buildingAtTile = buildingAtTile; __M.floorLabel = floorLabel; __M.floorRange = floorRange; __M.BUILDING_KINDS = BUILDING_KINDS;
+})();
+
+// ── world/map.js ─────────────────────────────
+(function () {
+  // 지역 데이터 → 타일 그리드. 청크 단위로 필요할 때만 만들고 캐시한다.
+  // 5백만 칸짜리 지도를 한 번에 만들지 않는 이유가 이것이다 (로딩 최소화).
+
+  const {
+    SEED, TILE, GROUND, GROUND_SOLID, PROP, PROP_SOLID, PROP_RULES, GEO,
+  } = __M;
+  const { WORLD_W, WORLD_H, projectPath, pathBounds, pointInPath, distToSegment, metersToTiles } = __M;
+  const { GridIndex } = __M;
+  const { noiseAt, fbm, seedOf } = __M;
+  const { REGIONS, WATERWAYS } = __M;
+
+  const CH = TILE.chunk;
+  const CROSSWALK_SPACING = 46;  // 횡단보도 간격 (타일)
+  const CROSSWALK_HALF = 1.6;    // 횡단보도 폭의 절반 (타일)
+
+  const groundSolid = new Set(GROUND_SOLID);
+  const propSolid = new Set(PROP_SOLID);
+
+  // 노이즈 시드는 미리 정수로 굳혀 둔다 (타일마다 문자열을 만들지 않기 위해)
+  const S_BASE = seedOf(SEED, 'base');
+  const S_CITY = seedOf(SEED, 'city');
+  const S_PROP = seedOf(SEED, 'prop');
+  const S_PROPKIND = seedOf(SEED, 'propkind');
+
+  class WorldMap {
+    constructor(buildings) {
+      this.buildings = buildings;
+      this.chunks = new Map();      // key → {ground, prop, solid, buildings}
+      this.order = [];              // LRU
+      this.regionIndex = new GridIndex(CH * 2);
+      this.waterIndex = new GridIndex(CH);
+
+      // 구역 폴리곤을 타일 좌표로 미리 변환해 둔다
+      this.regions = REGIONS.map((r) => {
+        const path = projectPath(r.path);
+        const b = pathBounds(path);
+        const region = { ...r, path, bounds: b, order: 0 };
+        this.regionIndex.insert(region, b.minX, b.minY, b.maxX, b.maxY);
+        return region;
+      });
+      this.regions.forEach((r, i) => { r.order = i; });
+
+      // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
+      this.areaIndex = new GridIndex(CH);
+      const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA, yard: GROUND.YARD };
+      for (const a of buildings.areas || []) {
+        const area = { ...a, kind: areaGround[a.ground] };
+        this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
+      }
+
+      // 하천 선분
+      this.waterways = [];
+      for (const w of WATERWAYS) {
+        const path = projectPath(w.path);
+        const half = metersToTiles(w.width) / 2;
+        for (let i = 0; i < path.length - 1; i++) {
+          const seg = { name: w.name, half, ax: path[i][0], ay: path[i][1],
+            bx: path[i + 1][0], by: path[i + 1][1] };
+          this.waterways.push(seg);
+          this.waterIndex.insert(seg,
+            Math.min(seg.ax, seg.bx) - half - 4, Math.min(seg.ay, seg.by) - half - 4,
+            Math.max(seg.ax, seg.bx) + half + 4, Math.max(seg.ay, seg.by) + half + 4);
+        }
+      }
+    }
+
+    static key(cx, cy) { return cx * 100000 + cy; }
+
+    // 청크 하나를 만든다 (있으면 캐시에서 꺼낸다)
+    chunk(cx, cy) {
+      const key = WorldMap.key(cx, cy);
+      let c = this.chunks.get(key);
+      if (c) return c;
+      c = this._generate(cx, cy);
+      this.chunks.set(key, c);
+      this.order.push(key);
+      while (this.order.length > TILE.chunkCacheMax) {
+        const old = this.order.shift();
+        if (old !== key) this.chunks.delete(old);
+      }
+      return c;
+    }
+
+    _generate(cx, cy) {
+      const n = CH * CH;
+      const ground = new Uint8Array(n);
+      const prop = new Uint8Array(n);
+      const solid = new Uint8Array(n);
+      const ox = cx * CH, oy = cy * CH;
+
+      // 1) 바탕 — 논밭에 얼룩진 풀밭
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CH; x++) {
+          const tx = ox + x, ty = oy + y;
+          const v = fbm(S_BASE, tx, ty, 26, 3);
+          ground[y * CH + x] = v > 0.62 ? GROUND.GRASS : v < 0.36 ? GROUND.DIRT : GROUND.FIELD;
+        }
+      }
+
+      // 2) 구역 — 뒤쪽 구역이 앞쪽을 덮는다
+      const regions = this.regionIndex
+        .query(ox, oy, ox + CH, oy + CH)
+        .sort((a, b) => a.order - b.order);
+      const regionRate = new Float32Array(n); // 소품 밀도 (숲은 높다)
+      for (const r of regions) {
+        for (let y = 0; y < CH; y++) {
+          const ty = oy + y + 0.5;
+          if (ty < r.bounds.minY || ty > r.bounds.maxY) continue;
+          for (let x = 0; x < CH; x++) {
+            const tx = ox + x + 0.5;
+            if (tx < r.bounds.minX || tx > r.bounds.maxX) continue;
+            if (!pointInPath(tx, ty, r.path)) continue;
+            const i = y * CH + x;
+            ground[i] = r.ground;
+            regionRate[i] = r.propRate || 0;
+            // 도시 바닥은 잔디와 포장이 얼룩덜룩 섞인다 (주차장·광장 자리)
+            if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.63) {
+              ground[i] = GROUND.PLAZA;
+            }
+          }
+        }
+      }
+
+      // 2-1) 블록 바닥
+      for (const a of this.areaIndex.query(ox, oy, ox + CH, oy + CH)) {
+        const x0 = Math.max(0, a.x - ox), x1 = Math.min(CH, a.x + a.w - ox);
+        const y0 = Math.max(0, a.y - oy), y1 = Math.min(CH, a.y + a.h - oy);
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            const i = y * CH + x;
+            ground[i] = a.kind;
+            regionRate[i] = 0;
+          }
+        }
+      }
+
+      // 3) 하천 — 물과 모래톱
+      const waters = this.waterIndex.query(ox - 4, oy - 4, ox + CH + 4, oy + CH + 4);
+      if (waters.length) {
+        for (let y = 0; y < CH; y++) {
+          for (let x = 0; x < CH; x++) {
+            const tx = ox + x + 0.5, ty = oy + y + 0.5;
+            let best = Infinity;
+            for (const s of waters) {
+              const d = distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) - s.half;
+              if (d < best) best = d;
+            }
+            const i = y * CH + x;
+            if (best < 0) ground[i] = GROUND.WATER;
+            else if (best < 1.6) ground[i] = GROUND.SAND;
+          }
+        }
+      }
+
+      // 4) 도로 — 차도 · 보도 · 횡단보도
+      const rawSegs = this.buildings.roads.index.query(ox - 8, oy - 8, ox + CH + 8, oy + CH + 8);
+      if (rawSegs.length) {
+        // 선분마다 변하지 않는 값은 미리 뽑아 둔다 (타일마다 다시 계산하지 않게)
+        const segs = rawSegs.map((s) => {
+          const dx = s.bx - s.ax, dy = s.by - s.ay;
+          const len2 = dx * dx + dy * dy || 1;
+          const halfRoad = s.spec.width / 2;
+          const outer = halfRoad + s.spec.sidewalk;
+          return { s, dx, dy, len2, len: Math.sqrt(len2), halfRoad2: halfRoad * halfRoad,
+            outer2: outer * outer,
+            minX: Math.min(s.ax, s.bx) - outer - 1, maxX: Math.max(s.ax, s.bx) + outer + 1,
+            minY: Math.min(s.ay, s.by) - outer - 1, maxY: Math.max(s.ay, s.by) + outer + 1,
+            ground: s.spec.ground !== undefined ? s.spec.ground : GROUND.ROAD,
+            centerLine: s.spec.ground === undefined && s.spec.width >= 4,
+            crossing: s.spec.crossing, dist0: s.dist0 };
+        });
+        for (let y = 0; y < CH; y++) {
+          const ty = oy + y + 0.5;
+          const row = segs.filter((q) => ty >= q.minY && ty <= q.maxY);
+          if (!row.length) continue;
+          for (let x = 0; x < CH; x++) {
+            const tx = ox + x + 0.5;
+            const i = y * CH + x;
+            let paint = -1, cross = false;
+            for (const q of row) {
+              if (tx < q.minX || tx > q.maxX) continue;
+              let t = ((tx - q.s.ax) * q.dx + (ty - q.s.ay) * q.dy) / q.len2;
+              t = t < 0 ? 0 : t > 1 ? 1 : t;
+              const ex = tx - (q.s.ax + t * q.dx), ey = ty - (q.s.ay + t * q.dy);
+              const d2 = ex * ex + ey * ey;
+              if (d2 <= q.halfRoad2) {
+                paint = q.ground;
+                // 폭이 넉넉한 차도에는 점선 중앙선을 넣는다
+                if (q.centerLine && d2 < 0.62) {
+                  const dash = ((q.dist0 + t * q.len) % 5);
+                  if (dash < 2.6) paint = GROUND.ROAD_LINE;
+                }
+                if (q.crossing) {
+                  // 도로를 따라 일정 간격으로 횡단보도를 놓는다
+                  const along = q.dist0 + t * q.len;
+                  const phase = ((along % CROSSWALK_SPACING) + CROSSWALK_SPACING) % CROSSWALK_SPACING;
+                  if (phase < CROSSWALK_HALF || phase > CROSSWALK_SPACING - CROSSWALK_HALF) {
+                    cross = true;
+                  }
+                }
+                break;
+              } else if (d2 <= q.outer2 && paint < 0) {
+                paint = GROUND.SIDEWALK;
+              }
+            }
+            if (paint >= 0) {
+              ground[i] = cross ? GROUND.CROSSWALK : paint;
+              regionRate[i] = 0;
+            }
+          }
+        }
+      }
+
+      // 5) 소품 — 지면 종류에 따라 결정적으로 흩뿌린다
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CH; x++) {
+          const i = y * CH + x;
+          const g = ground[i];
+          const rule = PROP_RULES[g];
+          const extra = regionRate[i];
+          if (!rule && !extra) continue;
+          const r = noiseAt(S_PROP, ox + x, oy + y);
+          const rate = (rule ? rule.rate : 0) + extra;
+          if (r > rate) continue;
+          const pickList = rule ? rule.pick : [PROP.TREE, PROP.TREE, PROP.BUSH, PROP.ROCK];
+          const idx = Math.floor(noiseAt(S_PROPKIND, ox + x, oy + y) * pickList.length);
+          prop[i] = pickList[Math.min(idx, pickList.length - 1)];
+        }
+      }
+
+      // 6) 건물 — 벽은 막히고 출입구만 뚫린다
+      const here = this.buildings.index.query(ox, oy, ox + CH, oy + CH);
+      for (const b of here) {
+        const x0 = Math.max(0, b.x - ox), x1 = Math.min(CH, b.x + b.w - ox);
+        const y0 = Math.max(0, b.y - oy), y1 = Math.min(CH, b.y + b.h - oy);
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            const i = y * CH + x;
+            ground[i] = GROUND.FLOOR;
+            prop[i] = PROP.NONE;
+            solid[i] = 1;
+          }
+        }
+        const dx = b.door.x - ox, dy = b.door.y - oy;
+        if (dx >= 0 && dx < CH && dy >= 0 && dy < CH) solid[dy * CH + dx] = 0;
+      }
+
+      // 7) 충돌 정리
+      for (let i = 0; i < n; i++) {
+        if (groundSolid.has(ground[i]) || propSolid.has(prop[i])) solid[i] = 1;
+      }
+
+      return { ground, prop, solid, buildings: here, cx, cy };
+    }
+
+    // ── 타일 조회 ────────────────────────────────────────────────────
+    inBounds(tx, ty) {
+      return tx >= 0 && ty >= 0 && tx < WORLD_W && ty < WORLD_H;
+    }
+
+    tileAt(tx, ty) {
+      if (!this.inBounds(tx, ty)) return null;
+      const c = this.chunk(Math.floor(tx / CH), Math.floor(ty / CH));
+      const i = (ty - c.cy * CH) * CH + (tx - c.cx * CH);
+      return { ground: c.ground[i], prop: c.prop[i], solid: c.solid[i] };
+    }
+
+    isSolid(tx, ty) {
+      if (!this.inBounds(tx, ty)) return true;   // 지도 밖은 벽
+      const c = this.chunk(Math.floor(tx / CH), Math.floor(ty / CH));
+      return c.solid[(ty - c.cy * CH) * CH + (tx - c.cx * CH)] === 1;
+    }
+
+    groundAt(tx, ty) {
+      const t = this.tileAt(tx, ty);
+      return t ? t.ground : GROUND.FIELD;
+    }
+
+    // 지금 서 있는 곳이 어느 구역인가 (이름 표시용)
+    regionNameAt(tx, ty) {
+      let found = '';
+      for (const r of this.regionIndex.queryPoint(tx, ty)) {
+        if (r.label && pointInPath(tx, ty, r.path)) found = r.name;
+      }
+      return found;
+    }
+  }
+
+  // 미니맵·전체지도용 저해상도 그림. 시작할 때 한 번만 만든다.
+  function buildOverview(map, scale) {
+    const w = Math.ceil(WORLD_W / scale), h = Math.ceil(WORLD_H / scale);
+    const data = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const tx = x * scale + scale / 2, ty = y * scale + scale / 2;
+        let g = GROUND.FIELD;
+        for (const r of map.regionIndex.queryPoint(tx, ty)) {
+          if (pointInPath(tx, ty, r.path)) g = r.ground;
+        }
+        for (const s of map.waterIndex.queryPoint(tx, ty)) {
+          if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.half) g = GROUND.WATER;
+        }
+        // 미니맵에서는 큰길만, 대신 실제보다 굵게 그린다 (안 그러면 안 보인다)
+        for (const s of map.buildings.roads.index.query(tx - scale, ty - scale, tx + scale, ty + scale)) {
+          if (s.spec.width < 4) continue;
+          if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.spec.width / 2 + scale * 0.45) {
+            g = GROUND.ROAD;
+          }
+        }
+        data[y * w + x] = g;
+      }
+    }
+    return { w, h, scale, data };
+  }
+
+  __M.WorldMap = WorldMap; __M.buildOverview = buildOverview;
+})();
+
+// ── world/interior.js ─────────────────────────────
+(function () {
+  // 실내 생성 · 층 전환. 건물에 들어갈 때마다 그 층을 즉석에서 만든다.
+  // 모든 건물이 시드로 만들어지므로 같은 건물의 같은 층은 언제나 같은 모습이다.
+
+  const { SEED, INTERIOR, IN, IN_SOLID, KIND } = __M;
+  const { makeRng } = __M;
+  const { ROOM_NAMES } = __M;
+  const { makeShopName } = __M;
+
+  const solidSet = new Set(IN_SOLID);
+
+  // 층 배열 (지하부터 꼭대기까지)
+  function floorList(b) {
+    const out = [];
+    for (let f = -(b.basement || 0); f <= b.floors; f++) {
+      if (f === 0) continue; // 0층은 없다
+      out.push(f);
+    }
+    return out;
+  }
+
+  // 실내 한 층. 결과는 그때그때 만들고 나가면 버린다 (작아서 부담 없다).
+  function makeInterior(b, floor) {
+    const rng = makeRng(SEED, 'interior', b.seed, b.name, floor);
+    const w = clampInt(Math.round(b.w * INTERIOR.scale), INTERIOR.minW, INTERIOR.maxW);
+    const h = clampInt(Math.round(b.h * INTERIOR.scale), INTERIOR.minH, INTERIOR.maxH);
+    const tiles = new Uint8Array(w * h).fill(IN.FLOOR);
+    const at = (x, y) => y * w + x;
+    const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < w && y < h) tiles[at(x, y)] = v; };
+    const get = (x, y) => (x >= 0 && y >= 0 && x < w && y < h ? tiles[at(x, y)] : IN.WALL);
+
+    // 바깥벽
+    for (let x = 0; x < w; x++) { set(x, 0, IN.WALL); set(x, h - 1, IN.WALL); }
+    for (let y = 0; y < h; y++) { set(0, y, IN.WALL); set(w - 1, y, IN.WALL); }
+    // 창문 — 벽에 드문드문
+    for (let x = 2; x < w - 2; x += 3) {
+      if (rng.chance(0.55)) set(x, 0, IN.WINDOW);
+      if (rng.chance(0.35)) set(x, h - 1, IN.WINDOW);
+    }
+
+    const ground = groundFloorOf(b);
+    const isGround = floor === ground;
+    const rooms = [];
+    const layout = layoutOf(b.kind, floor, b);
+
+    // 출입구 — 지상 1층에만
+    let spawn = { x: Math.floor(w / 2), y: h - 2 };
+    let exit = null;
+    if (isGround) {
+      const ex = Math.floor(w / 2);
+      set(ex, h - 1, IN.EXIT);
+      exit = { x: ex, y: h - 1 };
+      spawn = { x: ex, y: h - 2 };
+    }
+
+    // 복도와 방
+    const corridorY = Math.floor(h / 2);
+    const cw = Math.min(INTERIOR.corridorWidth, h - 4);
+    if (layout === 'open') {
+      fillOpen(tiles, w, h, set, get, rng, b, floor);
+    } else {
+      // 위·아래 두 줄로 방을 나눈다
+      makeRoomRow(1, corridorY - Math.floor(cw / 2), rooms, w, h, set, rng, true);
+      makeRoomRow(corridorY + Math.ceil(cw / 2), h - 1, rooms, w, h, set, rng, false);
+      // 출입구에서 복도까지 길을 뚫는다
+      if (exit) for (let y = corridorY; y < h - 1; y++) set(exit.x, y, IN.FLOOR);
+    }
+
+    // 방 이름과 가구
+    const namer = roomNamer(b, floor, rng, layout);
+    rooms.forEach((room, i) => {
+      room.name = namer(i, room);
+      furnish(room, layout, set, get, rng, b);
+    });
+
+    // 층 이동 장치
+    const floors = floorList(b);
+    const stairs = {};
+    const useElevator = b.floors >= INTERIOR.elevatorFrom;
+    const spot = { x: 2, y: corridorY };
+    const spot2 = { x: 3, y: corridorY };
+    if (floors.length > 1) {
+      const kindUp = useElevator ? IN.ELEVATOR : IN.STAIR_UP;
+      const idx = floors.indexOf(floor);
+      if (useElevator) {
+        set(spot.x, spot.y, IN.ELEVATOR);
+        stairs.elevator = { ...spot };
+      } else {
+        if (idx < floors.length - 1) { set(spot.x, spot.y, kindUp); stairs.up = { ...spot }; }
+        if (idx > 0) { set(spot2.x, spot2.y, IN.STAIR_DOWN); stairs.down = { ...spot2 }; }
+      }
+      // 계단 앞은 비워 둔다
+      set(spot.x, spot.y + 1, IN.FLOOR);
+      set(spot2.x, spot2.y + 1, IN.FLOOR);
+    }
+
+    // 상호작용 물건을 놓을 자리 — 벽에 붙은 빈 바닥
+    const slots = [];
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (tiles[at(x, y)] !== IN.FLOOR) continue;
+        if (get(x, y - 1) === IN.WALL || get(x, y - 1) === IN.WINDOW) slots.push({ x, y });
+      }
+    }
+
+    return {
+      building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout,
+      isSolid(x, y) {
+        if (x < 0 || y < 0 || x >= w || y >= h) return true;
+        return solidSet.has(tiles[y * w + x]);
+      },
+      tileAt(x, y) { return get(x, y); },
+      setTile(x, y, v) { set(x, y, v); },
+    };
+  }
+
+  function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // 이 건물의 "1층" (지상 최저층)
+  function groundFloorOf(b) { return 1; }
+
+  // 종류·층에 따른 실내 형태
+  function layoutOf(kind, floor, b) {
+    if (kind === KIND.MART || kind === KIND.FACTORY || kind === KIND.WAREHOUSE) return 'open';
+    if (kind === KIND.STATION && floor < 0) return 'open';
+    if (kind === KIND.CHURCH && floor === 1) return 'open';
+    if (kind === KIND.APARTMENT) return 'units';
+    return 'rooms';
+  }
+
+  // 한 줄에 방을 여러 개 만든다
+  function makeRoomRow(y0, y1, rooms, w, h, set, rng, top) {
+    const height = y1 - y0;
+    if (height < INTERIOR.minRoom) return;
+    let x = 1;
+    while (x < w - 1) {
+      const width = rng.int(INTERIOR.minRoom, INTERIOR.minRoom + 4);
+      const right = Math.min(w - 1, x + width);
+      if (right - x < INTERIOR.minRoom) break;
+      // 방 사이 칸막이
+      if (right < w - 1) for (let y = y0; y < y1; y++) set(right, y, IN.WALL);
+      // 복도 쪽 벽과 문
+      const doorX = x + Math.floor((right - x) / 2);
+      const wallY = top ? y1 - 1 : y0;
+      for (let xx = x; xx < right; xx++) set(xx, wallY, IN.WALL);
+      set(doorX, wallY, IN.FLOOR);
+      rooms.push({ x, y: top ? y0 : y0 + 1, w: right - x, h: height - 1, door: { x: doorX, y: wallY } });
+      x = right + 1;
+    }
+  }
+
+  // 넓은 한 칸짜리 층 (마트·공장·승강장)
+  function fillOpen(tiles, w, h, set, get, rng, b, floor) {
+    if (b.kind === KIND.STATION && floor < 0) {
+      // 승강장 — 가운데가 선로
+      const railY = Math.floor(h / 2);
+      for (let x = 1; x < w - 1; x++) {
+        set(x, railY - 1, IN.WALL);
+        set(x, railY, IN.MACHINE);
+        set(x, railY + 1, IN.WALL);
+      }
+      for (let x = 2; x < w - 2; x += 5) set(x, railY - 2, IN.COUNTER); // 스크린도어 앞 벤치
+      return;
+    }
+    if (b.kind === KIND.MART) {
+      for (let y = 3; y < h - 3; y += 3) {
+        for (let x = 2; x < w - 2; x++) {
+          if (x % 9 === 0) continue; // 통로
+          set(x, y, IN.SHELF);
+        }
+      }
+      for (let x = 2; x < Math.min(w - 2, 8); x++) set(x, h - 3, IN.COUNTER);
+      return;
+    }
+    if (b.kind === KIND.CHURCH) {
+      for (let y = 3; y < h - 3; y += 2) {
+        for (let x = 3; x < w - 3; x++) {
+          if (x === Math.floor(w / 2)) continue;
+          set(x, y, IN.TABLE);
+        }
+      }
+      return;
+    }
+    // 공장·창고 — 기계와 자재
+    for (let y = 3; y < h - 3; y += 4) {
+      for (let x = 3; x < w - 3; x += 5) {
+        if (rng.chance(0.7)) set(x, y, IN.MACHINE);
+        if (rng.chance(0.3)) set(x + 1, y, IN.SHELF);
+      }
+    }
+  }
+
+  // 방 이름 짓기
+  function roomNamer(b, floor, rng, layout) {
+    if (b.kind === KIND.APARTMENT || (b.kind === KIND.TOWER && floor >= 4)) {
+      return (i) => `${Math.max(1, floor)}${String(i + 1).padStart(2, '0')}호`;
+    }
+    if (b.kind === KIND.SCHOOL) {
+      const pool = rng.shuffle(ROOM_NAMES.school);
+      return (i) => (i < 3 && floor > 1 ? `${floor - 1}학년 ${i + 1}반` : pool[i % pool.length]);
+    }
+    if (b.kind === KIND.STATION) {
+      const pool = rng.shuffle(ROOM_NAMES.station);
+      return (i) => pool[i % pool.length];
+    }
+    if (b.kind === KIND.PUBLIC) {
+      const pool = rng.shuffle(ROOM_NAMES.public);
+      return (i) => pool[i % pool.length];
+    }
+    if (b.kind === KIND.HOSPITAL) {
+      const pool = rng.shuffle(ROOM_NAMES.hospital);
+      return (i) => pool[i % pool.length];
+    }
+    if (b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE) {
+      const pool = rng.shuffle(ROOM_NAMES.factory);
+      return (i) => pool[i % pool.length];
+    }
+    if (b.kind === KIND.SHOP || b.kind === KIND.TOWER || b.kind === KIND.MART) {
+      return () => makeShopName(rng);
+    }
+    if (b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE) {
+      return (i) => ['거실', '안방', '작은방', '주방', '창고'][i % 5];
+    }
+    const pool = rng.shuffle(ROOM_NAMES.office);
+    return (i) => pool[i % pool.length];
+  }
+
+  // 방에 가구 놓기
+  function furnish(room, layout, set, get, rng, b) {
+    const inside = (x, y) => x > room.x && x < room.x + room.w - 1 &&
+      y > room.y && y < room.y + room.h - 1;
+    const put = (x, y, v) => { if (inside(x, y) && get(x, y) === IN.FLOOR) set(x, y, v); };
+
+    const kit = furnitureKit(b.kind, room.name);
+    const count = Math.max(1, Math.floor(room.w * room.h * 0.16));
+    for (let i = 0; i < count; i++) {
+      const x = rng.int(room.x + 1, room.x + room.w - 2);
+      const y = rng.int(room.y + 1, room.y + room.h - 2);
+      put(x, y, rng.pick(kit));
+    }
+    if (rng.chance(0.4)) put(room.x + 1, room.y + 1, IN.PLANT);
+    if (rng.chance(0.3)) put(room.x + room.w - 2, room.y + room.h - 2, IN.RUG);
+  }
+
+  function furnitureKit(kind, roomName) {
+    switch (kind) {
+      case KIND.APARTMENT: case KIND.HOUSE: case KIND.FARMHOUSE:
+        return [IN.BED, IN.TABLE, IN.SHELF, IN.RUG];
+      case KIND.SCHOOL: return [IN.DESK, IN.DESK, IN.SHELF];
+      case KIND.HOSPITAL: return [IN.BED, IN.DESK, IN.MACHINE];
+      case KIND.PUBLIC: case KIND.STATION: return [IN.DESK, IN.COUNTER, IN.SHELF];
+      case KIND.SHOP: case KIND.TOWER: case KIND.MART: return [IN.SHELF, IN.TABLE, IN.COUNTER];
+      case KIND.FACTORY: case KIND.WAREHOUSE: return [IN.MACHINE, IN.SHELF];
+      case KIND.CHURCH: return [IN.TABLE, IN.PLANT];
+      default: return [IN.DESK, IN.SHELF, IN.TABLE];
+    }
+  }
+
+  __M.floorList = floorList; __M.makeInterior = makeInterior; __M.groundFloorOf = groundFloorOf;
+})();
+
+// ── world/actors.js ─────────────────────────────
+(function () {
+  // 길에 사는 것들 — 지나가는 사람과 고양이.
+  // 청크 단위로 시드에서 태어나고, 화면에서 멀어지면 사라진다.
+
+  const { SEED, NPC, TILE, GROUND } = __M;
+  const { makeRng } = __M;
+
+  const CH = TILE.chunk;
+  const CAT_CHANCE = 0.22;      // 청크마다 고양이가 있을 확률
+  const DESPAWN_CHUNKS = 3;     // 이 거리(청크)를 넘으면 정리한다
+
+  class Actors {
+    constructor(map) {
+      this.map = map;
+      this.chunks = new Map();   // 청크키 → 액터 배열
+    }
+
+    // 보이는 범위의 청크에 사는 것들을 준비한다
+    ensure(cx0, cy0, cx1, cy1) {
+      for (let cy = cy0; cy <= cy1; cy++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          const key = cx * 100000 + cy;
+          if (this.chunks.has(key)) continue;
+          this.chunks.set(key, this._spawn(cx, cy));
+        }
+      }
+      // 멀어진 청크 정리
+      for (const key of [...this.chunks.keys()]) {
+        const cx = Math.round(key / 100000), cy = key - cx * 100000;
+        if (cx < cx0 - DESPAWN_CHUNKS || cx > cx1 + DESPAWN_CHUNKS ||
+            cy < cy0 - DESPAWN_CHUNKS || cy > cy1 + DESPAWN_CHUNKS) {
+          this.chunks.delete(key);
+        }
+      }
+    }
+
+    _spawn(cx, cy) {
+      const rng = makeRng(SEED, 'actors', cx, cy);
+      const chunk = this.map.chunk(cx, cy);
+      const spots = [];
+      for (let i = 0; i < CH * CH; i++) {
+        if (chunk.solid[i]) continue;
+        if (NPC.spawnGrounds.includes(chunk.ground[i])) spots.push(i);
+      }
+      if (!spots.length) return [];
+
+      const out = [];
+      const count = Math.min(NPC.perChunk, Math.floor(spots.length / 40));
+      for (let i = 0; i < count; i++) {
+        const idx = rng.pick(spots);
+        out.push(this._make(cx, cy, idx, rng, 'npc'));
+      }
+      if (rng.chance(CAT_CHANCE)) {
+        out.push(this._make(cx, cy, rng.pick(spots), rng, 'cat'));
+      }
+      return out;
+    }
+
+    _make(cx, cy, idx, rng, kind) {
+      const tx = cx * CH + (idx % CH), ty = cy * CH + Math.floor(idx / CH);
+      const x = tx * TILE.size + TILE.size / 2, y = ty * TILE.size + TILE.size / 2;
+      return {
+        kind, x, y, homeX: x, homeY: y,
+        dir: 'down', anim: rng.range(0, 4), moving: false,
+        seed: rng.int(0, 9999), speed: NPC.speed * rng.range(0.7, 1.25),
+        targetX: x, targetY: y, wait: rng.range(0, 2.5),
+        id: `${cx}:${cy}:${idx}:${kind}`,
+      };
+    }
+
+    // 눈에 보이는 것들만 훑는다
+    *visible(cx0, cy0, cx1, cy1) {
+      for (let cy = cy0; cy <= cy1; cy++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          const list = this.chunks.get(cx * 100000 + cy);
+          if (list) for (const a of list) yield a;
+        }
+      }
+    }
+
+    update(dt, cx0, cy0, cx1, cy1) {
+      for (const a of this.visible(cx0, cy0, cx1, cy1)) {
+        a.anim += dt;
+        if (a.wait > 0) { a.wait -= dt; a.moving = false; continue; }
+
+        const dx = a.targetX - a.x, dy = a.targetY - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 2) {
+          // 새 목적지 — 태어난 자리 근처로만
+          const rng = makeRng(SEED, 'wander', a.id, Math.floor(a.anim));
+          const r = NPC.wanderRadius * (a.kind === 'cat' ? 0.5 : 1);
+          a.targetX = a.homeX + rng.range(-r, r);
+          a.targetY = a.homeY + rng.range(-r, r);
+          a.wait = rng.range(0.4, a.kind === 'cat' ? 4 : 2);
+          a.moving = false;
+          continue;
+        }
+
+        const speed = a.speed * (a.kind === 'cat' ? 0.55 : 1);
+        const nx = a.x + (dx / dist) * speed * dt;
+        const ny = a.y + (dy / dist) * speed * dt;
+        const tx = Math.floor(nx / TILE.size), ty = Math.floor(ny / TILE.size);
+        if (this.map.isSolid(tx, ty)) {
+          a.targetX = a.x; a.targetY = a.y; a.wait = 0.3;
+          continue;
+        }
+        a.x = nx; a.y = ny; a.moving = true;
+        a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      }
+    }
+
+    // 플레이어 근처의 고양이 (쓰다듬기용)
+    nearestCat(x, y, radius) {
+      let best = null, bestD = radius;
+      for (const list of this.chunks.values()) {
+        for (const a of list) {
+          if (a.kind !== 'cat') continue;
+          const d = Math.hypot(a.x - x, a.y - y);
+          if (d < bestD) { bestD = d; best = a; }
+        }
+      }
+      return best;
+    }
+  }
+
+  __M.Actors = Actors;
+})();
+
+// ── render/sprites.js ─────────────────────────────
+(function () {
+  // 절차적 스프라이트 생성 — 이 파일이 게임의 모든 그림을 만든다.
+  //
+  // 외부 이미지를 일절 쓰지 않는다. 전부 캔버스에 코드로 찍는다.
+  // 나중에 진짜 도트 에셋으로 바꾸고 싶으면 이 파일만 갈아끼우면 된다.
+  // 규칙: 모든 생성물은 시드에서 나오고, 한 번 만들면 캐시한다.
+
+  const { TILE, GROUND, PROP, KIND, IN, BUILDING, PLAYER, SEED } = __M;
+  const {
+    GROUND_COLOR, GROUND_JITTER, PROP_COLOR, BUILDING_COLOR, INTERIOR_COLOR,
+    PLAYER_COLOR, NPC_COLORS, shade, mix,
+  } = __M;
+  const { makeRng, noiseAt, seedOf } = __M;
+
+  const S = TILE.size;
+  const GROUND_VARIANTS = 6;   // 지면 종류마다 만들어 둘 변주 개수
+  const S_TEX = seedOf(SEED, 'tex');
+
+  // ── 캔버스 도구 ─────────────────────────────────────────────────────────
+  function makeCanvas(w, h) {
+    const c = typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(w, h)
+      : Object.assign(document.createElement('canvas'), { width: w, height: h });
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    return { canvas: c, ctx };
+  }
+
+  // 도트 하나(또는 사각형) 찍기
+  function px(ctx, x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x | 0, y | 0, w | 0, h | 0);
+  }
+
+  // ── 지면 타일 ───────────────────────────────────────────────────────────
+  const groundCache = new Map();
+
+  // kind 와 variant 로 16x16 지면 타일 하나
+  function groundTile(kind, variant) {
+    const key = kind * 16 + variant;
+    let hit = groundCache.get(key);
+    if (hit) return hit;
+
+    const { canvas, ctx } = makeCanvas(S, S);
+    const base = GROUND_COLOR[kind] || '#ff00ff';
+    const jitter = GROUND_JITTER[kind] || 0;
+    const rng = makeRng(SEED, 'ground', kind, variant);
+
+    px(ctx, 0, 0, S, S, base);
+    // 얼룩 — 픽셀마다 밝기를 조금씩 흔든다
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        const n = rng();
+        if (n > 0.72) px(ctx, x, y, 1, 1, shade(base, jitter * (n - 0.72) * 3));
+        else if (n < 0.2) px(ctx, x, y, 1, 1, shade(base, -jitter * (0.2 - n) * 3));
+      }
+    }
+
+    switch (kind) {
+      case GROUND.FIELD: { // 논 — 이랑 줄무늬
+        const dark = shade(base, -0.12);
+        for (let y = (variant % 2) ? 1 : 2; y < S; y += 4) px(ctx, 0, y, S, 1, dark);
+        break;
+      }
+      case GROUND.GRASS: { // 풀 — 짧은 잎
+        for (let i = 0; i < 10; i++) {
+          const x = rng.int(0, S - 1), y = rng.int(0, S - 2);
+          px(ctx, x, y, 1, 2, shade(base, 0.16));
+        }
+        break;
+      }
+      case GROUND.ROAD: { // 아스팔트 알갱이
+        for (let i = 0; i < 22; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, rng.chance(0.5) ? 0.1 : -0.1));
+        break;
+      }
+      case GROUND.ROAD_LINE: {
+        px(ctx, 0, 0, S, S, GROUND_COLOR[GROUND.ROAD]);
+        px(ctx, 0, S / 2 - 1, S, 2, '#e8e2c8');
+        break;
+      }
+      case GROUND.SIDEWALK: { // 보도블럭 격자
+        const line = shade(base, -0.14);
+        for (let y = 0; y < S; y += 8) px(ctx, 0, y, S, 1, line);
+        for (let x = (variant % 2) ? 0 : 4; x < S; x += 8) px(ctx, x, 0, 1, S, line);
+        break;
+      }
+      case GROUND.CROSSWALK: {
+        px(ctx, 0, 0, S, S, GROUND_COLOR[GROUND.ROAD]);
+        px(ctx, 2, 0, 5, S, '#eeead8');
+        px(ctx, 10, 0, 5, S, '#eeead8');
+        break;
+      }
+      case GROUND.PLAZA: { // 포장 블럭
+        const line = shade(base, -0.12);
+        for (let y = 0; y < S; y += 4) px(ctx, 0, y, S, 1, line);
+        for (let x = 0; x < S; x += 4) px(ctx, x, 0, 1, S, line);
+        break;
+      }
+      case GROUND.WATER: { // 잔물결
+        for (let i = 0; i < 4; i++) {
+          const y = rng.int(1, S - 2), x = rng.int(0, S - 6);
+          px(ctx, x, y, rng.int(3, 6), 1, shade(base, 0.22));
+        }
+        break;
+      }
+      case GROUND.SAND: {
+        for (let i = 0; i < 14; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, -0.1));
+        break;
+      }
+      case GROUND.YARD: case GROUND.PARKING: { // 주차 구획선
+        px(ctx, 0, 0, 1, S, shade(base, 0.22));
+        break;
+      }
+      case GROUND.TRACK: { // 산책로 — 자잘한 자갈
+        for (let i = 0; i < 18; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, rng.chance(0.5) ? 0.12 : -0.12));
+        break;
+      }
+      case GROUND.FLOOR: { // 건물 바닥 — 실제로는 거의 가려진다
+        px(ctx, 0, 0, S, S, shade(base, -0.05));
+        break;
+      }
+    }
+
+    hit = canvas;
+    groundCache.set(key, hit);
+    return hit;
+  }
+
+  // 타일 좌표로 변주 고르기 — 같은 자리는 언제나 같은 모습
+  function groundVariantAt(tx, ty) {
+    return Math.floor(noiseAt(S_TEX, tx, ty) * GROUND_VARIANTS) % GROUND_VARIANTS;
+  }
+
+  // ── 소품 ────────────────────────────────────────────────────────────────
+  const propCache = new Map();
+  const PROP_H = 24; // 소품 캔버스 높이 (타일보다 커서 위로 삐져나온다)
+
+  function propSprite(kind, variant) {
+    const key = kind * 16 + variant;
+    let hit = propCache.get(key);
+    if (hit) return hit;
+
+    const { canvas, ctx } = makeCanvas(S, PROP_H);
+    const rng = makeRng(SEED, 'prop', kind, variant);
+    const c = PROP_COLOR[kind] || {};
+    const base = PROP_H; // 바닥선
+
+    switch (kind) {
+      case PROP.TREE: {
+        const leaf = shade(c.leaf, rng.range(-0.08, 0.08));
+        px(ctx, 7, base - 7, 2, 6, c.trunk);
+        // 잎은 세 덩어리를 겹쳐 둥글게
+        for (const [ox, oy, r] of [[8, base - 13, 6], [5, base - 11, 5], [11, base - 11, 5]]) {
+          blob(ctx, ox, oy, r, leaf, rng);
+        }
+        blob(ctx, 6, base - 15, 3, c.leafHi, rng);
+        break;
+      }
+      case PROP.BUSH: {
+        blob(ctx, 8, base - 4, 5, c.leaf, rng);
+        blob(ctx, 6, base - 6, 3, c.leafHi, rng);
+        break;
+      }
+      case PROP.LAMP: {
+        px(ctx, 7, base - 16, 2, 16, c.pole);
+        px(ctx, 5, base - 20, 6, 4, c.head);
+        px(ctx, 4, base - 18, 8, 1, shade(c.head, -0.3));
+        break;
+      }
+      case PROP.BENCH: {
+        px(ctx, 2, base - 6, 12, 3, c.wood);
+        px(ctx, 2, base - 9, 12, 2, shade(c.wood, 0.1));
+        px(ctx, 3, base - 3, 2, 3, c.leg);
+        px(ctx, 11, base - 3, 2, 3, c.leg);
+        break;
+      }
+      case PROP.SIGN: {
+        px(ctx, 7, base - 12, 2, 12, c.pole);
+        px(ctx, 2, base - 20, 12, 8, c.board);
+        px(ctx, 4, base - 17, 8, 1, c.text);
+        px(ctx, 4, base - 15, 6, 1, c.text);
+        break;
+      }
+      case PROP.HYDRANT: {
+        px(ctx, 6, base - 8, 4, 8, c.body);
+        px(ctx, 5, base - 10, 6, 2, c.cap);
+        px(ctx, 4, base - 6, 8, 2, shade(c.body, -0.2));
+        break;
+      }
+      case PROP.PLANTER: {
+        px(ctx, 4, base - 6, 8, 6, c.pot);
+        blob(ctx, 8, base - 9, 4, c.leaf, rng);
+        break;
+      }
+      case PROP.FENCE: {
+        px(ctx, 0, base - 8, S, 2, c.wood);
+        px(ctx, 0, base - 4, S, 2, c.wood);
+        px(ctx, 2, base - 10, 2, 10, shade(c.wood, -0.15));
+        px(ctx, 12, base - 10, 2, 10, shade(c.wood, -0.15));
+        break;
+      }
+      case PROP.ROCK: {
+        blob(ctx, 8, base - 4, 5, c.body, rng);
+        px(ctx, 6, base - 7, 3, 2, c.hi);
+        break;
+      }
+      case PROP.FLOWER: {
+        const petal = c.petal[variant % c.petal.length];
+        for (let i = 0; i < 3; i++) {
+          const x = 3 + i * 5 + rng.int(0, 1), y = base - 4 - rng.int(0, 3);
+          px(ctx, x, y + 2, 1, 3, c.stem);
+          px(ctx, x - 1, y, 3, 2, petal);
+        }
+        break;
+      }
+      case PROP.VENDING: {
+        px(ctx, 3, base - 14, 10, 14, c.body);
+        px(ctx, 5, base - 12, 6, 7, c.glass);
+        px(ctx, 5, base - 4, 6, 2, shade(c.body, -0.3));
+        break;
+      }
+    }
+
+    hit = canvas;
+    propCache.set(key, hit);
+    return hit;
+  }
+
+  // 둥근 덩어리 (도트라서 원 대신 계단식)
+  function blob(ctx, cx, cy, r, color, rng) {
+    ctx.fillStyle = color;
+    for (let y = -r; y <= r; y++) {
+      const w = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
+      if (w <= 0) continue;
+      const wobble = rng ? (rng.chance(0.25) ? -1 : 0) : 0;
+      ctx.fillRect(cx - w, cy + y, w * 2 + wobble, 1);
+    }
+  }
+
+  // ── 건물 ────────────────────────────────────────────────────────────────
+  const buildingCache = new Map();
+  const buildingOrder = [];
+  const BUILDING_CACHE_MAX = 320;
+
+  // 건물 높이(픽셀) — 층수에 비례하되 상한이 있다
+  function wallHeight(b) {
+    return Math.min(BUILDING.wallHeightMax, 8 + b.floors * BUILDING.wallHeightPerFloor);
+  }
+
+  // 건물 한 채를 통째로 그린 캔버스. 아래 끝이 건물 남쪽 벽에 맞는다.
+  function buildingSprite(b) {
+    const wh = wallHeight(b);
+    const key = `${b.kind}|${b.w}|${b.h}|${b.floors}|${b.seed}|${b.door.dir}`;
+    let hit = buildingCache.get(key);
+    if (hit) return hit;
+
+    const pw = b.w * S, ph = b.h * S + wh;
+    const { canvas, ctx } = makeCanvas(pw, ph);
+    const col = BUILDING_COLOR[b.kind] || BUILDING_COLOR[KIND.SHOP];
+    const rng = makeRng(SEED, 'sprite', b.seed, b.kind);
+    // 같은 종류라도 채마다 색을 조금씩 흔든다
+    const wall = shade(col.wall, rng.range(-0.06, 0.06));
+    const roof = shade(col.roof, rng.range(-0.07, 0.07));
+    const trim = col.trim;
+    const roofH = b.h * S;
+
+    // 옥상
+    px(ctx, 0, 0, pw, roofH, roof);
+    px(ctx, 0, 0, pw, 1, shade(roof, 0.18));
+    px(ctx, 0, roofH - 1, pw, 1, shade(roof, -0.2));
+    drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng);
+
+    // 앞벽
+    px(ctx, 0, roofH, pw, wh, wall);
+    px(ctx, 0, roofH, pw, 1, shade(wall, 0.2));
+    px(ctx, 0, ph - 2, pw, 2, shade(wall, -0.28));
+    px(ctx, 0, roofH, 1, wh, shade(wall, -0.12));
+    px(ctx, pw - 1, roofH, 1, wh, shade(wall, -0.12));
+
+    drawWindows(ctx, b, pw, roofH, wh, wall, col, rng);
+    drawFrontDoor(ctx, b, pw, roofH, wh, col, rng);
+
+    hit = canvas;
+    buildingCache.set(key, hit);
+    buildingOrder.push(key);
+    if (buildingOrder.length > BUILDING_CACHE_MAX) {
+      buildingCache.delete(buildingOrder.shift());
+    }
+    return hit;
+  }
+
+  function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng) {
+    const dark = shade(roof, -0.16), light = shade(roof, 0.12);
+    switch (b.kind) {
+      case KIND.APARTMENT: case KIND.TOWER: {
+        // 옥상 난간 + 물탱크 + 계단탑
+        px(ctx, 1, 1, pw - 2, 1, light);
+        px(ctx, 1, roofH - 3, pw - 2, 1, dark);
+        const tx = Math.floor(pw * 0.62), ty = Math.floor(roofH * 0.3);
+        px(ctx, tx, ty, 12, 8, shade(roof, -0.25));
+        px(ctx, tx + 1, ty + 1, 10, 2, light);
+        px(ctx, 6, Math.floor(roofH * 0.45), 10, 9, dark);
+        break;
+      }
+      case KIND.HOUSE: case KIND.FARMHOUSE: {
+        // 경사 지붕 — 가운데 용마루
+        const mid = Math.floor(roofH / 2);
+        px(ctx, 0, 0, pw, mid, shade(roof, 0.1));
+        px(ctx, 0, mid, pw, roofH - mid, dark);
+        px(ctx, 0, mid - 1, pw, 2, shade(roof, -0.35));
+        break;
+      }
+      case KIND.FACTORY: case KIND.WAREHOUSE: {
+        // 톱날 지붕 + 환기구
+        for (let x = 2; x < pw - 4; x += 10) {
+          px(ctx, x, 2, 6, roofH - 5, dark);
+          px(ctx, x, 2, 6, 2, col.accent);
+        }
+        break;
+      }
+      case KIND.SCHOOL: case KIND.PUBLIC: case KIND.HOSPITAL: {
+        px(ctx, 2, 2, pw - 4, roofH - 5, shade(roof, -0.08));
+        px(ctx, 4, 4, pw - 8, 1, light);
+        if (b.kind === KIND.HOSPITAL) { // 옥상 적십자
+          const cx = Math.floor(pw / 2), cy = Math.floor(roofH / 2);
+          px(ctx, cx - 2, cy - 6, 5, 13, col.accent);
+          px(ctx, cx - 6, cy - 2, 13, 5, col.accent);
+        }
+        break;
+      }
+      case KIND.CHURCH: {
+        const cx = Math.floor(pw / 2), cy = Math.floor(roofH / 2);
+        px(ctx, cx - 1, cy - 8, 3, 16, col.accent);
+        px(ctx, cx - 5, cy - 4, 11, 3, col.accent);
+        break;
+      }
+      case KIND.STATION: {
+        // 유리 캐노피
+        for (let x = 2; x < pw - 2; x += 6) px(ctx, x, 2, 4, roofH - 5, shade(roof, 0.16));
+        px(ctx, 0, roofH - 4, pw, 2, col.accent);
+        break;
+      }
+      case KIND.MART: {
+        px(ctx, 3, 3, pw - 6, roofH - 7, shade(roof, -0.1));
+        for (let x = 6; x < pw - 6; x += 12) px(ctx, x, 6, 8, 6, dark); // 실외기
+        break;
+      }
+      default: {
+        // 상가 옥상 — 난간, 실외기 줄, 물탱크, 옥상 출입문
+        px(ctx, 1, 1, pw - 2, roofH - 3, shade(roof, -0.05));
+        px(ctx, 1, 1, pw - 2, 1, light);
+        px(ctx, 1, roofH - 3, pw - 2, 1, dark);
+        for (let x = 5; x < pw - 8; x += 11) {
+          if (!rng.chance(0.55)) continue;
+          px(ctx, x, 5, 7, 5, shade(roof, -0.2));
+          px(ctx, x + 1, 6, 5, 3, shade(roof, 0.1));
+        }
+        if (roofH > 26) {
+          px(ctx, pw - 14, roofH - 14, 9, 8, dark);       // 옥상 출입문
+          px(ctx, pw - 12, roofH - 12, 5, 5, shade(roof, 0.2));
+        }
+        if (roofH > 20 && rng.chance(0.6)) {
+          px(ctx, 4, roofH - 13, 8, 7, shade(roof, -0.28)); // 물탱크
+          px(ctx, 5, roofH - 12, 6, 2, light);
+        }
+      }
+    }
+  }
+
+  function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng) {
+    if (b.kind === KIND.FARMHOUSE && b.w < 6) return;
+    const glass = shade(col.accent, rng.range(-0.05, 0.1));
+    const rows = Math.max(1, Math.min(4, Math.floor((wh - 8) / 9)));
+    const step = b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE ? 14 : 9;
+    for (let r = 0; r < rows; r++) {
+      const y = roofH + 4 + r * 9;
+      if (y + 5 > roofH + wh - 3) break;
+      for (let x = 4; x < pw - 6; x += step) {
+        if (rng.chance(0.12)) continue; // 불 꺼진 창
+        px(ctx, x, y, 5, 5, glass);
+        px(ctx, x, y, 5, 1, shade(glass, 0.25));
+        px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
+      }
+    }
+    // 상가는 1층에 간판띠
+    if ((b.kind === KIND.SHOP || b.kind === KIND.MART) && wh > 14) {
+      const y = roofH + wh - 14;
+      px(ctx, 1, y, pw - 2, 5, col.accent);
+      px(ctx, 1, y, pw - 2, 1, shade(col.accent, 0.25));
+      for (let x = 3; x < pw - 5; x += 4) px(ctx, x, y + 2, 2, 1, '#fffdf2');
+    }
+  }
+
+  function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng) {
+    const doorW = Math.min(10, Math.max(5, Math.floor(pw / 5)));
+    const y = roofH + wh - 9;
+    const dark = shade(col.trim, -0.2);
+    if (b.door.dir === 'S') {
+      // 앞면 정중앙 근처 — 실제 출입구 타일 위치에 맞춘다
+      const dx = Math.max(1, Math.min(pw - doorW - 1, (b.door.x - b.x) * S + (S - doorW) / 2));
+      px(ctx, dx, y, doorW, 9, dark);
+      px(ctx, dx + 1, y + 1, doorW - 2, 6, shade(col.accent, 0.2));
+      px(ctx, dx, y + 8, doorW, 1, shade(dark, -0.3));
+    } else {
+      // 옆·뒷면 출입구는 앞벽에 셔터나 창고문으로 표시만 한다
+      const dx = Math.floor(pw / 2) - doorW / 2;
+      px(ctx, dx, y + 2, doorW, 7, shade(col.trim, -0.05));
+    }
+  }
+
+  // 출입구 발판 (땅에 깔리는 매트) — 문 찾기 쉬우라고
+  let doorMat = null;
+  function doorMatSprite() {
+    if (doorMat) return doorMat;
+    const { canvas, ctx } = makeCanvas(S, S);
+    px(ctx, 2, 4, 12, 9, '#c9a24a');
+    px(ctx, 3, 5, 10, 7, '#e0b95f');
+    px(ctx, 5, 8, 6, 1, '#8f6f2c');
+    doorMat = canvas;
+    return doorMat;
+  }
+
+  // ── 사람 ────────────────────────────────────────────────────────────────
+  // 4방향 × 4프레임 (서기, 걷기1, 서기, 걷기2)
+  const DIRS = ['down', 'left', 'right', 'up'];
+  const FRAMES = 4;
+
+  function makeCharacterSheet(colors) {
+    const w = PLAYER.drawWidth, h = PLAYER.drawHeight;
+    const { canvas, ctx } = makeCanvas(w * FRAMES, h * DIRS.length);
+    for (let d = 0; d < DIRS.length; d++) {
+      for (let f = 0; f < FRAMES; f++) {
+        drawCharacter(ctx, f * w, d * h, w, h, DIRS[d], f, colors);
+      }
+    }
+    return { canvas, w, h, dirs: DIRS, frames: FRAMES };
+  }
+
+  function drawCharacter(ctx, ox, oy, w, h, dir, frame, c) {
+    const step = frame === 1 ? 1 : frame === 3 ? -1 : 0; // 걸음에 따라 다리를 엇갈린다
+    const cx = ox + w / 2;
+    const out = c.outline;
+
+    // 그림자
+    ctx.globalAlpha = 0.2;
+    px(ctx, ox + 3, oy + h - 2, w - 6, 2, '#000000');
+    ctx.globalAlpha = 1;
+
+    // 다리
+    px(ctx, cx - 3, oy + h - 6 + (step > 0 ? 0 : 1), 2, 5, c.bottom);
+    px(ctx, cx + 1, oy + h - 6 + (step < 0 ? 0 : 1), 2, 5, c.bottom);
+    px(ctx, cx - 3, oy + h - 2, 2, 2, c.shoe);
+    px(ctx, cx + 1, oy + h - 2, 2, 2, c.shoe);
+
+    // 몸통
+    px(ctx, cx - 4, oy + 8, 8, 7, c.top);
+    px(ctx, cx - 4, oy + 8, 8, 1, shade(c.top, 0.2));
+    // 팔
+    px(ctx, cx - 5, oy + 9 + (step > 0 ? 1 : 0), 1, 5, shade(c.top, -0.12));
+    px(ctx, cx + 4, oy + 9 + (step < 0 ? 1 : 0), 1, 5, shade(c.top, -0.12));
+
+    // 머리
+    px(ctx, cx - 4, oy + 1, 8, 8, c.skin);
+    px(ctx, cx - 4, oy + 1, 8, 3, c.hair);
+    px(ctx, cx - 5, oy + 2, 1, 5, c.hair);
+    px(ctx, cx + 4, oy + 2, 1, 5, c.hair);
+
+    // 눈·표정 — 방향에 따라
+    if (dir === 'down') {
+      px(ctx, cx - 3, oy + 5, 2, 2, out);
+      px(ctx, cx + 1, oy + 5, 2, 2, out);
+      px(ctx, cx - 1, oy + 7, 2, 1, shade(c.skin, -0.25));
+    } else if (dir === 'left') {
+      px(ctx, cx - 3, oy + 5, 2, 2, out);
+      px(ctx, cx - 5, oy + 4, 1, 3, c.hair);
+    } else if (dir === 'right') {
+      px(ctx, cx + 1, oy + 5, 2, 2, out);
+      px(ctx, cx + 4, oy + 4, 1, 3, c.hair);
+    } else {
+      px(ctx, cx - 4, oy + 1, 8, 6, c.hair); // 뒤통수
+    }
+  }
+
+  let playerSheet = null;
+  function playerSheet_() {
+    if (!playerSheet) playerSheet = makeCharacterSheet(PLAYER_COLOR);
+    return playerSheet;
+  }
+
+  const npcSheets = new Map();
+  function npcSheet(seed) {
+    let hit = npcSheets.get(seed);
+    if (hit) return hit;
+    const rng = makeRng(SEED, 'npc', seed);
+    hit = makeCharacterSheet({
+      skin: rng.pick(['#f2cfa8', '#e6bd94', '#d8a97e']),
+      hair: rng.pick(NPC_COLORS.hair),
+      top: rng.pick(NPC_COLORS.top),
+      bottom: rng.pick(NPC_COLORS.bottom),
+      shoe: '#3a3a42',
+      outline: '#2a2028',
+    });
+    npcSheets.set(seed, hit);
+    return hit;
+  }
+
+  // 고양이 — 이 동네에 꼭 있어야 한다
+  let catSprites = null;
+  function catSprite(variant) {
+    if (!catSprites) {
+      catSprites = [];
+      for (let v = 0; v < 3; v++) {
+        const { canvas, ctx } = makeCanvas(14, 12);
+        const rng = makeRng(SEED, 'cat', v);
+        const fur = rng.pick(['#d8b98a', '#8a8a92', '#3a3a42', '#e8e2d8']);
+        px(ctx, 2, 5, 9, 5, fur);
+        px(ctx, 9, 3, 4, 4, fur);          // 머리
+        px(ctx, 9, 2, 1, 2, fur);          // 귀
+        px(ctx, 12, 2, 1, 2, fur);
+        px(ctx, 1, 3, 2, 5, fur);          // 꼬리
+        px(ctx, 3, 9, 2, 2, shade(fur, -0.2));
+        px(ctx, 8, 9, 2, 2, shade(fur, -0.2));
+        px(ctx, 10, 4, 1, 1, '#2a2028');   // 눈
+        px(ctx, 12, 4, 1, 1, '#2a2028');
+        catSprites.push(canvas);
+      }
+    }
+    return catSprites[variant % catSprites.length];
+  }
+
+  // ── 실내 타일 ───────────────────────────────────────────────────────────
+  const interiorCache = new Map();
+
+  function interiorTile(kind, variant) {
+    const key = kind * 16 + variant;
+    let hit = interiorCache.get(key);
+    if (hit) return hit;
+
+    const { canvas, ctx } = makeCanvas(S, S);
+    const base = INTERIOR_COLOR[kind] || '#ff00ff';
+    const rng = makeRng(SEED, 'in', kind, variant);
+    px(ctx, 0, 0, S, S, base);
+
+    switch (kind) {
+      case IN.FLOOR: { // 장판 — 이음선
+        px(ctx, 0, 0, S, 1, shade(base, -0.08));
+        px(ctx, 0, 0, 1, S, shade(base, -0.08));
+        for (let i = 0; i < 6; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, -0.05));
+        break;
+      }
+      case IN.WALL: {
+        px(ctx, 0, 0, S, 3, shade(base, 0.16));
+        px(ctx, 0, S - 3, S, 3, shade(base, -0.22));
+        for (let y = 3; y < S - 3; y += 6) px(ctx, 0, y, S, 1, shade(base, -0.1));
+        break;
+      }
+      case IN.EXIT: {
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 2, 2, 12, 12, base);
+        px(ctx, 5, 5, 6, 6, shade(base, 0.3));
+        break;
+      }
+      case IN.STAIR_UP: case IN.STAIR_DOWN: {
+        const up = kind === IN.STAIR_UP;
+        for (let i = 0; i < 4; i++) {
+          const y = up ? 12 - i * 4 : i * 4;
+          px(ctx, 1, y, 14, 3, shade(base, up ? 0.06 * i : -0.06 * i));
+        }
+        break;
+      }
+      case IN.ELEVATOR: {
+        px(ctx, 1, 1, 14, 14, shade(base, -0.15));
+        px(ctx, 3, 3, 4, 10, shade(base, 0.25));
+        px(ctx, 9, 3, 4, 10, shade(base, 0.25));
+        break;
+      }
+      case IN.COUNTER: {
+        px(ctx, 0, 3, S, 10, base);
+        px(ctx, 0, 3, S, 2, shade(base, 0.2));
+        px(ctx, 0, 12, S, 2, shade(base, -0.25));
+        break;
+      }
+      case IN.SHELF: {
+        px(ctx, 1, 1, 14, 14, base);
+        for (let y = 3; y < 14; y += 5) px(ctx, 2, y, 12, 3, shade(base, rng.range(-0.2, 0.25)));
+        break;
+      }
+      case IN.DESK: {
+        px(ctx, 1, 4, 14, 9, base);
+        px(ctx, 1, 4, 14, 2, shade(base, 0.18));
+        px(ctx, 4, 6, 7, 4, '#6d7a86'); // 모니터
+        break;
+      }
+      case IN.PLANT: {
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 6, 10, 4, 5, '#b1705a');
+        blob(ctx, 8, 7, 4, base, rng);
+        break;
+      }
+      case IN.RUG: {
+        px(ctx, 1, 1, 14, 14, base);
+        px(ctx, 3, 3, 10, 10, shade(base, 0.14));
+        break;
+      }
+      case IN.WINDOW: {
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.WALL]);
+        px(ctx, 2, 3, 12, 9, base);
+        px(ctx, 7, 3, 2, 9, shade(base, -0.25));
+        break;
+      }
+      case IN.BED: {
+        px(ctx, 2, 2, 12, 12, base);
+        px(ctx, 2, 2, 12, 4, shade(base, 0.2));
+        px(ctx, 3, 7, 10, 6, '#b8c8dc');
+        break;
+      }
+      case IN.TABLE: {
+        px(ctx, 2, 3, 12, 10, base);
+        px(ctx, 2, 3, 12, 2, shade(base, 0.2));
+        px(ctx, 6, 6, 4, 4, '#f2f2ee');
+        break;
+      }
+      case IN.MACHINE: {
+        px(ctx, 1, 1, 14, 14, base);
+        px(ctx, 3, 3, 10, 5, shade(base, -0.3));
+        px(ctx, 4, 10, 3, 3, '#e2705f');
+        px(ctx, 9, 10, 3, 3, '#8fc48a');
+        break;
+      }
+    }
+
+    hit = canvas;
+    interiorCache.set(key, hit);
+    return hit;
+  }
+
+  // 상호작용 물건 (버튼·레버·자판기 따위) — 실내외 공용
+  const gizmoCache = new Map();
+  function gizmoSprite(icon, active) {
+    const key = icon + (active ? '!' : '');
+    let hit = gizmoCache.get(key);
+    if (hit) return hit;
+    const { canvas, ctx } = makeCanvas(S, S);
+    const body = '#3d4450';
+    switch (icon) {
+      case 'button':
+        px(ctx, 3, 5, 10, 8, body);
+        px(ctx, 5, 7, 6, 4, active ? '#8fc48a' : '#e2554a');
+        px(ctx, 5, 7, 6, 1, '#ffffff44');
+        break;
+      case 'lever':
+        px(ctx, 4, 9, 8, 5, body);
+        px(ctx, active ? 9 : 5, 3, 2, 7, '#d8d8dc');
+        px(ctx, active ? 8 : 4, 2, 4, 3, active ? '#8fc48a' : '#e2554a');
+        break;
+      case 'panel':
+        px(ctx, 2, 3, 12, 11, '#8a919c');
+        px(ctx, 3, 4, 10, 9, active ? '#2a2f38' : '#b8bfc8');
+        if (active) { px(ctx, 5, 6, 2, 2, '#f2c14e'); px(ctx, 9, 9, 2, 2, '#8fc48a'); }
+        break;
+      case 'valve':
+        px(ctx, 7, 4, 2, 9, body);
+        px(ctx, 3, 6, 10, 2, active ? '#8fc48a' : '#e2554a');
+        px(ctx, 6, 3, 4, 2, '#d8d8dc');
+        break;
+      case 'note':
+        px(ctx, 3, 3, 10, 11, '#f2eddc');
+        px(ctx, 5, 6, 6, 1, '#8a8477');
+        px(ctx, 5, 8, 6, 1, '#8a8477');
+        px(ctx, 5, 10, 4, 1, '#8a8477');
+        break;
+      case 'bowl':
+        px(ctx, 4, 8, 8, 4, '#c98f6a');
+        px(ctx, 5, 7, 6, 2, active ? '#e8d8a8' : '#a8724e');
+        break;
+      case 'bell':
+        px(ctx, 5, 4, 6, 7, '#d8b45a');
+        px(ctx, 4, 10, 8, 2, '#b8923a');
+        px(ctx, 7, 12, 2, 2, '#8a6a24');
+        break;
+      default:
+        px(ctx, 4, 4, 8, 8, body);
+        px(ctx, 6, 6, 4, 4, active ? '#8fc48a' : '#e2554a');
+    }
+    hit = canvas;
+    gizmoCache.set(key, hit);
+    return hit;
+  }
+
+  // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
+  function clearSpriteCaches() {
+    groundCache.clear(); propCache.clear(); buildingCache.clear();
+    buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
+    npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
+  }
+
+  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
+})();
+
+// ── render/camera.js ─────────────────────────────
+(function () {
+  // 카메라 — 플레이어를 부드럽게 따라가고 지도 밖을 비추지 않는다.
+
+  const { CAMERA, TILE } = __M;
+  const { WORLD_PX_W, WORLD_PX_H } = __M;
+
+  class Camera {
+    constructor() {
+      this.x = 0; this.y = 0;      // 화면 중앙이 보는 월드 좌표(픽셀)
+      this.zoom = CAMERA.zoom;
+      this.viewW = 0; this.viewH = 0; // 화면 크기(월드 픽셀 기준)
+    }
+
+    resize(cssW, cssH) {
+      this.viewW = cssW / this.zoom;
+      this.viewH = cssH / this.zoom;
+    }
+
+    setZoom(z, cssW, cssH) {
+      this.zoom = Math.max(CAMERA.zoomMin, Math.min(CAMERA.zoomMax, Math.round(z)));
+      this.resize(cssW, cssH);
+    }
+
+    // 목표를 따라간다. bounds 를 주면 그 안으로 가둔다 (실내는 실내 크기로).
+    follow(tx, ty, dt, bounds) {
+      const dx = tx - this.x, dy = ty - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > CAMERA.deadzone) {
+        const t = 1 - Math.pow(1 - CAMERA.lerp, dt * 60);
+        this.x += dx * t;
+        this.y += dy * t;
+      }
+      this.clamp(bounds);
+    }
+
+    snap(tx, ty, bounds) {
+      this.x = tx; this.y = ty;
+      this.clamp(bounds);
+    }
+
+    clamp(bounds) {
+      const w = bounds ? bounds.w : WORLD_PX_W;
+      const h = bounds ? bounds.h : WORLD_PX_H;
+      const halfW = this.viewW / 2, halfH = this.viewH / 2;
+      this.x = w <= this.viewW ? w / 2 : Math.max(halfW, Math.min(w - halfW, this.x));
+      this.y = h <= this.viewH ? h / 2 : Math.max(halfH, Math.min(h - halfH, this.y));
+    }
+
+    // 화면 왼쪽 위가 보는 월드 좌표. 정수로 맞춰 도트가 흔들리지 않게 한다.
+    get left() { return Math.round(this.x - this.viewW / 2); }
+    get top() { return Math.round(this.y - this.viewH / 2); }
+
+    worldToScreen(wx, wy) {
+      return [(wx - this.left) * this.zoom, (wy - this.top) * this.zoom];
+    }
+
+    // 지금 보이는 타일 범위
+    visibleTiles(pad = 1) {
+      return {
+        x0: Math.floor(this.left / TILE.size) - pad,
+        y0: Math.floor(this.top / TILE.size) - pad,
+        x1: Math.ceil((this.left + this.viewW) / TILE.size) + pad,
+        y1: Math.ceil((this.top + this.viewH) / TILE.size) + pad,
+      };
+    }
+  }
+
+  __M.Camera = Camera;
+})();
+
+// ── render/scene.js ─────────────────────────────
+(function () {
+  // 화면 그리기. 청크는 캔버스에 한 번 구워 두고, 움직이는 것만 매 프레임 그린다.
+
+  const { TILE, RENDER, PROP, GROUND, IN, PLAYER, CAMERA } = __M;
+  const { UI_COLOR, INTERIOR_COLOR, shade } = __M;
+  const {
+    makeCanvas, groundTile, groundVariantAt, propSprite, PROP_H,
+    buildingSprite, wallHeight, doorMatSprite, playerSheet_, npcSheet, catSprite,
+    interiorTile, gizmoSprite,
+  } = __M;
+
+  const S = TILE.size;
+  const CH = TILE.chunk;
+  const MARGIN = 16;      // 청크 위쪽 여백 — 나무처럼 위로 삐져나온 소품 자리
+  const CHUNK_PX = CH * S;
+
+  class Scene {
+    constructor(map, buildings) {
+      this.map = map;
+      this.buildings = buildings;
+      this.cache = new Map();   // 구워 둔 청크 캔버스
+      this.order = [];
+    }
+
+    // 청크 하나를 캔버스에 굽는다 (지면 + 소품)
+    bake(cx, cy) {
+      const key = cx * 100000 + cy;
+      let hit = this.cache.get(key);
+      if (hit) return hit;
+
+      const chunk = this.map.chunk(cx, cy);
+      const { canvas, ctx } = makeCanvas(CHUNK_PX, CHUNK_PX + MARGIN);
+      const ox = cx * CH, oy = cy * CH;
+
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CH; x++) {
+          const g = chunk.ground[y * CH + x];
+          ctx.drawImage(groundTile(g, groundVariantAt(ox + x, oy + y)), x * S, y * S + MARGIN);
+        }
+      }
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CH; x++) {
+          const p = chunk.prop[y * CH + x];
+          if (!p) continue;
+          const v = (ox + x + (oy + y) * 3) % 4;
+          ctx.drawImage(propSprite(p, v), x * S, y * S + MARGIN + S - PROP_H);
+        }
+      }
+
+      hit = canvas;
+      this.cache.set(key, hit);
+      this.order.push(key);
+      while (this.order.length > TILE.chunkCacheMax) {
+        const old = this.order.shift();
+        if (old !== key) this.cache.delete(old);
+      }
+      return hit;
+    }
+
+    // 청크 캐시를 버린다 (지면이 바뀌었을 때)
+    invalidate() { this.cache.clear(); this.order.length = 0; }
+
+    // ── 바깥 ──────────────────────────────────────────────────────
+    drawOutdoor(ctx, cam, state) {
+      const view = cam.visibleTiles(1);
+      const cx0 = Math.floor(view.x0 / CH), cx1 = Math.floor(view.x1 / CH);
+      const cy0 = Math.floor(view.y0 / CH), cy1 = Math.floor(view.y1 / CH);
+
+      ctx.save();
+      ctx.scale(cam.zoom, cam.zoom);
+      ctx.translate(-cam.left, -cam.top);
+
+      // 지면
+      for (let cy = cy0; cy <= cy1; cy++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          if (cx < 0 || cy < 0) continue;
+          ctx.drawImage(this.bake(cx, cy), cx * CHUNK_PX, cy * CHUNK_PX - MARGIN);
+        }
+      }
+
+      // 세로로 겹치는 것들을 발밑 높이 순으로 정렬해 그린다
+      const items = [];
+      const seen = new Set();
+      for (let cy = cy0; cy <= cy1; cy++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          for (const b of this.map.chunk(Math.max(0, cx), Math.max(0, cy)).buildings) {
+            if (seen.has(b.id)) continue;
+            seen.add(b.id);
+            items.push({ base: (b.y + b.h) * S, draw: () => this.drawBuilding(ctx, b) });
+          }
+        }
+      }
+      for (const g of state.outdoorGizmos) {
+        if (g.tx < view.x0 || g.tx > view.x1 || g.ty < view.y0 || g.ty > view.y1) continue;
+        items.push({
+          base: (g.ty + 1) * S,
+          draw: () => ctx.drawImage(gizmoSprite(g.icon, state.game.used.has(g.id)), g.tx * S, g.ty * S),
+        });
+      }
+      for (const a of state.actors.visible(cx0, cy0, cx1, cy1)) {
+        items.push({ base: a.y, draw: () => this.drawActor(ctx, a) });
+      }
+      items.push({ base: state.player.y, draw: () => this.drawPlayer(ctx, state.player) });
+
+      items.sort((a, b) => a.base - b.base);
+      for (const it of items) it.draw();
+
+      ctx.restore();
+    }
+
+    drawBuilding(ctx, b) {
+      const sprite = buildingSprite(b);
+      const wh = wallHeight(b);
+      // 출입구 발판은 건물보다 먼저 (땅에 깔린 것)
+      ctx.drawImage(doorMatSprite(), b.door.x * S, b.door.y * S);
+      ctx.globalAlpha = RENDER.shadowAlpha;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(b.x * S + 2, (b.y + b.h) * S - 2, b.w * S, 4);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(sprite, b.x * S, b.y * S - wh);
+    }
+
+    drawActor(ctx, a) {
+      const sheet = a.kind === 'cat' ? null : npcSheet(a.seed);
+      if (!sheet) {
+        ctx.drawImage(catSprite(a.seed % 3), Math.round(a.x - 7), Math.round(a.y - 10));
+        return;
+      }
+      drawFromSheet(ctx, sheet, a.x, a.y, a.dir, a.moving ? a.anim : 0);
+    }
+
+    drawPlayer(ctx, p) {
+      drawFromSheet(ctx, playerSheet_(), p.x, p.y, p.dir, p.moving ? p.anim : 0);
+    }
+
+    // ── 실내 ──────────────────────────────────────────────────────
+    drawInterior(ctx, cam, state) {
+      const it = state.interior;
+      ctx.save();
+      ctx.scale(cam.zoom, cam.zoom);
+      ctx.translate(-cam.left, -cam.top);
+
+      // 실내 바깥은 어둡게
+      ctx.fillStyle = INTERIOR_COLOR[IN.VOID];
+      ctx.fillRect(cam.left - S, cam.top - S, cam.viewW + S * 2, cam.viewH + S * 2);
+
+      const x0 = Math.max(0, Math.floor(cam.left / S) - 1);
+      const y0 = Math.max(0, Math.floor(cam.top / S) - 1);
+      const x1 = Math.min(it.w - 1, Math.ceil((cam.left + cam.viewW) / S));
+      const y1 = Math.min(it.h - 1, Math.ceil((cam.top + cam.viewH) / S));
+
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const t = it.tiles[y * it.w + x];
+          if (t === IN.VOID) continue;
+          // 벽·가구 아래에도 바닥을 먼저 깔아 둔다
+          if (t !== IN.FLOOR && t !== IN.WALL) {
+            ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3), x * S, y * S);
+          }
+          ctx.drawImage(interiorTile(t, (x * 3 + y) % 3), x * S, y * S);
+        }
+      }
+
+      for (const g of state.interiorGizmos) {
+        ctx.drawImage(gizmoSprite(g.icon, state.game.used.has(g.id)), g.tx * S, g.ty * S - 4);
+      }
+
+      this.drawPlayer(ctx, state.player);
+
+      // 방 이름 — 방 한가운데 옅게
+      ctx.font = `${8}px ${'monospace'}`;
+      ctx.restore();
+    }
+  }
+
+  // 스프라이트 시트에서 한 칸 꺼내 그리기
+  function drawFromSheet(ctx, sheet, x, y, dir, animTime) {
+    const d = Math.max(0, sheet.dirs.indexOf(dir));
+    const frame = animTime > 0
+      ? Math.floor(animTime * PLAYER.animFps) % sheet.frames
+      : 0;
+    ctx.drawImage(sheet.canvas,
+      frame * sheet.w, d * sheet.h, sheet.w, sheet.h,
+      Math.round(x - sheet.w / 2), Math.round(y - sheet.h + 3), sheet.w, sheet.h);
+  }
+
+  __M.Scene = Scene;
+})();
+
+// ── ui/labels.js ─────────────────────────────
+(function () {
+  // 건물 이름표. 가까운 것부터, 화면당 정해진 개수만 그린다.
+
+  const { TILE, RENDER, UI } = __M;
+  const { UI_COLOR } = __M;
+  const { wallHeight } = __M;
+
+  const S = TILE.size;
+
+  // 공용 글자 그리기 (그림자 있는 도트 느낌)
+  function drawText(ctx, text, x, y, opts = {}) {
+    const size = opts.size || UI.hudSize;
+    ctx.font = `${opts.bold ? 'bold ' : ''}${size}px ${UI.font}`;
+    ctx.textAlign = opts.align || 'left';
+    ctx.textBaseline = opts.baseline || 'alphabetic';
+    if (opts.shadow !== false) {
+      ctx.fillStyle = opts.shadowColor || UI_COLOR.labelShadow;
+      ctx.fillText(text, x + 1, y + 1);
+      ctx.fillText(text, x - 1, y + 1);
+      ctx.fillText(text, x + 1, y - 1);
+      ctx.fillText(text, x - 1, y - 1);
+    }
+    ctx.fillStyle = opts.color || UI_COLOR.text;
+    ctx.fillText(text, x, y);
+  }
+
+  function textWidth(ctx, text, size) {
+    ctx.font = `${size || UI.hudSize}px ${UI.font}`;
+    return ctx.measureText(text).width;
+  }
+
+  // 바깥 — 건물 이름
+  function drawBuildingLabels(ctx, cam, map, player) {
+    const view = cam.visibleTiles(0);
+    const cx0 = Math.floor(view.x0 / TILE.chunk), cx1 = Math.floor(view.x1 / TILE.chunk);
+    const cy0 = Math.floor(view.y0 / TILE.chunk), cy1 = Math.floor(view.y1 / TILE.chunk);
+
+    const seen = new Set();
+    const cands = [];
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (cx < 0 || cy < 0) continue;
+        for (const b of map.chunk(cx, cy).buildings) {
+          if (seen.has(b.id)) continue;
+          seen.add(b.id);
+          const bx = (b.x + b.w / 2) * S, by = b.y * S;
+          const d = Math.hypot(bx - player.x, by - player.y);
+          if (d > RENDER.labelMaxDistance && !b.landmark) continue;
+          cands.push({ b, d, bx, by });
+        }
+      }
+    }
+    // 랜드마크 먼저, 그다음 가까운 순
+    cands.sort((a, b) => (b.b.landmark - a.b.landmark) || (a.d - b.d));
+
+    for (const c of cands.slice(0, RENDER.labelMax)) {
+      const [sx, sy] = cam.worldToScreen(c.bx, c.by - wallHeight(c.b) - 4);
+      if (sx < -80 || sy < -20) continue;
+      // 글자 뒤에 옅은 칩을 깔아 배경과 섞이지 않게 한다
+      const w = textWidth(ctx, c.b.name, UI.labelSize) + 10;
+      ctx.fillStyle = 'rgba(24, 22, 30, 0.42)';
+      ctx.fillRect(sx - w / 2, sy - UI.labelSize - 1, w, UI.labelSize + 6);
+      drawText(ctx, c.b.name, sx, sy, {
+        size: UI.labelSize,
+        align: 'center',
+        color: c.b.landmark ? UI_COLOR.labelLandmark : UI_COLOR.label,
+      });
+    }
+  }
+
+  // 실내 — 방 이름
+  function drawRoomLabels(ctx, cam, interior) {
+    for (const room of interior.rooms) {
+      const wx = (room.x + room.w / 2) * S, wy = (room.y + 1) * S;
+      const [sx, sy] = cam.worldToScreen(wx, wy);
+      if (sx < -60 || sy < -20 || sx > ctx.canvas.width + 60 || sy > ctx.canvas.height + 20) continue;
+      drawText(ctx, room.name, sx, sy, {
+        size: UI.labelSize, align: 'center', color: UI_COLOR.label,
+      });
+    }
+  }
+
+  __M.drawText = drawText; __M.textWidth = textWidth; __M.drawBuildingLabels = drawBuildingLabels; __M.drawRoomLabels = drawRoomLabels;
+})();
+
+// ── ui/hud.js ─────────────────────────────
+(function () {
+  // 화면 위에 얹히는 것들 — 시계, 안내문, 미니맵, 알림.
+
+  const { TILE, UI, GAME, GEO } = __M;
+  const { UI_COLOR, GROUND_COLOR } = __M;
+  const { makeCanvas } = __M;
+  const { drawText, textWidth } = __M;
+  const { WORLD_W, WORLD_H } = __M;
+
+  const S = TILE.size;
+
+  // 미니맵 바탕을 한 번만 굽는다
+  function bakeOverview(overview) {
+    const { canvas, ctx } = makeCanvas(overview.w, overview.h);
+    const img = ctx.createImageData(overview.w, overview.h);
+    for (let i = 0; i < overview.data.length; i++) {
+      const hex = GROUND_COLOR[overview.data[i]] || '#000000';
+      const v = parseInt(hex.slice(1), 16);
+      img.data[i * 4] = (v >> 16) & 255;
+      img.data[i * 4 + 1] = (v >> 8) & 255;
+      img.data[i * 4 + 2] = v & 255;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  function drawHud(ctx, state) {
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const g = state.game;
+
+    // ── 왼쪽 위: 시계와 목적지 ──────────────────────────────────
+    panel(ctx, 12, 12, 186, 54);
+    const late = g.late;
+    drawText(ctx, g.clockText(), 22, 40, { size: 24, bold: true,
+      color: late ? '#e2705f' : UI_COLOR.text });
+    drawText(ctx, late ? '지각' : `출근 ${fmt(GAME.deadline - g.clock)} 전`, 92, 32,
+      { size: 12, color: late ? '#e2705f' : UI_COLOR.textDim });
+    // 남은 거리 — 어느 쪽으로 얼마나 가야 하는지 감을 준다
+    const dist = state.goalPoint
+      ? Math.hypot(state.goalPoint.x - state.player.x, state.goalPoint.y - state.player.y)
+      : 0;
+    const km = (dist / TILE.size) * GEO.metersPerTile / 1000;
+    drawText(ctx, `→ ${GAME.goalName} ${km < 0.15 ? '도착' : km.toFixed(1) + 'km'}`, 92, 50,
+      { size: 12, color: UI_COLOR.accent });
+
+    // ── 오른쪽 위: 지금 있는 곳 ────────────────────────────────
+    const place = state.placeName || '';
+    if (place) {
+      const w = textWidth(ctx, place, 14) + 28;
+      panel(ctx, W - w - 12, 12, w, 32);
+      drawText(ctx, place, W - 24, 33, { size: 14, align: 'right' });
+    }
+
+    // ── 왼쪽 아래: 미니맵 ─────────────────────────────────────
+    // 미니맵은 바깥에서만 (실내 좌표로는 의미가 없다)
+    if (state.showMinimap && state.minimap && state.mode === 'outdoor') drawMinimap(ctx, state, H);
+
+    // ── 아래 가운데: 상호작용 안내 ────────────────────────────
+    if (state.prompt) {
+      const text = state.prompt;
+      const w = textWidth(ctx, text, 14) + 36;
+      panel(ctx, (W - w) / 2, H - 76, w, 34);
+      drawText(ctx, text, W / 2, H - 54, { size: 14, align: 'center' });
+    }
+
+    // ── 알림 ─────────────────────────────────────────────────
+    let y = H - 110;
+    for (const t of state.toasts) {
+      const alpha = Math.min(1, t.life / 0.5);
+      ctx.globalAlpha = alpha;
+      const w = textWidth(ctx, t.text, 13) + 32;
+      panel(ctx, (W - w) / 2, y - 24, w, 30);
+      drawText(ctx, t.text, W / 2, y - 4, { size: 13, align: 'center', color: UI_COLOR.accent });
+      ctx.globalAlpha = 1;
+      y -= 36;
+    }
+
+    // ── 오른쪽 아래: 조작 힌트 ────────────────────────────────
+    if (W >= 640) {
+      drawText(ctx, 'H 도움말 · M 지도 · F 전체화면 · L 엔딩 목록', W - 58, H - 16,
+        { size: 11, align: 'right', color: 'rgba(255,255,255,0.5)', shadow: false });
+    }
+
+    if (state.showHelp) drawHelp(ctx, W, H);
+  }
+
+  function drawMinimap(ctx, state, H) {
+    const size = UI.minimapSize;
+    const x = 12, y = H - size - 12;
+    panel(ctx, x - 4, y - 4, size + 8, size + 8);
+
+    const mm = state.minimap;
+    const scale = UI.minimapScale;
+    // 플레이어 주변만 잘라서 보여 준다
+    const pxT = state.player.x / S / scale, pyT = state.player.y / S / scale;
+    const half = size / 2 / 2; // 2배 확대
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, size, size);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mm, pxT - half, pyT - half, half * 2, half * 2, x, y, size, size);
+
+    // 목적지 방향 표시
+    const gx = state.goalPoint.x / S / scale, gy = state.goalPoint.y / S / scale;
+    const dx = gx - pxT, dy = gy - pyT;
+    const inView = Math.abs(dx) < half && Math.abs(dy) < half;
+    const cxp = x + size / 2, cyp = y + size / 2;
+    ctx.fillStyle = UI_COLOR.accent;
+    if (inView) {
+      ctx.fillRect(cxp + dx * 2 - 3, cyp + dy * 2 - 3, 6, 6);
+    } else {
+      const ang = Math.atan2(dy, dx);
+      ctx.fillRect(cxp + Math.cos(ang) * (size / 2 - 8) - 3,
+        cyp + Math.sin(ang) * (size / 2 - 8) - 3, 6, 6);
+    }
+    // 나
+    ctx.fillStyle = UI_COLOR.player;
+    ctx.fillRect(cxp - 2, cyp - 2, 4, 4);
+    ctx.restore();
+
+    ctx.strokeStyle = UI_COLOR.minimapEdge;
+    ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    drawText(ctx, '← 양촌  ·  구래 →', x + size / 2, y + size + 14,
+      { size: 10, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  function drawHelp(ctx, W, H) {
+    ctx.fillStyle = 'rgba(12, 11, 16, 0.86)';
+    ctx.fillRect(0, 0, W, H);
+
+    const lines = [
+      ['이동', '방향키 · WASD'],
+      ['달리기', 'Shift'],
+      ['들어가기 · 만지기', 'Space · Enter · E'],
+      ['층 이동', '계단이나 엘리베이터 위에서 Space'],
+      ['전체화면', 'F'],
+      ['미니맵', 'M'],
+      ['엔딩 목록', 'L'],
+      ['확대 · 축소', '+ · -'],
+      ['다시 시작', 'R (결말 화면에서)'],
+    ];
+    const boxW = Math.min(420, W - 48);
+    const boxH = lines.length * 26 + 150;
+    const x = (W - boxW) / 2;
+    const y = Math.max(20, (H - boxH) / 2);
+    panel(ctx, x, y, boxW, boxH);
+
+    drawText(ctx, '〈구래〉', x + boxW / 2, y + 52, { size: 28, align: 'center', bold: true });
+    drawText(ctx, '구래동에서 양촌공단까지, 걸어서 출근하기.', x + boxW / 2, y + 78,
+      { size: 13, align: 'center', color: UI_COLOR.textDim });
+    drawText(ctx, '무엇을 건드리느냐로 결말이 갈린다.', x + boxW / 2, y + 98,
+      { size: 13, align: 'center', color: UI_COLOR.accent });
+
+    let ly = y + 134;
+    for (const [k, v] of lines) {
+      drawText(ctx, k, x + 26, ly, { size: 13, color: UI_COLOR.accent });
+      drawText(ctx, v, x + boxW - 26, ly, { size: 13, align: 'right' });
+      ly += 26;
+    }
+    drawText(ctx, '아무 키나 눌러 시작 · H 도움말', x + boxW / 2, ly + 16,
+      { size: 12, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  // 반투명 판
+  function panel(ctx, x, y, w, h) {
+    ctx.fillStyle = UI_COLOR.panel;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = UI_COLOR.panelEdge;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+
+  function fmt(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(s / 60);
+    return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`;
+  }
+
+  __M.bakeOverview = bakeOverview; __M.drawHud = drawHud; __M.panel = panel;
+})();
+
+// ── game/state.js ─────────────────────────────
+(function () {
+  // 게임 진행 상태 — 시계, 플래그, 발견한 엔딩.
+  // "무엇을 건드렸는가" 가 전부다. 엔딩은 이 상태만 보고 결정된다.
+
+  const { GAME, SAVE } = __M;
+
+  class GameState {
+    constructor() {
+      this.clock = GAME.startClock;     // 게임 내 시각(초)
+      this.flags = new Set();           // 건드린 것들
+      this.counters = {};               // 횟수를 세는 것들 (고양이 등)
+      this.log = [];                    // 무엇을 언제 건드렸는지 (엔딩 화면에 보여 준다)
+      this.used = new Set();            // 한 번만 되는 물건
+      this.ending = null;               // 결말이 나면 채워진다
+      this.startedAt = Date.now();
+      this.found = loadFound();         // 지금까지 본 엔딩 (localStorage)
+    }
+
+    tick(dt) {
+      if (this.ending) return;
+      this.clock += dt * GAME.timeScale;
+    }
+
+    has(flag) { return this.flags.has(flag); }
+    count(key) { return this.counters[key] || 0; }
+
+    set(flag, note) {
+      if (!this.flags.has(flag)) {
+        this.flags.add(flag);
+        if (note) this.log.push({ t: this.clock, note });
+      }
+    }
+
+    bump(key, n = 1) { this.counters[key] = (this.counters[key] || 0) + n; }
+
+    get late() { return this.clock > GAME.deadline; }
+    get touched() { return this.flags.size; }
+
+    clockText() {
+      const t = Math.floor(this.clock) % 86400;
+      const hh = String(Math.floor(t / 3600)).padStart(2, '0');
+      const mm = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    discover(id) {
+      this.found.add(id);
+      saveFound(this.found);
+    }
+  }
+
+  function loadFound() {
+    try {
+      const raw = localStorage.getItem(SAVE.key);
+      if (!raw) return new Set();
+      return new Set(JSON.parse(raw).found || []);
+    } catch (e) {
+      return new Set(); // 저장이 막힌 환경에서도 게임은 돌아간다
+    }
+  }
+
+  function saveFound(found) {
+    try {
+      localStorage.setItem(SAVE.key, JSON.stringify({ found: [...found] }));
+    } catch (e) { /* 저장 못 해도 그만 */ }
+  }
+
+  __M.GameState = GameState;
+})();
+
+// ── game/endings.js ─────────────────────────────
+(function () {
+  // 결말. 위에 있는 것부터 검사해서 처음 맞는 하나가 그 판의 결말이 된다.
+  //
+  // when: 'any'  건드린 순간 바로 끝난다
+  //       'goal' 양촌공단에 닿았을 때 판정한다
+  // 새 결말을 넣고 싶으면 이 배열에 하나 더 얹으면 된다. 다른 파일은 건드릴 필요 없다.
+
+  const ENDINGS = [
+    // ── 즉시 끝나는 것들 ───────────────────────────────────────────
+    {
+      id: 'E01', title: '대폭발', tag: 'bad', when: 'any',
+      hint: '불 꺼진 공장에서 밸브를 돌리면',
+      test: (s) => s.has('valve') && s.has('blackout'),
+      lines: ['압력계 바늘이 오른쪽 끝까지 갔다.',
+        '정전된 공장에서 경보는 울리지 않았다.',
+        '양촌 하늘이 잠깐 아주 밝았다.'],
+    },
+    {
+      id: 'E02', title: '자수', tag: 'odd', when: 'any',
+      hint: '파출소에서 하지 않아도 될 말을 하면',
+      test: (s) => s.has('confess'),
+      lines: ['"제가 그랬습니다."',
+        '경관은 무엇을 그랬는지 세 번 물었다.',
+        '조서에는 결국 출근 시각만 적혔다.'],
+    },
+    {
+      id: 'E03', title: '과다복용', tag: 'bad', when: 'any',
+      hint: '같은 약을 세 번 받으면',
+      test: (s) => s.count('pill') >= 3,
+      lines: ['세 번째 알약을 삼키자 복도가 기울었다.',
+        '병원 침대는 생각보다 편했다.',
+        '출근은 내일부터 하기로 했다.'],
+    },
+    {
+      id: 'E04', title: '연행', tag: 'bad', when: 'any',
+      hint: '사이렌을 울린 채로 차단기를 만지면',
+      test: (s) => s.has('siren') && s.has('gate'),
+      lines: ['비상벨 소리가 아직 귀에 남아 있었다.',
+        '차단기가 올라가는 순간 순찰차가 도착했다.',
+        '앞자리에 앉아 본 것은 처음이었다.'],
+    },
+    {
+      id: 'E05', title: '출근 포기', tag: 'odd', when: 'any',
+      hint: '역에서 반대 방향 열차를 타면',
+      test: (s) => s.has('ride_east'),
+      lines: ['마산 방면 열차 문이 닫혔다.',
+        '양촌은 반대쪽이었다.',
+        '창밖으로 논이 지나갔고, 그냥 계속 앉아 있었다.'],
+    },
+
+    // ── 양촌공단에 닿았을 때 ───────────────────────────────────────
+    {
+      id: 'E06', title: '전부 만졌다', tag: 'true', when: 'goal',
+      hint: '스무 가지 넘게 건드리고 도착하면',
+      test: (s) => s.touched >= 20,
+      lines: ['버튼, 레버, 밸브, 종, 냉동고, 분전반.',
+        '구래에서 양촌까지 손대지 않은 것이 없었다.',
+        '공단 정문 경비가 물었다. "무슨 일 하시는 분이세요?"',
+        '아직 아무 일도 시작하지 않았다.'],
+    },
+    {
+      id: 'E07', title: '아무것도 만지지 않았다', tag: 'true', when: 'goal',
+      hint: '정말로 아무것도 건드리지 않고 제시간에 닿으면',
+      test: (s) => s.touched === 0 && !s.late,
+      lines: ['자판기도, 비상벨도, 남의 집 문도 그냥 지나쳤다.',
+        '08시 52분. 공단 정문.',
+        '아무 일도 일어나지 않았다는 것이 오늘의 사건이었다.'],
+    },
+    {
+      id: 'E08', title: '무결점 지각', tag: 'odd', when: 'goal',
+      hint: '아무것도 안 건드렸는데 늦으면',
+      test: (s) => s.touched === 0 && s.late,
+      lines: ['한눈 한 번 팔지 않았는데 시계는 아홉 시를 넘겼다.',
+        '구래에서 양촌은 원래 그만큼 멀다.',
+        '아무도 그 말을 믿어 주지 않았다.'],
+    },
+    {
+      id: 'E09', title: '출입증', tag: 'good', when: 'goal',
+      hint: '관리사무소에 먼저 들르면',
+      test: (s) => s.has('pass') && !s.late,
+      lines: ['목에 건 카드가 정문에서 삑 하고 울렸다.',
+        '경비는 고개만 끄덕였다.',
+        '오늘부터 여기 사람이 되었다.'],
+    },
+    {
+      id: 'E10', title: '정전 속의 첫 출근', tag: 'bad', when: 'goal',
+      hint: '어딘가의 분전반을 열어 두고 도착하면',
+      test: (s) => s.has('blackout'),
+      lines: ['구래동 상가 절반이 어두웠다.',
+        '공단 사무실도 비상등만 켜져 있었다.',
+        '"오늘 왜 이러지?" 아무도 나를 보지 않았다.'],
+    },
+    {
+      id: 'E11', title: '무임승차', tag: 'bad', when: 'goal',
+      hint: '표 없이 열차를 타면',
+      test: (s) => s.has('metro') && !s.has('ticket'),
+      lines: ['양촌역 개찰구에서 문이 열리지 않았다.',
+        '역무원이 다가오는 동안 공단 굴뚝이 보였다.',
+        '첫 출근 기록보다 부가운임 영수증이 먼저 생겼다.'],
+    },
+    {
+      id: 'E12', title: '정기권', tag: 'good', when: 'goal',
+      hint: '표를 끊고 열차로 가면',
+      test: (s) => s.has('metro') && s.has('ticket'),
+      lines: ['구래에서 양촌까지 두 정거장.',
+        '걸었으면 한 시간, 앉아서 4분.',
+        '내일부터는 이 시간에 이 자리에 앉기로 했다.'],
+    },
+    {
+      id: 'E13', title: '산 넘어 출근', tag: 'odd', when: 'goal',
+      hint: '가현산 정자의 종을 치고 도착하면',
+      test: (s) => s.has('mountain_bell'),
+      lines: ['정자에서 종을 한 번 쳤다. 아무도 없었다.',
+        '능선을 따라 내려오니 신도시가 등 뒤로 사라졌다.',
+        '구두에 흙이 묻은 채로 공단에 도착했다.'],
+    },
+    {
+      id: 'E14', title: '고양이 대장', tag: 'good', when: 'goal',
+      hint: '고양이를 셋 이상 만나면',
+      test: (s) => s.count('cat') >= 3,
+      lines: ['구래동 고양이 셋이 차례로 따라왔다.',
+        '공단 정문에서 셋 다 멈춰 서서 앉았다.',
+        '거기까지가 그들의 구역인 모양이었다.'],
+    },
+    {
+      id: 'E15', title: '도시락', tag: 'good', when: 'goal',
+      hint: '하나로마트에서 뭔가 사 가면',
+      test: (s) => s.has('lunch'),
+      lines: ['가방에서 도시락이 아직 따뜻했다.',
+        '점심시간에 혼자 먹지 않아도 됐다.',
+        '"이거 어디서 샀어요?" 양촌농협이요.'],
+    },
+    {
+      id: 'E16', title: '자판기 커피', tag: 'good', when: 'goal',
+      hint: '역 앞 자판기를 누르고 늦지 않으면',
+      test: (s) => s.has('coffee') && !s.late,
+      lines: ['300원짜리 종이컵을 들고 걸었다.',
+        '다 식을 때쯤 공단이 보였다.',
+        '첫 출근에 손에 뭔가 들려 있으면 덜 어색하다.'],
+    },
+    {
+      id: 'E17', title: '젖은 신발', tag: 'odd', when: 'goal',
+      hint: '소화전을 열어 보면',
+      test: (s) => s.has('water'),
+      lines: ['소화전은 생각보다 세게 열렸다.',
+        '양말까지 젖은 채로 4킬로미터를 걸었다.',
+        '공단 화장실 핸드드라이어 앞에서 20분을 보냈다.'],
+    },
+    {
+      id: 'E18', title: '연체', tag: 'odd', when: 'goal',
+      hint: '도서관에서 책을 빌리면',
+      test: (s) => s.has('book'),
+      lines: ['가방 속 책은 2주 뒤에 반납해야 한다.',
+        '공단에서 구래도서관까지 다시 오는 일은 없었다.',
+        '연체일이 쌓이는 동안 책은 사물함에 있었다.'],
+    },
+    {
+      id: 'E19', title: '전입신고', tag: 'good', when: 'goal',
+      hint: '행정복지센터 민원실에 들르면',
+      test: (s) => s.has('moved'),
+      lines: ['오늘부로 김포시민이 되었다.',
+        '주소지와 직장이 같은 시에 있다.',
+        '이런 걸 정착이라고 부르는 모양이다.'],
+    },
+    {
+      id: 'E20', title: '조조', tag: 'odd', when: 'goal',
+      hint: '출근길에 상영관에 들어가면',
+      test: (s) => s.has('movie'),
+      lines: ['상영관에는 나 혼자였다.',
+        '무슨 영화였는지는 끝까지 몰랐다.',
+        '엔딩 크레딧을 보고 나오니 공단 갈 시간이 딱 맞았다. 아마도.'],
+    },
+    {
+      id: 'E21', title: '지게차', tag: 'good', when: 'goal',
+      hint: '물류센터에서 지게차를 건드리면',
+      test: (s) => s.has('forklift'),
+      lines: ['시동은 걸렸고, 팔레트 하나를 옮겼다.',
+        '창고 반장이 물었다. "면허 있어요?"',
+        '없다고 하니 명함을 줬다. 취업 제안이었다.'],
+    },
+    {
+      id: 'E22', title: '소방차 뒤를 따라', tag: 'odd', when: 'goal',
+      hint: '119안전센터에 신고하면',
+      test: (s) => s.has('report'),
+      lines: ['신고한 것은 별일이 아니었다.',
+        '그래도 소방차는 왔고, 나는 그 뒤를 따라 걸었다.',
+        '양촌까지 길이 전부 비켜 있었다.'],
+    },
+    {
+      id: 'E23', title: '종소리 배웅', tag: 'good', when: 'goal',
+      hint: '교회 종을 치고 나오면',
+      test: (s) => s.has('church_bell'),
+      lines: ['한 번만 치려던 종을 세 번 쳤다.',
+        '소리가 구래동 위로 넓게 퍼졌다.',
+        '누가 배웅해 준 것 같은 아침이었다.'],
+    },
+    {
+      id: 'E24', title: '굴뚝 연기', tag: 'true', when: 'goal',
+      hint: '망원경으로 본 것을 옥상에서 다시 보면',
+      test: (s) => s.has('saw_smoke') && s.has('rooftop'),
+      lines: ['호수공원 망원경으로 본 연기가 옥상에서도 보였다.',
+        '방향이 조금 달랐다. 두 번 보면 알 수 있다.',
+        '공단에 도착해 물었더니, 오늘은 아무 공정도 돌리지 않았다고 했다.'],
+    },
+    {
+      id: 'E25', title: '냉동식품', tag: 'odd', when: 'goal',
+      hint: '마트 냉동고를 열어 보면',
+      test: (s) => s.has('frozen'),
+      lines: ['냉동고 문을 오래 열어 두었다.',
+        '가방 속 만두는 공단에 도착할 때쯤 다 녹았다.',
+        '점심으로는 못 쓰게 됐다.'],
+    },
+    {
+      id: 'E26', title: '등기우편', tag: 'good', when: 'goal',
+      hint: '편지를 넣고 우체국에도 들르면',
+      test: (s) => s.has('letter') && s.has('parcel'),
+      lines: ['우체통에 넣은 편지와 창구에서 부친 소포.',
+        '둘 다 오늘 안에 떠난다고 했다.',
+        '나만 아직 도착하지 않았다. 이제 도착했다.'],
+    },
+    {
+      id: 'E27', title: '지각', tag: 'bad', when: 'goal',
+      hint: '아홉 시를 넘겨 도착하면',
+      test: (s) => s.late,
+      lines: ['정문을 지나며 시계를 봤다.',
+        '첫날부터 늦는 사람은 대체로 계속 늦는다고 한다.',
+        '아직 그 말을 믿지 않기로 했다.'],
+    },
+    {
+      id: 'E28', title: '첫 출근', tag: 'good', when: 'goal',
+      hint: '무사히 도착하면',
+      test: () => true,
+      lines: ['구래동에서 양촌공단까지 걸었다.',
+        '논과 아파트와 공장이 차례로 지나갔다.',
+        '이제 여기서 일한다.'],
+    },
+  ];
+
+  // 상태에 맞는 결말 하나 (없으면 null)
+  function evaluateEnding(state, where) {
+    for (const e of ENDINGS) {
+      if (where !== 'goal' && e.when !== 'any') continue; // 도착 전에는 즉시 결말만 본다
+      if (e.test(state)) return e;
+    }
+    return null;
+  }
+
+  const ENDING_COUNT = ENDINGS.length;
+
+  // 태그별 색 (엔딩 화면·목록에서 쓴다)
+  const TAG_COLOR = {
+    good: '#8fc48a', bad: '#e2705f', odd: '#f2c14e', true: '#a8c8f0',
+  };
+  const TAG_LABEL = {
+    good: '무사히', bad: '사고', odd: '이상하게', true: '숨은',
+  };
+
+  __M.ENDINGS = ENDINGS; __M.evaluateEnding = evaluateEnding; __M.ENDING_COUNT = ENDING_COUNT; __M.TAG_COLOR = TAG_COLOR; __M.TAG_LABEL = TAG_LABEL;
+})();
+
+// ── game/gizmos.js ─────────────────────────────
+(function () {
+  // 만질 수 있는 것들. 이 배열이 곧 선택지다.
+  //
+  // 자리 정하기
+  //   { place: '건물 이름', floor: 층, slot: 실내 자리 번호 }  실내
+  //   { lon, lat }                                            길 위
+  // effect 에서 상태에 플래그를 남기고, 그 조합이 endings.js 에서 결말이 된다.
+  // 새 물건을 넣으려면 여기에 하나 더 적으면 된다.
+
+  const GIZMOS = [
+    // ── 길 위 ──────────────────────────────────────────────────────
+    {
+      id: 'vending', icon: 'vending', at: { lon: 126.6288, lat: 37.6434 },
+      name: '자판기', once: true,
+      text: '종이컵이 덜컹 떨어진다. 300원.',
+      effect: (s) => s.set('coffee', '자판기 커피를 뽑았다'),
+    },
+    {
+      id: 'siren', icon: 'button', at: { lon: 126.6282, lat: 37.6441 },
+      name: '역 앞 비상벨', once: true,
+      text: '누르지 마시오, 라고 적혀 있다. 눌렀다.',
+      effect: (s) => s.set('siren', '비상벨을 눌렀다'),
+    },
+    {
+      id: 'hydrant', icon: 'valve', at: { lon: 126.6296, lat: 37.6419 },
+      name: '소화전', once: true,
+      text: '뚜껑이 생각보다 쉽게 돌아간다. 물이 솟는다.',
+      effect: (s) => s.set('water', '소화전을 열었다'),
+    },
+    {
+      id: 'postbox', icon: 'note', at: { lon: 126.6253, lat: 37.6443 },
+      name: '우체통', once: true,
+      text: '주머니에 있던 봉투를 넣었다. 언제부터 있었는지는 모른다.',
+      effect: (s) => s.set('letter', '우체통에 편지를 넣었다'),
+    },
+    {
+      id: 'timetable', icon: 'note', at: { lon: 126.6272, lat: 37.6456 },
+      name: '버스 시간표', once: true,
+      text: '양촌 방면 첫차는 이미 지나갔다.',
+      effect: (s) => s.set('timetable', '버스 시간표를 읽었다'),
+    },
+    {
+      id: 'telescope', icon: 'panel', at: { lon: 126.6357, lat: 37.6451 },
+      name: '망원경', once: true,
+      text: '호수 건너 서쪽. 공단 굴뚝에서 연기가 오른다.',
+      effect: (s) => s.set('saw_smoke', '망원경으로 공단 연기를 봤다'),
+    },
+    {
+      id: 'mountain-bell', icon: 'bell', at: { lon: 126.6301, lat: 37.6597 },
+      name: '가현산 정자의 종', once: true,
+      text: '한 번 치면 소리가 오래 남는다.',
+      effect: (s) => s.set('mountain_bell', '가현산에서 종을 쳤다'),
+    },
+    {
+      id: 'catbowl', icon: 'bowl', at: { lon: 126.6281, lat: 37.6466 },
+      name: '고양이 밥그릇', once: true,
+      text: '빈 그릇에 가진 것을 조금 덜어 놓았다.',
+      effect: (s) => { s.set('cat_bowl', '고양이 밥그릇을 채웠다'); s.bump('cat'); },
+    },
+    {
+      id: 'gate', icon: 'lever', at: { lon: 126.6086, lat: 37.6421 },
+      name: '공단 진입 차단기', once: true,
+      text: '수동 레버가 있다. 올린다.',
+      effect: (s) => s.set('gate', '공단 차단기를 올렸다'),
+    },
+
+    // ── 구래역 ─────────────────────────────────────────────────────
+    {
+      id: 'ticket', icon: 'panel', at: { place: '구래역', floor: 1, slot: 2 },
+      name: '발매기', once: true,
+      text: '양촌역까지 한 장.',
+      effect: (s) => s.set('ticket', '승차권을 샀다'),
+    },
+    {
+      id: 'lost-found', icon: 'note', at: { place: '구래역', floor: -1, slot: 3 },
+      name: '유실물 보관함', once: true,
+      text: '열쇠 하나가 주인 없이 놓여 있다. 집었다.',
+      effect: (s) => s.set('key', '유실물 열쇠를 챙겼다'),
+    },
+    {
+      id: 'train-west', icon: 'button', at: { place: '구래역', floor: -2, slot: 1 },
+      name: '양촌 방면 승강장', once: false,
+      text: '열차가 들어온다. 서쪽이다.',
+      effect: (s, ctx) => { s.set('metro', '열차를 탔다'); ctx.rideTo('양촌역'); },
+    },
+    {
+      id: 'train-east', icon: 'button', at: { place: '구래역', floor: -2, slot: 6 },
+      name: '마산 방면 승강장', once: false,
+      text: '열차가 들어온다. 반대쪽이다.',
+      effect: (s) => s.set('ride_east', '반대 방향 열차를 탔다'),
+    },
+
+    // ── 관공서·시설 ────────────────────────────────────────────────
+    {
+      id: 'civil', icon: 'panel', at: { place: '구래동 행정복지센터', floor: 1, slot: 4 },
+      name: '민원 창구', once: true,
+      text: '전입신고서를 내밀자 도장이 두 번 찍혔다.',
+      effect: (s) => s.set('moved', '전입신고를 했다'),
+    },
+    {
+      id: 'book', icon: 'note', at: { place: '구래도서관', floor: 3, slot: 5 },
+      name: '대출대', once: true,
+      text: '김포 지명 유래집. 2주 뒤 반납.',
+      effect: (s) => s.set('book', '도서관에서 책을 빌렸다'),
+    },
+    {
+      id: 'confess', icon: 'button', at: { place: '구래파출소', floor: 1, slot: 1 },
+      name: '민원 접수대', once: true,
+      text: '"저기요, 드릴 말씀이 있는데요."',
+      effect: (s) => s.set('confess', '파출소에서 자수했다'),
+    },
+    {
+      id: 'report', icon: 'button', at: { place: '양촌119안전센터', floor: 1, slot: 2 },
+      name: '신고 접수대', once: true,
+      text: '아까 그 소화전 이야기를 했다.',
+      effect: (s) => s.set('report', '119에 신고했다'),
+    },
+    {
+      id: 'parcel', icon: 'note', at: { place: '구래우체국', floor: 1, slot: 2 },
+      name: '창구', once: true,
+      text: '소포 하나를 부쳤다. 받는 사람은 나중에 정하기로.',
+      effect: (s) => s.set('parcel', '우체국에서 소포를 부쳤다'),
+    },
+    {
+      id: 'schoolbell', icon: 'button', at: { place: '구래초등학교', floor: 1, slot: 3 },
+      name: '수업 종 스위치', once: true,
+      text: '복도 끝 스위치. 종이 울린다. 아직 방학이다.',
+      effect: (s) => s.set('school_bell', '학교 종을 울렸다'),
+    },
+    {
+      id: 'churchbell', icon: 'bell', at: { place: '구래중앙교회', floor: 1, slot: 2 },
+      name: '종줄', once: true,
+      text: '한 번, 두 번, 세 번.',
+      effect: (s) => s.set('church_bell', '교회 종을 쳤다'),
+    },
+    {
+      id: 'pill', icon: 'bowl', at: { place: '한강종합병원', floor: 1, slot: 4 },
+      name: '접수대의 약봉지', once: false,
+      text: '이름이 적히지 않은 봉지. 하나 삼켰다.',
+      effect: (s) => { s.set('pill', '약을 먹었다'); s.bump('pill'); },
+    },
+    {
+      id: 'rooftop', icon: 'panel', at: { place: '구래역 스퀘어', floor: 18, slot: 1 },
+      name: '옥상 출입문', once: true,
+      text: '문은 잠겨 있지 않았다. 서쪽으로 공단이 보인다.',
+      effect: (s) => s.set('rooftop', '스퀘어 옥상에 올라갔다'),
+    },
+    {
+      id: 'movie', icon: 'button', at: { place: '구래 시네마', floor: 4, slot: 2 },
+      name: '4관 입구', once: true,
+      text: '조조. 불이 꺼진다.',
+      effect: (s) => s.set('movie', '조조영화를 봤다'),
+    },
+
+    // ── 상업 ───────────────────────────────────────────────────────
+    {
+      id: 'breaker', icon: 'panel', at: { place: '한강마트 구래점', floor: -1, slot: 2 },
+      name: '분전반', once: true,
+      text: '차단기 여섯 개. 전부 내렸다.',
+      effect: (s) => s.set('blackout', '마트 분전반을 내렸다'),
+    },
+    {
+      id: 'freezer', icon: 'panel', at: { place: '한강마트 구래점', floor: 1, slot: 6 },
+      name: '냉동고', once: true,
+      text: '문을 열고 한참 서 있었다. 만두를 하나 집었다.',
+      effect: (s) => s.set('frozen', '마트 냉동고를 열었다'),
+    },
+    {
+      id: 'lunch', icon: 'bowl', at: { place: '양촌농협 하나로마트', floor: 1, slot: 3 },
+      name: '도시락 매대', once: true,
+      text: '제육. 아직 따뜻하다.',
+      effect: (s) => s.set('lunch', '도시락을 샀다'),
+    },
+
+    // ── 공단 ───────────────────────────────────────────────────────
+    {
+      id: 'pass', icon: 'panel', at: { place: '김포양촌산업단지 관리사무소', floor: 1, slot: 2 },
+      name: '출입증 발급기', once: true,
+      text: '사진이 이상하게 나왔지만 발급됐다.',
+      effect: (s) => s.set('pass', '공단 출입증을 받았다'),
+    },
+    {
+      id: 'valve', icon: 'valve', at: { place: '대한정밀 제1공장', floor: 1, slot: 4 },
+      name: '압력 밸브', once: true,
+      text: '빨간 손잡이. 시계 방향으로 돌아간다.',
+      effect: (s) => s.set('valve', '공장 압력 밸브를 돌렸다'),
+    },
+    {
+      id: 'forklift', icon: 'lever', at: { place: '한성물류 김포센터', floor: 1, slot: 3 },
+      name: '지게차', once: true,
+      text: '열쇠가 꽂혀 있다. 시동이 걸린다.',
+      effect: (s) => s.set('forklift', '지게차에 시동을 걸었다'),
+    },
+  ];
+
+  // 실내 물건을 건물 이름으로 묶어 둔다 (건물에 들어갈 때 꺼내 쓴다)
+  function indexIndoorGizmos() {
+    const byPlace = new Map();
+    for (const g of GIZMOS) {
+      if (!g.at.place) continue;
+      const key = `${g.at.place}|${g.at.floor}`;
+      let list = byPlace.get(key);
+      if (!list) byPlace.set(key, (list = []));
+      list.push(g);
+    }
+    return byPlace;
+  }
+
+  function outdoorGizmos() {
+    return GIZMOS.filter((g) => g.at.lon !== undefined);
+  }
+
+  __M.GIZMOS = GIZMOS; __M.indexIndoorGizmos = indexIndoorGizmos; __M.outdoorGizmos = outdoorGizmos;
+})();
+
+// ── ui/ending.js ─────────────────────────────
+(function () {
+  // 결말 화면과 엔딩 목록.
+
+  const { UI } = __M;
+  const { UI_COLOR } = __M;
+  const { ENDINGS, ENDING_COUNT, TAG_COLOR, TAG_LABEL } = __M;
+  const { drawText, textWidth } = __M;
+  const { panel } = __M;
+
+  // 결말 한 판
+  function drawEnding(ctx, state) {
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const e = state.game.ending;
+    const g = state.game;
+
+    ctx.fillStyle = 'rgba(10, 9, 13, 0.92)';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W / 2;
+    let y = Math.max(90, H / 2 - 150);
+
+    drawText(ctx, `${TAG_LABEL[e.tag]} 끝났다`, cx, y - 40,
+      { size: 13, align: 'center', color: UI_COLOR.textDim });
+    drawText(ctx, e.title, cx, y, { size: 34, align: 'center', bold: true, color: TAG_COLOR[e.tag] });
+    drawText(ctx, `${e.id} · ${g.clockText()}`, cx, y + 26,
+      { size: 12, align: 'center', color: UI_COLOR.textDim });
+
+    y += 66;
+    for (const line of e.lines) {
+      drawText(ctx, line, cx, y, { size: 15, align: 'center' });
+      y += 26;
+    }
+
+    // 이 판에 건드린 것들
+    y += 16;
+    if (g.log.length) {
+      drawText(ctx, `건드린 것 ${g.log.length}가지`, cx, y,
+        { size: 12, align: 'center', color: UI_COLOR.accent });
+      y += 20;
+      const notes = g.log.slice(-6).map((l) => l.note);
+      for (const note of notes) {
+        drawText(ctx, `· ${note}`, cx, y, { size: 12, align: 'center', color: UI_COLOR.textDim });
+        y += 18;
+      }
+    } else {
+      drawText(ctx, '아무것도 건드리지 않았다', cx, y,
+        { size: 12, align: 'center', color: UI_COLOR.textDim });
+      y += 20;
+    }
+
+    y += 14;
+    drawText(ctx, `찾은 결말 ${g.found.size} / ${ENDING_COUNT}`, cx, y,
+      { size: 14, align: 'center', color: UI_COLOR.accent });
+    drawText(ctx, 'R 다시 시작 · L 엔딩 목록', cx, y + 30,
+      { size: 13, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  // 지금까지 본 결말 목록
+  function drawGallery(ctx, state) {
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const found = state.game.found;
+
+    ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';
+    ctx.fillRect(0, 0, W, H);
+    drawText(ctx, `엔딩 ${found.size} / ${ENDING_COUNT}`, W / 2, 46,
+      { size: 22, align: 'center', bold: true });
+    drawText(ctx, '못 본 결말에는 힌트가 붙어 있다', W / 2, 68,
+      { size: 12, align: 'center', color: UI_COLOR.textDim });
+
+    const cols = W >= 1000 ? 3 : W >= 680 ? 2 : 1;
+    const cardW = Math.min(320, (W - 60) / cols - 12);
+    const cardH = 54;
+    const startX = (W - (cardW * cols + 12 * (cols - 1))) / 2;
+    let top = 92;
+    const rows = Math.ceil(ENDINGS.length / cols);
+    const maxRows = Math.floor((H - top - 60) / (cardH + 8));
+    const scale = rows > maxRows ? (H - top - 60) / (rows * (cardH + 8)) : 1;
+
+    ENDINGS.forEach((e, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = startX + col * (cardW + 12);
+      const y = top + row * (cardH + 8) * scale;
+      const h = cardH * scale;
+      const got = found.has(e.id);
+      ctx.fillStyle = got ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+      ctx.fillRect(x, y, cardW, h);
+      ctx.fillStyle = got ? TAG_COLOR[e.tag] : 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x, y, 3, h);
+      drawText(ctx, e.id, x + 12, y + 20 * scale,
+        { size: 11 * scale, color: UI_COLOR.textDim, shadow: false });
+      drawText(ctx, got ? e.title : '？？？', x + 44, y + 21 * scale,
+        { size: 14 * scale, color: got ? UI_COLOR.text : UI_COLOR.textDim, shadow: false });
+      drawText(ctx, got ? e.lines[0] : e.hint, x + 12, y + 40 * scale,
+        { size: 11 * scale, color: got ? UI_COLOR.textDim : 'rgba(255,255,255,0.32)', shadow: false });
+    });
+
+    drawText(ctx, 'L 로 닫기', W / 2, H - 24,
+      { size: 12, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  __M.drawEnding = drawEnding; __M.drawGallery = drawGallery;
+})();
+
+// ── ui/fullscreen.js ─────────────────────────────
+(function () {
+  // 전체화면. 브라우저마다 이름이 조금씩 달라서 한 겹 감싼다.
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function toggleFullscreen(el) {
+    if (isFullscreen()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) exit.call(document);
+      return false;
+    }
+    const target = el || document.documentElement;
+    const req = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (req) req.call(target);
+    return true;
+  }
+
+  // 화면 크기가 바뀌면 알려 준다
+  function onFullscreenChange(handler) {
+    document.addEventListener('fullscreenchange', handler);
+    document.addEventListener('webkitfullscreenchange', handler);
+  }
+
+  __M.isFullscreen = isFullscreen; __M.toggleFullscreen = toggleFullscreen; __M.onFullscreenChange = onFullscreenChange;
+})();
+
+// ── main.js ─────────────────────────────
+(function () {
+  // 진입점 — 초기화, 입력, 게임 루프, 상태 전환.
+  // 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
+
+  const {
+    TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
+  } = __M;
+  const { WORLD_PX_W, WORLD_PX_H, project, pathBounds } = __M;
+  const { buildBuildings, doorOutside, floorLabel } = __M;
+  const { WorldMap, buildOverview } = __M;
+  const { makeInterior, floorList } = __M;
+  const { Actors } = __M;
+  const { Camera } = __M;
+  const { Scene } = __M;
+  const { UI_COLOR } = __M;
+  const { drawBuildingLabels, drawRoomLabels, drawText } = __M;
+  const { drawHud, bakeOverview, panel } = __M;
+  const { drawEnding, drawGallery } = __M;
+  const { toggleFullscreen, onFullscreenChange } = __M;
+  const { GameState } = __M;
+  const { GIZMOS, indexIndoorGizmos, outdoorGizmos } = __M;
+  const { evaluateEnding } = __M;
+
+  const S = TILE.size;
+  const state = {
+    mode: 'outdoor',
+    player: { x: 0, y: 0, dir: 'down', moving: false, anim: 0 },
+    prompt: '', toasts: [],
+    showHelp: true, showMinimap: true, showGallery: false,
+    interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
+    picker: null, placeName: '', startPos: { x: 0, y: 0 },
+  };
+
+  const keys = new Set();
+  let canvas, ctx, cam, map, buildings, scene, actors, minimap, indoorIndex;
+  let lastTime = 0;
+
+  // ── 초기화 ──────────────────────────────────────────────────────────────
+  function init() {
+    canvas = document.getElementById('game');
+    ctx = canvas.getContext('2d', { alpha: false });
+    ctx.imageSmoothingEnabled = false;
+
+    buildings = buildBuildings();
+    map = new WorldMap(buildings);
+    scene = new Scene(map, buildings);
+    actors = new Actors(map);
+    state.actors = actors;   // 그리는 쪽에서도 쓴다
+    cam = new Camera();
+    state.game = new GameState();
+    indoorIndex = indexIndoorGizmos();
+
+    // 길 위의 물건들을 걸어갈 수 있는 칸에 앉힌다
+    state.outdoorGizmos = outdoorGizmos().map((g) => {
+      const [tx, ty] = project([g.at.lon, g.at.lat]);
+      const spot = nearestWalkable(Math.round(tx), Math.round(ty));
+      return { ...g, tx: spot.x, ty: spot.y };
+    });
+
+    // 목적지 — 양촌공단 한가운데
+    const goalRegion = map.regions.find((r) => GAME.goalRegions.includes(r.id));
+    const gb = pathBounds(goalRegion.path);
+    state.goalPoint = {
+      x: ((gb.minX + gb.maxX) / 2) * S,
+      y: ((gb.minY + gb.maxY) / 2) * S,
+    };
+
+    // 출발점 — 구래역 앞. 역을 못 찾으면 좌표로 떨어진다.
+    const startBuilding = buildings.list.find((b) => b.name === PLAYER.startPlace);
+    const startTile = startBuilding
+      ? doorOutside(startBuilding)
+      : nearestWalkable(...project([PLAYER.startLon, PLAYER.startLat]).map(Math.round));
+    const start = nearestWalkable(startTile.x, startTile.y);
+    state.startPos = { x: start.x * S + S / 2, y: start.y * S + S / 2 };
+    state.player.x = state.startPos.x;
+    state.player.y = state.startPos.y;
+
+    minimap = bakeOverview(buildOverview(map, UI.minimapScale));
+    state.minimap = minimap;
+
+    window.addEventListener('resize', resize);
+    onFullscreenChange(resize);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', (e) => keys.delete(e.code));
+    window.addEventListener('blur', () => keys.clear());
+    canvas.addEventListener('pointerdown', () => { if (state.showHelp) state.showHelp = false; });
+
+    // 전체화면 버튼 (키보드 없는 환경용)
+    const fsButton = document.getElementById('fs');
+    if (fsButton) {
+      fsButton.addEventListener('click', () => toggleFullscreen(document.documentElement));
+    }
+    const boot = document.getElementById('boot');
+    if (boot) boot.remove();
+
+    exposeDebugHandle();
+    resize();
+    cam.snap(state.player.x, state.player.y);
+    requestAnimationFrame(loop);
+  }
+
+  // 지도 밖이나 벽이면 근처의 걸을 수 있는 칸을 찾는다 (나선 탐색)
+  function nearestWalkable(tx, ty) {
+    if (!map.isSolid(tx, ty)) return { x: tx, y: ty };
+    for (let r = 1; r < 40; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          if (!map.isSolid(tx + dx, ty + dy)) return { x: tx + dx, y: ty + dy };
+        }
+      }
+    }
+    return { x: tx, y: ty };
+  }
+
+  function resize() {
+    const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1);
+    const w = window.innerWidth, h = window.innerHeight;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    cam.resize(w, h);
+  }
+
+  // ── 입력 ────────────────────────────────────────────────────────────────
+  function onKeyDown(e) {
+    if (e.repeat) { keys.add(e.code); return; }
+    keys.add(e.code);
+
+    if (KEYS.fullscreen.includes(e.code)) { toggleFullscreen(document.documentElement); e.preventDefault(); return; }
+    if (KEYS.map.includes(e.code)) { state.showMinimap = !state.showMinimap; return; }
+    if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
+    if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+    if (KEYS.zoomIn.includes(e.code)) { cam.setZoom(cam.zoom + 1, window.innerWidth, window.innerHeight); return; }
+    if (KEYS.zoomOut.includes(e.code)) { cam.setZoom(cam.zoom - 1, window.innerWidth, window.innerHeight); return; }
+    if (e.code === 'Escape') { state.picker = null; state.showGallery = false; state.showHelp = false; return; }
+
+    if (state.game.ending) {
+      if (e.code === 'KeyR') restart();
+      return;
+    }
+    if (state.showHelp) { state.showHelp = false; return; }
+
+    if (state.picker) {
+      if (KEYS.up.includes(e.code)) state.picker.index = Math.max(0, state.picker.index - 1);
+      else if (KEYS.down.includes(e.code)) {
+        state.picker.index = Math.min(state.picker.floors.length - 1, state.picker.index + 1);
+      } else if (KEYS.interact.includes(e.code)) {
+        changeFloor(state.picker.floors[state.picker.index]);
+        state.picker = null;
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (KEYS.interact.includes(e.code)) { interact(); e.preventDefault(); }
+  }
+
+  function axis(negKeys, posKeys) {
+    const neg = negKeys.some((k) => keys.has(k));
+    const pos = posKeys.some((k) => keys.has(k));
+    return (pos ? 1 : 0) - (neg ? 1 : 0);
+  }
+
+  // ── 루프 ────────────────────────────────────────────────────────────────
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
+    lastTime = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    const g = state.game;
+    if (g.ending) return;
+    if (state.showHelp || state.showGallery || state.picker) return;
+
+    g.tick(dt);
+    if (state.exitCooldown > 0) state.exitCooldown -= dt;
+
+    movePlayer(dt);
+
+    if (state.mode === 'outdoor') {
+      const view = cam.visibleTiles(2);
+      const c0x = Math.floor(view.x0 / TILE.chunk), c1x = Math.floor(view.x1 / TILE.chunk);
+      const c0y = Math.floor(view.y0 / TILE.chunk), c1y = Math.floor(view.y1 / TILE.chunk);
+      actors.ensure(c0x, c0y, c1x, c1y);
+      actors.update(dt, c0x, c0y, c1x, c1y);
+      cam.follow(state.player.x, state.player.y, dt);
+      updatePlaceName();
+      checkGoal();
+    } else {
+      cam.follow(state.player.x, state.player.y, dt,
+        { w: state.interior.w * S, h: state.interior.h * S });
+      state.placeName = `${state.interiorBuilding.name} · ${floorLabel(state.floor)}`;
+    }
+
+    updatePrompt();
+
+    for (const t of state.toasts) t.life -= dt;
+    state.toasts = state.toasts.filter((t) => t.life > 0);
+  }
+
+  function movePlayer(dt) {
+    const p = state.player;
+    const dx = axis(KEYS.left, KEYS.right);
+    const dy = axis(KEYS.up, KEYS.down);
+    p.moving = dx !== 0 || dy !== 0;
+    if (!p.moving) return;
+
+    const running = KEYS.run.some((k) => keys.has(k));
+    const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
+    const len = Math.hypot(dx, dy) || 1;
+    const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
+
+    if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+    else if (dy !== 0) p.dir = dy > 0 ? 'down' : 'up';
+
+    p.anim += dt * (running ? 1.6 : 1);
+
+    if (!blocked(p.x + vx, p.y)) p.x += vx;
+    if (!blocked(p.x, p.y + vy)) p.y += vy;
+  }
+
+  // 발밑 상자로 충돌을 본다
+  function blocked(x, y) {
+    const hw = PLAYER.width / 2, hh = PLAYER.height;
+    const corners = [
+      [x - hw, y - hh], [x + hw, y - hh], [x - hw, y], [x + hw, y],
+    ];
+    for (const [cx, cy] of corners) {
+      const tx = Math.floor(cx / S), ty = Math.floor(cy / S);
+      if (state.mode === 'interior') {
+        if (state.interior.isSolid(tx, ty)) return true;
+      } else if (map.isSolid(tx, ty)) return true;
+    }
+    return false;
+  }
+
+  // ── 상호작용 ────────────────────────────────────────────────────────────
+  function nearestOutdoorTarget() {
+    const p = state.player;
+    const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S);
+
+    // 물건
+    for (const g of state.outdoorGizmos) {
+      const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+      if (d < GAME.interactRadius && !(g.once && state.game.used.has(g.id))) {
+        return { type: 'gizmo', gizmo: g, label: g.name };
+      }
+    }
+    // 고양이
+    const cat = actors.nearestCat(p.x, p.y, GAME.petRadius);
+    if (cat && !state.game.used.has('cat:' + cat.id)) {
+      return { type: 'cat', cat, label: '고양이' };
+    }
+    // 건물 출입구
+    let best = null, bestD = BUILDING.enterRadius;
+    for (const b of buildings.index.query(ptx - 3, pty - 3, ptx + 3, pty + 3)) {
+      const d = Math.hypot((b.door.x + 0.5) * S - p.x, (b.door.y + 0.5) * S - p.y);
+      if (d < bestD) { bestD = d; best = b; }
+    }
+    if (best && state.exitCooldown <= 0) {
+      return { type: 'enter', building: best, label: best.name };
+    }
+    return null;
+  }
+
+  function nearestInteriorTarget() {
+    const p = state.player;
+    const tx = Math.floor(p.x / S), ty = Math.floor(p.y / S);
+    const it = state.interior;
+
+    for (const g of state.interiorGizmos) {
+      const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+      if (d < GAME.interactRadius && !(g.once && state.game.used.has(g.id))) {
+        return { type: 'gizmo', gizmo: g, label: g.name };
+      }
+    }
+    const here = it.tileAt(tx, ty);
+    if (here === IN.EXIT) return { type: 'exit', label: '나가기' };
+    if (here === IN.STAIR_UP) return { type: 'stair', delta: 1, label: '올라가기' };
+    if (here === IN.STAIR_DOWN) return { type: 'stair', delta: -1, label: '내려가기' };
+    if (here === IN.ELEVATOR) return { type: 'elevator', label: '엘리베이터' };
+    return null;
+  }
+
+  function updatePrompt() {
+    const t = state.mode === 'outdoor' ? nearestOutdoorTarget() : nearestInteriorTarget();
+    state.target = t;
+    if (!t) { state.prompt = ''; return; }
+    const verb = t.type === 'enter' ? '들어가기'
+      : t.type === 'exit' ? '나가기'
+      : t.type === 'cat' ? '쓰다듬기'
+      : t.type === 'stair' ? t.label
+      : t.type === 'elevator' ? '층 고르기'
+      : '만지기';
+    state.prompt = `Space  ${verb} — ${t.label}`;
+  }
+
+  function interact() {
+    const t = state.target;
+    if (!t) return;
+    switch (t.type) {
+      case 'enter': return enterBuilding(t.building);
+      case 'exit': return exitBuilding();
+      case 'stair': return changeFloor(nextFloor(state.floor, t.delta));
+      case 'elevator': return openPicker();
+      case 'cat': return petCat(t.cat);
+      case 'gizmo': return useGizmo(t.gizmo);
+    }
+  }
+
+  function petCat(cat) {
+    state.game.used.add('cat:' + cat.id);
+    state.game.bump('cat');
+    state.game.set('cat_' + state.game.count('cat'), '고양이를 쓰다듬었다');
+    toast(`고양이를 쓰다듬었다 (${state.game.count('cat')})`);
+    checkImmediateEnding();
+  }
+
+  function useGizmo(g) {
+    const ctxObj = {
+      toast,
+      rideTo: (stationName) => rideTo(stationName),
+    };
+    state.game.used.add(g.id);
+    g.effect(state.game, ctxObj);
+    toast(g.text);
+    checkImmediateEnding();
+  }
+
+  function toast(text) {
+    state.toasts.unshift({ text, life: UI.toastSeconds });
+    if (state.toasts.length > 3) state.toasts.pop();
+  }
+
+  // ── 건물 출입 · 층 이동 ─────────────────────────────────────────────────
+  function enterBuilding(b) {
+    state.interiorBuilding = b;
+    const floors = floorList(b);
+    setFloor(b, floors.includes(1) ? 1 : floors[0], 'spawn');
+    state.mode = 'interior';
+    cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
+    toast(`${b.name} · ${floorLabel(state.floor)}`);
+  }
+
+  function setFloor(b, floor, place) {
+    state.floor = floor;
+    state.interior = makeInterior(b, floor);
+    state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
+      const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
+        || state.interior.spawn;
+      return { ...g, tx: slot.x, ty: slot.y };
+    });
+
+    let spot;
+    if (place === 'spawn') spot = state.interior.spawn;
+    else if (place === 'up') spot = below(state.interior.stairs.down || state.interior.stairs.elevator);
+    else if (place === 'down') spot = below(state.interior.stairs.up || state.interior.stairs.elevator);
+    else spot = below(state.interior.stairs.elevator) || state.interior.spawn;
+    state.player.x = (spot.x + 0.5) * S;
+    state.player.y = (spot.y + 0.9) * S; // 타일 경계에 딱 걸치지 않게 (발밑 기준)
+  }
+
+  function below(pos) {
+    return pos ? { x: pos.x, y: pos.y + 1 } : null;
+  }
+
+  function nextFloor(floor, delta) {
+    const floors = floorList(state.interiorBuilding);
+    const i = floors.indexOf(floor);
+    return floors[Math.max(0, Math.min(floors.length - 1, i + delta))];
+  }
+
+  function changeFloor(floor) {
+    if (floor === state.floor) return;
+    const dir = floor > state.floor ? 'up' : 'down';
+    setFloor(state.interiorBuilding, floor, dir);
+    cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
+    toast(`${state.interiorBuilding.name} · ${floorLabel(floor)}`);
+  }
+
+  function openPicker() {
+    const floors = floorList(state.interiorBuilding);
+    state.picker = { floors, index: Math.max(0, floors.indexOf(state.floor)) };
+  }
+
+  function exitBuilding() {
+    const b = state.interiorBuilding;
+    const out = doorOutside(b);
+    state.mode = 'outdoor';
+    state.player.x = (out.x + 0.5) * S;
+    state.player.y = (out.y + 0.7) * S;
+    state.interior = null;
+    state.interiorGizmos = [];
+    state.floor = 1;
+    state.exitCooldown = INTERIOR.exitPause;
+    cam.snap(state.player.x, state.player.y);
+  }
+
+  // 지하철로 다른 역까지
+  function rideTo(stationName) {
+    const target = buildings.list.find((b) => b.name === stationName);
+    if (!target) return;
+    const out = doorOutside(target);
+    state.mode = 'outdoor';
+    state.interior = null;
+    state.interiorGizmos = [];
+    state.interiorBuilding = null;
+    state.floor = 1;
+    state.player.x = (out.x + 0.5) * S;
+    state.player.y = (out.y + 0.7) * S;
+    state.exitCooldown = INTERIOR.exitPause;
+    state.game.clock += 4 * 60; // 4분
+    cam.snap(state.player.x, state.player.y);
+    toast(`${stationName} 도착`);
+  }
+
+  // ── 결말 ────────────────────────────────────────────────────────────────
+  function updatePlaceName() {
+    const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
+    state.placeName = map.regionNameAt(tx, ty) || '김포 들녘';
+  }
+
+  function checkGoal() {
+    const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
+    for (const r of map.regionIndex.queryPoint(tx, ty)) {
+      if (!GAME.goalRegions.includes(r.id)) continue;
+      if (pointInside(tx, ty, r.path)) { finish('goal'); return; }
+    }
+  }
+
+  function pointInside(px, py, path) {
+    let inside = false;
+    for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+      const [xi, yi] = path[i], [xj, yj] = path[j];
+      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-12) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function checkImmediateEnding() { finish('any'); }
+
+  function finish(where) {
+    if (state.game.ending) return;
+    const e = evaluateEnding(state.game, where);
+    if (!e) return;
+    state.game.ending = e;
+    state.game.discover(e.id);
+  }
+
+  function restart() {
+    state.game = new GameState();
+    state.mode = 'outdoor';
+    state.interior = null;
+    state.interiorGizmos = [];
+    state.interiorBuilding = null;
+    state.toasts = [];
+    state.showGallery = false;
+    state.player.x = state.startPos.x;
+    state.player.y = state.startPos.y;
+    state.player.dir = 'down';
+    cam.snap(state.player.x, state.player.y);
+  }
+
+  // ── 그리기 ──────────────────────────────────────────────────────────────
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = UI_COLOR.sky;
+    ctx.fillRect(0, 0, W, H);
+
+    if (state.mode === 'outdoor') {
+      scene.drawOutdoor(ctx, cam, state);
+      drawBuildingLabels(ctx, cam, map, state.player);
+    } else {
+      scene.drawInterior(ctx, cam, state);
+      drawRoomLabels(ctx, cam, state.interior);
+    }
+
+    drawHud(ctx, state);
+    if (state.picker) drawPicker();
+    // 목록을 열면 결말 화면 대신 목록만 보여 준다
+    if (state.showGallery) drawGallery(ctx, state);
+    else if (state.game.ending) drawEnding(ctx, state);
+  }
+
+  function drawPicker() {
+    const W = ctx.canvas.width / (window.devicePixelRatio > 1 ? 1 : 1);
+    const floors = state.picker.floors;
+    const h = Math.min(280, floors.length * 24 + 40);
+    const x = 40, y = 120;
+    panel(ctx, x, y, 150, h);
+    drawText(ctx, '층 선택', x + 16, y + 26, { size: 14, color: UI_COLOR.accent });
+    const visible = Math.floor((h - 40) / 24);
+    const from = Math.max(0, Math.min(floors.length - visible, state.picker.index - 2));
+    for (let i = from; i < Math.min(floors.length, from + visible); i++) {
+      const sel = i === state.picker.index;
+      drawText(ctx, `${sel ? '▶ ' : '   '}${floorLabel(floors[i])}`,
+        x + 16, y + 52 + (i - from) * 24,
+        { size: 13, color: sel ? UI_COLOR.text : UI_COLOR.textDim });
+    }
+  }
+
+  // 개발·점검용 손잡이. 콘솔에서 __gurae 로 세계를 들여다볼 수 있다.
+  function exposeDebugHandle() {
+    if (typeof window === 'undefined') return;
+    window.__gurae = {
+      state, cam,
+      get map() { return map; },
+      get buildings() { return buildings; },
+      // 타일 좌표로 순간이동 (실외)
+      tp(tx, ty) {
+        state.mode = 'outdoor';
+        state.interior = null;
+        state.player.x = (tx + 0.5) * S;
+        state.player.y = (ty + 0.7) * S;
+        cam.snap(state.player.x, state.player.y);
+      },
+      // 이름으로 건물 앞까지
+      goto(name) {
+        const b = buildings.list.find((x) => x.name === name);
+        if (!b) return false;
+        const out = doorOutside(b);
+        window.__gurae.tp(out.x, out.y);
+        return true;
+      },
+      interact,
+    };
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  }
+
+})();
+
+</script>
+</body>
+</html>

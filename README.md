@@ -206,3 +206,11 @@ git checkout -- index.html netforge.html
 ```bash
 python build.py
 ```
+
+---
+
+## 이 레포의 다른 것 — `sy/`
+
+`sy/` 에는 별개 프로젝트인 **〈구래〉** 가 들어 있습니다. 김포 구래동에서 양촌공단까지
+걸어서 출근하는 탑뷰 도트 어드벤처로, 역시 서버 없이 `sy/index.html` 하나로 돌아갑니다.
+자세한 것은 `sy/README.md` 를 보세요.
