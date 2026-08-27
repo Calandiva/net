@@ -4,10 +4,39 @@
 
 let tutTimer = null;
 const tutPaneOn = () => $('#pane-tut') && $('#pane-tut').classList.contains('on');
+
+/* 구성이 바뀔 때마다 자동으로 다시 채점한다 — 채점 버튼을 누르지 않아도 된다 */
 function tutRefreshSoon(){
-  if (!TUT.cur || !tutPaneOn()) return;
+  if (!TUT.cur) return;
   clearTimeout(tutTimer);
-  tutTimer = setTimeout(()=>{ if (TUT.cur && tutPaneOn()) renderTutorialPane(true); }, 450);
+  tutTimer = setTimeout(tutAutoGrade, 420);
+}
+function tutBadge(){
+  const el = $('#cntTut'); if (!el) return;
+  const st = tutStats();
+  el.textContent = TUT.cur ? (TUT.last ? TUT.last.score : st.done) : st.done;
+  el.className = 'cnt' + (TUT.cur ? (TUT.last && TUT.last.passed ? ' warn' : '') : '');
+}
+function tutAutoGrade(){
+  const les = LESSONS.find(l=>l.id===TUT.cur); if (!les) return null;
+  const before = TUT.last;
+  let g; try { g = gradeLesson(les); } catch(err){ console.warn('채점 실패', err); return null; }
+  TUT.last = g;
+  const best = TUT.prog[les.id];
+  if (!best || g.score > best.score || (g.passed && !best.passed)){
+    TUT.prog[les.id] = { score:g.score, passed:g.passed, grade:g.grade };
+    tutSaveProg();
+  }
+  /* 방금 조건을 채운 순간에만 알린다 */
+  if (g.passed && !(before && before.passed))
+    toast(`통과! ${les.id}. ${les.title} — ${g.score}점 (${g.grade})`, 'good');
+  else if (before && before.passed && !g.passed)
+    toast(`조건이 다시 깨졌습니다 — 남은 조건 ${g.rt-g.rp}개`, 'bad');
+  else if (before && g.rp > before.rp)
+    toast(`조건 달성 ${g.rp}/${g.rt}`);
+  if (tutPaneOn()) renderTutorialPane(true);
+  tutBadge();
+  return g;
 }
 
 function tutStats(){
@@ -26,7 +55,7 @@ function openLesson(id){
     $('#docname').value = S.t;
     TUT.cur = id; TUT.last = null;
     UI.sel=null; UI.selSet=new Set(); UI.focus=null; UI.trace=null; UI.traceId=null; UI.spof=null;
-    afterEdit(); fitView(); switchTab('tut'); renderTutorialPane();
+    afterEdit(); fitView(); switchTab('tut'); tutAutoGrade(); renderTutorialPane();
     toast(`${les.id}. ${les.title} 시작`);
   };
   /* 이미 학습 중이면 바로 넘어간다. 자유 편집 중인 구성만 확인을 받는다. */
@@ -47,15 +76,11 @@ function openLesson(id){
 
 function gradeCurrent(loud){
   const les = LESSONS.find(l=>l.id===TUT.cur); if (!les) return null;
-  const g = gradeLesson(les);
-  TUT.last = g;
-  const prevBest = TUT.prog[les.id];
-  if (!prevBest || g.score > prevBest.score || (g.passed && !prevBest.passed)){
-    TUT.prog[les.id] = { score:g.score, passed:g.passed, grade:g.grade };
-    tutSaveProg();
-  }
-  if (loud) toast(g.passed ? `통과! ${g.score}점 (${g.grade})` : `미통과 — ${g.score}점 · 남은 조건 ${g.rt-g.rp}개`,
-    g.passed ? 'good' : 'bad');
+  TUT.last = null;                       // 강제로 다시 계산
+  const g = tutAutoGrade();
+  if (!g) return null;
+  if (loud) toast(g.passed ? `통과 — ${g.score}점 (${g.grade})`
+                           : `아직 ${g.rp}/${g.rt} — 남은 조건 ${g.rt-g.rp}개`, g.passed ? 'good' : '');
   renderTutorialPane();
   return g;
 }
@@ -117,7 +142,7 @@ function renderTutorialPane(keepScroll){
     <div class="meta">${ch.id}장 · ${esc(ch.n)}</div>
     <div style="margin-top:6px;font-size:12px"><b>목표</b> — ${esc(les.goal)}</div>`;
   const nav = h('div',{cls:'row', style:'margin-top:7px;flex-wrap:wrap'});
-  nav.appendChild(btn('채점하기', ()=>gradeCurrent(true), 'pri'));
+  nav.appendChild(btn('지금 다시 채점', ()=>gradeCurrent(true), 'pri'));
   nav.appendChild(btn('다시 시작', ()=>{ TUT.cur=null; openLesson(les.id); }));
   const prev = LESSONS.find(l=>l.id===les.id-1), nxt = LESSONS.find(l=>l.id===les.id+1);
   if (prev) nav.appendChild(btn('◀ 이전', ()=>openLesson(prev.id)));
@@ -132,7 +157,7 @@ function renderTutorialPane(keepScroll){
     <div class="bar"><i class="${g.score<60?'bad':g.score<90?'warn':''}" style="width:${g.score}%"></i></div>
     <div class="kv" style="margin-top:6px"><span>필수 조건</span><b>${g.rp} / ${g.rt}</b></div>
     ${g.bt ? `<div class="kv"><span>추가 점수</span><b>${g.bp} / ${g.bt}</b></div>` : ''}
-    <div class="muted" style="margin-top:4px;font-size:10.5px">필수 조건을 모두 채우면 통과 70점, 추가 조건까지 채우면 100점입니다.</div>`;
+    <div class="muted" style="margin-top:4px;font-size:10.5px">구성을 고칠 때마다 <b>자동으로 다시 채점</b>됩니다. 필수 조건을 모두 채우면 통과 70점, 추가 조건까지 채우면 100점.</div>`;
   p.appendChild(sco);
 
   /* 안내 */

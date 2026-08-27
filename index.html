@@ -204,6 +204,8 @@ label.ck{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px}
 /* 드래그 보조 */
 .guide{stroke:var(--cu);stroke-width:1;stroke-dasharray:4 4;opacity:.85;pointer-events:none}
 .band{fill:var(--acc);fill-opacity:.09;stroke:var(--acc);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
+.node.willsel .nbody{stroke:var(--acc);stroke-width:2}
+.node.willsel .nband{opacity:1}
 .droptgt{fill:none;stroke:var(--acc);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
 .dropport{fill:var(--acc);opacity:.85;pointer-events:none}
 
@@ -1965,7 +1967,7 @@ function validateAll(){
 
   /* IP */
   S.n.forEach(n=>{
-    if (!T[n.ty].host || n.ty==='internet' || isTrans(n)) return;
+    if (!T[n.ty].host || n.ty==='internet' || n.ty==='wan' || isTrans(n)) return;
     if (!bareIp(n.p.ip)) E(`${n.p.name} IP 미설정`, '통신에 필요한 IP 주소가 없습니다.', '속성 탭 → IP/CIDR 입력, 또는 상단 “IP 자동할당”.', {n:n.id});
     else if (!bareIp(n.p.gw) && !isRouter(n))
       W(`${n.p.name} 게이트웨이 없음`, '같은 대역 밖으로는 통신할 수 없습니다.', '같은 서브넷의 L3 장비 IP(또는 VIP)를 게이트웨이로 지정하세요.', {n:n.id});
@@ -2069,7 +2071,7 @@ function validateAll(){
   S.n.filter(n=>n.ty==='rdb').forEach(n=>{
     if ((n.p.dbha||'none')==='none')
       W(`${n.p.name} DB 이중화 없음`, '단일 인스턴스라 장애 시 서비스가 멈추고 데이터 손실 위험이 있습니다.', `${dbHaSuggest(n.p.eng)} 구성을 검토하세요.`, {n:n.id});
-    else if (!n.p.peer && !['rac','tac','fci'].includes(n.p.dbha))
+    else if (!n.p.peer && !['rac','tac','fci','group','patroni'].includes(n.p.dbha))
       W(`${n.p.name} 복제 대상 미지정`, `${(O_DBHA.find(x=>x[0]===n.p.dbha)||[])[1]} 로 설정했지만 상대 노드가 없습니다.`, '상대 노드를 지정하고 두 노드를 링크로 연결하세요.', {n:n.id});
     if (n.p.dbha==='async' || (n.p.sync==='async' && n.p.dbha!=='none'))
       N(`${n.p.name} 비동기 복제`, '장애 시 마지막 트랜잭션이 유실될 수 있습니다 (RPO > 0).', '무손실이 필요하면 동기/반동기로 전환하세요. 다만 커밋 지연이 늘어납니다.', {n:n.id});
@@ -2086,6 +2088,7 @@ function validateAll(){
   });
 
   /* 이중화 일반 */
+  const soloSw = new Set();
   S.n.forEach(n=>{
     const ha = n.p.ha||'none';
     const sameKind = S.n.filter(x=>x.ty===n.ty && x.id!==n.id).length;
@@ -2105,8 +2108,19 @@ function validateAll(){
       if (peer){
         const theirs = new Set(edgesOf(peer.id).map(e=>otherEnd(e,peer.id)));
         const up = [...mine].filter(x=>theirs.has(x) && nodeById(x) && ['l2sw','l3sw','router','fw'].includes(nodeById(x).ty));
-        if (up.length===1 && (edgesOf(nodeById(up[0]).id).length>1) && !nodeById(up[0]).p.peer)
-          W(`${nodeById(up[0]).p.name} 단일 상단 스위치`, `${n.p.name} / ${peer.p.name} 이중화가 스위치 1대에만 물려 있어 그 스위치가 SPOF 입니다.`, '상단 스위치도 2대로 나누어 교차 연결하세요.', {n:up[0]});
+        if (up.length===1){
+          const swNode = nodeById(up[0]);
+          /* 같은 종류의 다른 스위치가 곁에 붙어 있으면 짝이 있는 것으로 본다
+             (p.peer 를 안 적어도 스위치끼리 링크로 이어져 있으면 이중화된 구성) */
+          const twinned = !!swNode.p.peer || edgesOf(swNode.id).some(e=>{
+            const o = nodeById(otherEnd(e, swNode.id)); return o && o.ty===swNode.ty; });
+          if (!twinned && edgesOf(swNode.id).length>1 && !soloSw.has(swNode.id)){
+            soloSw.add(swNode.id);
+            W(`${swNode.p.name} 단일 상단 스위치`,
+              `이중화한 장비들이 이 스위치 1대에만 물려 있어 스위치가 SPOF 입니다.`,
+              '상단 스위치를 2대로 나누어 교차 연결하세요.', {n:swNode.id});
+          }
+        }
       }
     }
   });
@@ -2879,12 +2893,10 @@ function initCanvas(){
     }
     if (band){
       const b = band; band = null; clearBand();
-      const x0=Math.min(b.x0,b.x1), x1=Math.max(b.x0,b.x1), y0=Math.min(b.y0,b.y1), y1=Math.max(b.y0,b.y1);
-      if (Math.abs(x1-x0)>5 || Math.abs(y1-y0)>5){
-        const hits = S.n.filter(n=>{ if (UI.layers[T[n.ty].ly]===false) return false;
-          const r=nodeRect(n); return r.x < x1 && r.x+r.w > x0 && r.y < y1 && r.y+r.h > y0; }).map(n=>n.id);
+      if (Math.abs(b.x1-b.x0)>5 || Math.abs(b.y1-b.y0)>5){
+        const hits = bandHits(b).map(n=>n.id);
         setSel(b.add ? [...new Set([...(UI.selSet||[]), ...hits])] : hits);
-        if (hits.length) toast(`${hits.length}개 선택`);
+        toast(hits.length ? `${hits.length}개 선택` : '범위 안에 완전히 들어온 장비가 없습니다');
       }
     }
     if (drag && drag.moved){ clearGuides(); afterEdit(); }
@@ -2973,13 +2985,31 @@ function drawCord(){
   g.appendChild(el('path',{ class:'ghost', d:ptsToPath(tidy(bend)) }));
 }
 const clearCord = () => [...$('#gOverlay').querySelectorAll('.ghost,.droptgt,.dropport')].forEach(e=>e.remove());
+/* 사각형 안에 "완전히 들어온" 노드만 고른다 — 화면에 그려진 범위와 정확히 일치 */
+function bandHits(b){
+  if (!b) return [];
+  const x0=Math.min(b.x0,b.x1), x1=Math.max(b.x0,b.x1);
+  const y0=Math.min(b.y0,b.y1), y1=Math.max(b.y0,b.y1);
+  return S.n.filter(n=>{
+    if (UI.layers[T[n.ty].ly]===false) return false;
+    const r = nodeRect(n);
+    return r.x >= x0 && r.x + r.w <= x1 && r.y >= y0 && r.y + r.h <= y1;
+  });
+}
 function drawBand(){
   const g = $('#gOverlay'); clearBand();
   if (!band) return;
-  g.appendChild(el('rect',{ class:'band', x:Math.min(band.x0,band.x1), y:Math.min(band.y0,band.y1),
-    width:Math.abs(band.x1-band.x0), height:Math.abs(band.y1-band.y0) }));
+  const x0=Math.min(band.x0,band.x1), x1=Math.max(band.x0,band.x1);
+  const y0=Math.min(band.y0,band.y1), y1=Math.max(band.y0,band.y1);
+  g.appendChild(el('rect',{ class:'band', x:x0, y:y0, width:x1-x0, height:y1-y0 }));
+  const hit = new Set(bandHits(band).map(n=>n.id));
+  REF.nodes.forEach((node,id)=>node.classList.toggle('willsel', hit.has(id)));
+  $('#hudSel').textContent = hit.size ? `${hit.size}개 선택 예정` : '범위 안에 들어온 장비만 선택';
 }
-const clearBand = () => [...$('#gOverlay').querySelectorAll('.band')].forEach(e=>e.remove());
+function clearBand(){
+  [...$('#gOverlay').querySelectorAll('.band')].forEach(e=>e.remove());
+  REF.nodes.forEach(node=>node.classList.remove('willsel'));
+}
 
 /* ── 빠른 추가 (캔버스 더블클릭) ───────────────────────────────────────── */
 function openQuickAdd(wx, wy, sx, sy){
@@ -4045,7 +4075,7 @@ function switchTab(id){
   $$('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.pane===id));
   $$('.pane').forEach(p=>p.classList.toggle('on', p.id==='pane-'+id));
   if (id==='url') renderUrlPane();
-  if (id==='tut') renderTutorialPane();
+  if (id==='tut'){ if (TUT.cur) tutAutoGrade(); else renderTutorialPane(); }
 }
 
 /* ── 편집 후 공통 처리 ─────────────────────────────────────────────────── */
@@ -4061,8 +4091,7 @@ function afterEdit(){
   render(); renderInspector(); renderValPane(); renderFlowPane(); renderLayerPane(); renderHaPane();
   if ($('#pane-url').classList.contains('on')) renderUrlPane();
   if (typeof tutRefreshSoon==='function') tutRefreshSoon();
-  if (typeof tutStats==='function'){ const s=tutStats(); const el=$('#cntTut');
-    if (el){ el.textContent = s.done; el.className = 'cnt' + (s.done===s.total ? ' warn' : ''); } }
+  if (typeof tutBadge==='function') tutBadge();
   if (UI.trace) animateFlow(UI.trace);
   scheduleUrl();
 }
@@ -4230,16 +4259,18 @@ function genRandom(profileKey){
     try { doc = assemble(rollSpec(prof ? prof.bias : null), prof); }
     catch(err){ console.warn('조립 실패', err); continue; }
     const prev = S; S = doc;
-    let errs = 99, fails = 99;
+    let errs = 99, fails = 99, warns = 99;
     try {
       const res = validateAll();
       errs  = res.issues.filter(i=>i.lv==='e').length;
       fails = res.flows.filter(f=>!f.r.ok).length;
+      warns = res.issues.filter(i=>i.lv==='w').length;
     } catch(err){ console.warn('검증 실패', err); }
     S = prev;
-    const score = fails*10 + errs;
+    /* 통신이 되는가(하드) 를 먼저 보고, 같은 조건이면 경고가 적은 쪽을 고른다 */
+    const score = fails*1000 + errs*100 + warns;
     if (score < bestScore){ bestScore = score; best = doc; }
-    if (score === 0) return doc;
+    if (fails===0 && errs===0 && warns<=2) return doc;
   }
   return best || blankDoc();
 }
@@ -5104,7 +5135,6 @@ async function boot(){
   switchTab('insp');
   if (!loaded) setTimeout(()=>toast('예제 구성도를 불러왔습니다. 상단 “랜덤 구성도”로 다른 아키텍처를 만들어 보세요.'), 500);
 }
-boot();
 
 /* ═══════════════════════════════════════════════════════════════════════════
    85-tutorial.js — 100 단계 학습 과정
@@ -6071,10 +6101,39 @@ tutLoadProg();
 
 let tutTimer = null;
 const tutPaneOn = () => $('#pane-tut') && $('#pane-tut').classList.contains('on');
+
+/* 구성이 바뀔 때마다 자동으로 다시 채점한다 — 채점 버튼을 누르지 않아도 된다 */
 function tutRefreshSoon(){
-  if (!TUT.cur || !tutPaneOn()) return;
+  if (!TUT.cur) return;
   clearTimeout(tutTimer);
-  tutTimer = setTimeout(()=>{ if (TUT.cur && tutPaneOn()) renderTutorialPane(true); }, 450);
+  tutTimer = setTimeout(tutAutoGrade, 420);
+}
+function tutBadge(){
+  const el = $('#cntTut'); if (!el) return;
+  const st = tutStats();
+  el.textContent = TUT.cur ? (TUT.last ? TUT.last.score : st.done) : st.done;
+  el.className = 'cnt' + (TUT.cur ? (TUT.last && TUT.last.passed ? ' warn' : '') : '');
+}
+function tutAutoGrade(){
+  const les = LESSONS.find(l=>l.id===TUT.cur); if (!les) return null;
+  const before = TUT.last;
+  let g; try { g = gradeLesson(les); } catch(err){ console.warn('채점 실패', err); return null; }
+  TUT.last = g;
+  const best = TUT.prog[les.id];
+  if (!best || g.score > best.score || (g.passed && !best.passed)){
+    TUT.prog[les.id] = { score:g.score, passed:g.passed, grade:g.grade };
+    tutSaveProg();
+  }
+  /* 방금 조건을 채운 순간에만 알린다 */
+  if (g.passed && !(before && before.passed))
+    toast(`통과! ${les.id}. ${les.title} — ${g.score}점 (${g.grade})`, 'good');
+  else if (before && before.passed && !g.passed)
+    toast(`조건이 다시 깨졌습니다 — 남은 조건 ${g.rt-g.rp}개`, 'bad');
+  else if (before && g.rp > before.rp)
+    toast(`조건 달성 ${g.rp}/${g.rt}`);
+  if (tutPaneOn()) renderTutorialPane(true);
+  tutBadge();
+  return g;
 }
 
 function tutStats(){
@@ -6093,7 +6152,7 @@ function openLesson(id){
     $('#docname').value = S.t;
     TUT.cur = id; TUT.last = null;
     UI.sel=null; UI.selSet=new Set(); UI.focus=null; UI.trace=null; UI.traceId=null; UI.spof=null;
-    afterEdit(); fitView(); switchTab('tut'); renderTutorialPane();
+    afterEdit(); fitView(); switchTab('tut'); tutAutoGrade(); renderTutorialPane();
     toast(`${les.id}. ${les.title} 시작`);
   };
   /* 이미 학습 중이면 바로 넘어간다. 자유 편집 중인 구성만 확인을 받는다. */
@@ -6114,15 +6173,11 @@ function openLesson(id){
 
 function gradeCurrent(loud){
   const les = LESSONS.find(l=>l.id===TUT.cur); if (!les) return null;
-  const g = gradeLesson(les);
-  TUT.last = g;
-  const prevBest = TUT.prog[les.id];
-  if (!prevBest || g.score > prevBest.score || (g.passed && !prevBest.passed)){
-    TUT.prog[les.id] = { score:g.score, passed:g.passed, grade:g.grade };
-    tutSaveProg();
-  }
-  if (loud) toast(g.passed ? `통과! ${g.score}점 (${g.grade})` : `미통과 — ${g.score}점 · 남은 조건 ${g.rt-g.rp}개`,
-    g.passed ? 'good' : 'bad');
+  TUT.last = null;                       // 강제로 다시 계산
+  const g = tutAutoGrade();
+  if (!g) return null;
+  if (loud) toast(g.passed ? `통과 — ${g.score}점 (${g.grade})`
+                           : `아직 ${g.rp}/${g.rt} — 남은 조건 ${g.rt-g.rp}개`, g.passed ? 'good' : '');
   renderTutorialPane();
   return g;
 }
@@ -6184,7 +6239,7 @@ function renderTutorialPane(keepScroll){
     <div class="meta">${ch.id}장 · ${esc(ch.n)}</div>
     <div style="margin-top:6px;font-size:12px"><b>목표</b> — ${esc(les.goal)}</div>`;
   const nav = h('div',{cls:'row', style:'margin-top:7px;flex-wrap:wrap'});
-  nav.appendChild(btn('채점하기', ()=>gradeCurrent(true), 'pri'));
+  nav.appendChild(btn('지금 다시 채점', ()=>gradeCurrent(true), 'pri'));
   nav.appendChild(btn('다시 시작', ()=>{ TUT.cur=null; openLesson(les.id); }));
   const prev = LESSONS.find(l=>l.id===les.id-1), nxt = LESSONS.find(l=>l.id===les.id+1);
   if (prev) nav.appendChild(btn('◀ 이전', ()=>openLesson(prev.id)));
@@ -6199,7 +6254,7 @@ function renderTutorialPane(keepScroll){
     <div class="bar"><i class="${g.score<60?'bad':g.score<90?'warn':''}" style="width:${g.score}%"></i></div>
     <div class="kv" style="margin-top:6px"><span>필수 조건</span><b>${g.rp} / ${g.rt}</b></div>
     ${g.bt ? `<div class="kv"><span>추가 점수</span><b>${g.bp} / ${g.bt}</b></div>` : ''}
-    <div class="muted" style="margin-top:4px;font-size:10.5px">필수 조건을 모두 채우면 통과 70점, 추가 조건까지 채우면 100점입니다.</div>`;
+    <div class="muted" style="margin-top:4px;font-size:10.5px">구성을 고칠 때마다 <b>자동으로 다시 채점</b>됩니다. 필수 조건을 모두 채우면 통과 70점, 추가 조건까지 채우면 100점.</div>`;
   p.appendChild(sco);
 
   /* 안내 */
@@ -6237,6 +6292,15 @@ function renderTutorialPane(keepScroll){
 
   p.scrollTop = sc;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   99-boot.js — 마지막에 실행. 앞선 모든 모듈(특히 const 로 선언된 TUT 등)이
+   초기화된 뒤여야 boot() 안의 afterEdit() 이 안전하다.
+   ═══════════════════════════════════════════════════════════════════════════ */
+boot().catch(err=>{
+  console.error('부팅 실패', err);
+  try { toast('초기화 중 문제가 발생했습니다: ' + err.message, 'bad'); } catch(_){}
+});
 
 </script>
 </body>

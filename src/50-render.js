@@ -693,12 +693,10 @@ function initCanvas(){
     }
     if (band){
       const b = band; band = null; clearBand();
-      const x0=Math.min(b.x0,b.x1), x1=Math.max(b.x0,b.x1), y0=Math.min(b.y0,b.y1), y1=Math.max(b.y0,b.y1);
-      if (Math.abs(x1-x0)>5 || Math.abs(y1-y0)>5){
-        const hits = S.n.filter(n=>{ if (UI.layers[T[n.ty].ly]===false) return false;
-          const r=nodeRect(n); return r.x < x1 && r.x+r.w > x0 && r.y < y1 && r.y+r.h > y0; }).map(n=>n.id);
+      if (Math.abs(b.x1-b.x0)>5 || Math.abs(b.y1-b.y0)>5){
+        const hits = bandHits(b).map(n=>n.id);
         setSel(b.add ? [...new Set([...(UI.selSet||[]), ...hits])] : hits);
-        if (hits.length) toast(`${hits.length}개 선택`);
+        toast(hits.length ? `${hits.length}개 선택` : '범위 안에 완전히 들어온 장비가 없습니다');
       }
     }
     if (drag && drag.moved){ clearGuides(); afterEdit(); }
@@ -787,13 +785,31 @@ function drawCord(){
   g.appendChild(el('path',{ class:'ghost', d:ptsToPath(tidy(bend)) }));
 }
 const clearCord = () => [...$('#gOverlay').querySelectorAll('.ghost,.droptgt,.dropport')].forEach(e=>e.remove());
+/* 사각형 안에 "완전히 들어온" 노드만 고른다 — 화면에 그려진 범위와 정확히 일치 */
+function bandHits(b){
+  if (!b) return [];
+  const x0=Math.min(b.x0,b.x1), x1=Math.max(b.x0,b.x1);
+  const y0=Math.min(b.y0,b.y1), y1=Math.max(b.y0,b.y1);
+  return S.n.filter(n=>{
+    if (UI.layers[T[n.ty].ly]===false) return false;
+    const r = nodeRect(n);
+    return r.x >= x0 && r.x + r.w <= x1 && r.y >= y0 && r.y + r.h <= y1;
+  });
+}
 function drawBand(){
   const g = $('#gOverlay'); clearBand();
   if (!band) return;
-  g.appendChild(el('rect',{ class:'band', x:Math.min(band.x0,band.x1), y:Math.min(band.y0,band.y1),
-    width:Math.abs(band.x1-band.x0), height:Math.abs(band.y1-band.y0) }));
+  const x0=Math.min(band.x0,band.x1), x1=Math.max(band.x0,band.x1);
+  const y0=Math.min(band.y0,band.y1), y1=Math.max(band.y0,band.y1);
+  g.appendChild(el('rect',{ class:'band', x:x0, y:y0, width:x1-x0, height:y1-y0 }));
+  const hit = new Set(bandHits(band).map(n=>n.id));
+  REF.nodes.forEach((node,id)=>node.classList.toggle('willsel', hit.has(id)));
+  $('#hudSel').textContent = hit.size ? `${hit.size}개 선택 예정` : '범위 안에 들어온 장비만 선택';
 }
-const clearBand = () => [...$('#gOverlay').querySelectorAll('.band')].forEach(e=>e.remove());
+function clearBand(){
+  [...$('#gOverlay').querySelectorAll('.band')].forEach(e=>e.remove());
+  REF.nodes.forEach(node=>node.classList.remove('willsel'));
+}
 
 /* ── 빠른 추가 (캔버스 더블클릭) ───────────────────────────────────────── */
 function openQuickAdd(wx, wy, sx, sy){

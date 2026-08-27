@@ -161,16 +161,18 @@ function genRandom(profileKey){
     try { doc = assemble(rollSpec(prof ? prof.bias : null), prof); }
     catch(err){ console.warn('조립 실패', err); continue; }
     const prev = S; S = doc;
-    let errs = 99, fails = 99;
+    let errs = 99, fails = 99, warns = 99;
     try {
       const res = validateAll();
       errs  = res.issues.filter(i=>i.lv==='e').length;
       fails = res.flows.filter(f=>!f.r.ok).length;
+      warns = res.issues.filter(i=>i.lv==='w').length;
     } catch(err){ console.warn('검증 실패', err); }
     S = prev;
-    const score = fails*10 + errs;
+    /* 통신이 되는가(하드) 를 먼저 보고, 같은 조건이면 경고가 적은 쪽을 고른다 */
+    const score = fails*1000 + errs*100 + warns;
     if (score < bestScore){ bestScore = score; best = doc; }
-    if (score === 0) return doc;
+    if (fails===0 && errs===0 && warns<=2) return doc;
   }
   return best || blankDoc();
 }

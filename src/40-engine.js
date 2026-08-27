@@ -711,7 +711,7 @@ function validateAll(){
 
   /* IP */
   S.n.forEach(n=>{
-    if (!T[n.ty].host || n.ty==='internet' || isTrans(n)) return;
+    if (!T[n.ty].host || n.ty==='internet' || n.ty==='wan' || isTrans(n)) return;
     if (!bareIp(n.p.ip)) E(`${n.p.name} IP 미설정`, '통신에 필요한 IP 주소가 없습니다.', '속성 탭 → IP/CIDR 입력, 또는 상단 “IP 자동할당”.', {n:n.id});
     else if (!bareIp(n.p.gw) && !isRouter(n))
       W(`${n.p.name} 게이트웨이 없음`, '같은 대역 밖으로는 통신할 수 없습니다.', '같은 서브넷의 L3 장비 IP(또는 VIP)를 게이트웨이로 지정하세요.', {n:n.id});
@@ -815,7 +815,7 @@ function validateAll(){
   S.n.filter(n=>n.ty==='rdb').forEach(n=>{
     if ((n.p.dbha||'none')==='none')
       W(`${n.p.name} DB 이중화 없음`, '단일 인스턴스라 장애 시 서비스가 멈추고 데이터 손실 위험이 있습니다.', `${dbHaSuggest(n.p.eng)} 구성을 검토하세요.`, {n:n.id});
-    else if (!n.p.peer && !['rac','tac','fci'].includes(n.p.dbha))
+    else if (!n.p.peer && !['rac','tac','fci','group','patroni'].includes(n.p.dbha))
       W(`${n.p.name} 복제 대상 미지정`, `${(O_DBHA.find(x=>x[0]===n.p.dbha)||[])[1]} 로 설정했지만 상대 노드가 없습니다.`, '상대 노드를 지정하고 두 노드를 링크로 연결하세요.', {n:n.id});
     if (n.p.dbha==='async' || (n.p.sync==='async' && n.p.dbha!=='none'))
       N(`${n.p.name} 비동기 복제`, '장애 시 마지막 트랜잭션이 유실될 수 있습니다 (RPO > 0).', '무손실이 필요하면 동기/반동기로 전환하세요. 다만 커밋 지연이 늘어납니다.', {n:n.id});
@@ -832,6 +832,7 @@ function validateAll(){
   });
 
   /* 이중화 일반 */
+  const soloSw = new Set();
   S.n.forEach(n=>{
     const ha = n.p.ha||'none';
     const sameKind = S.n.filter(x=>x.ty===n.ty && x.id!==n.id).length;
@@ -851,8 +852,19 @@ function validateAll(){
       if (peer){
         const theirs = new Set(edgesOf(peer.id).map(e=>otherEnd(e,peer.id)));
         const up = [...mine].filter(x=>theirs.has(x) && nodeById(x) && ['l2sw','l3sw','router','fw'].includes(nodeById(x).ty));
-        if (up.length===1 && (edgesOf(nodeById(up[0]).id).length>1) && !nodeById(up[0]).p.peer)
-          W(`${nodeById(up[0]).p.name} 단일 상단 스위치`, `${n.p.name} / ${peer.p.name} 이중화가 스위치 1대에만 물려 있어 그 스위치가 SPOF 입니다.`, '상단 스위치도 2대로 나누어 교차 연결하세요.', {n:up[0]});
+        if (up.length===1){
+          const swNode = nodeById(up[0]);
+          /* 같은 종류의 다른 스위치가 곁에 붙어 있으면 짝이 있는 것으로 본다
+             (p.peer 를 안 적어도 스위치끼리 링크로 이어져 있으면 이중화된 구성) */
+          const twinned = !!swNode.p.peer || edgesOf(swNode.id).some(e=>{
+            const o = nodeById(otherEnd(e, swNode.id)); return o && o.ty===swNode.ty; });
+          if (!twinned && edgesOf(swNode.id).length>1 && !soloSw.has(swNode.id)){
+            soloSw.add(swNode.id);
+            W(`${swNode.p.name} 단일 상단 스위치`,
+              `이중화한 장비들이 이 스위치 1대에만 물려 있어 스위치가 SPOF 입니다.`,
+              '상단 스위치를 2대로 나누어 교차 연결하세요.', {n:swNode.id});
+          }
+        }
       }
     }
   });

@@ -198,6 +198,8 @@ label.ck{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px}
 /* 드래그 보조 */
 .guide{stroke:var(--cu);stroke-width:1;stroke-dasharray:4 4;opacity:.85;pointer-events:none}
 .band{fill:var(--acc);fill-opacity:.09;stroke:var(--acc);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
+.node.willsel .nbody{stroke:var(--acc);stroke-width:2}
+.node.willsel .nband{opacity:1}
 .droptgt{fill:none;stroke:var(--acc);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
 .dropport{fill:var(--acc);opacity:.85;pointer-events:none}
 

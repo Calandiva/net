@@ -748,7 +748,7 @@ function switchTab(id){
   $$('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.pane===id));
   $$('.pane').forEach(p=>p.classList.toggle('on', p.id==='pane-'+id));
   if (id==='url') renderUrlPane();
-  if (id==='tut') renderTutorialPane();
+  if (id==='tut'){ if (TUT.cur) tutAutoGrade(); else renderTutorialPane(); }
 }
 
 /* ── 편집 후 공통 처리 ─────────────────────────────────────────────────── */
@@ -764,8 +764,7 @@ function afterEdit(){
   render(); renderInspector(); renderValPane(); renderFlowPane(); renderLayerPane(); renderHaPane();
   if ($('#pane-url').classList.contains('on')) renderUrlPane();
   if (typeof tutRefreshSoon==='function') tutRefreshSoon();
-  if (typeof tutStats==='function'){ const s=tutStats(); const el=$('#cntTut');
-    if (el){ el.textContent = s.done; el.className = 'cnt' + (s.done===s.total ? ' warn' : ''); } }
+  if (typeof tutBadge==='function') tutBadge();
   if (UI.trace) animateFlow(UI.trace);
   scheduleUrl();
 }

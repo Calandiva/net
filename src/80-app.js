@@ -341,4 +341,3 @@ async function boot(){
   switchTab('insp');
   if (!loaded) setTimeout(()=>toast('예제 구성도를 불러왔습니다. 상단 “랜덤 구성도”로 다른 아키텍처를 만들어 보세요.'), 500);
 }
-boot();

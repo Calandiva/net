@@ -3,7 +3,7 @@
 import io, os
 
 SRC = 'src'
-JS = ['20-catalog.js','30-core.js','40-engine.js','50-render.js','55-context.js','60-ui.js','70-generator.js','80-app.js','85-tutorial.js','86-tutorial-ui.js']
+JS = ['20-catalog.js','30-core.js','40-engine.js','50-render.js','55-context.js','60-ui.js','70-generator.js','80-app.js','85-tutorial.js','86-tutorial-ui.js','99-boot.js']
 
 def rd(n):
     return io.open(os.path.join(SRC, n), encoding='utf-8').read()
