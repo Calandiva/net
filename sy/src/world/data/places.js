@@ -18,21 +18,21 @@ import { KIND } from '../../config.js';
 export const PLACES = [
   // ── 김포 골드라인 ───────────────────────────────────────────────
   { name: '구래역', kind: KIND.STATION, lon: 126.6285, lat: 37.6437,
-    w: 34, h: 22, floors: 1, basement: 2,     // 김포한강7로 87 (구래동 6880-8)
+    w: 22, h: 15, floors: 1, basement: 2,     // 김포한강7로 87 (구래동 6880-8) · 지상은 출입구만
     note: '김포 골드라인 · 양촌 ↔ 마산',
     floorNames: { '-2': '승강장', '-1': '대합실', 1: '역사 출입구' },
     metro: { line: '김포 골드라인', order: 2 } },
   { name: '마산역', kind: KIND.STATION, lon: 126.6395, lat: 37.6392,
-    w: 30, h: 20, floors: 1, basement: 2,     // 김포한강3로 지하442 (마산동 641-3)
+    w: 20, h: 14, floors: 1, basement: 2,     // 김포한강3로 지하442 (마산동 641-3)
     note: '김포 골드라인 · 구래 ↔ 장기',
     metro: { line: '김포 골드라인', order: 3 } },
   { name: '양촌역', kind: KIND.STATION, lon: 126.6120, lat: 37.6478,
-    w: 30, h: 20, floors: 1, basement: 2,     // 양촌역길 107 (유현리 275-7)
+    w: 20, h: 14, floors: 1, basement: 2,     // 양촌역길 107 (유현리 275-7)
     note: '김포 골드라인 기점 · 산업단지 방면',
     metro: { line: '김포 골드라인', order: 1 } },
 
   // ── 상업 ───────────────────────────────────────────────────────
-  { name: '이마트 김포한강점', kind: KIND.MART, lon: 126.6301, lat: 37.6428,
+  { name: '이마트 김포한강점', kind: KIND.MART, lon: 126.6309, lat: 37.6420,
     w: 100, h: 66, floors: 4, basement: 2,    // 구래동 6880-9 · 구래역 4번 출구
     note: '구래역 4번 출구 · 10:00 ~ 23:00',
     floorNames: { '-2': '주차장', '-1': '주차장', 1: '식품매장', 2: '생활용품',
@@ -50,7 +50,7 @@ export const PLACES = [
     note: '민원실은 1층입니다' },
   { name: '마산동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6410, lat: 37.6418,
     w: 32, h: 20, floors: 3, basement: 0 },
-  { name: '양촌읍 행정복지센터', kind: KIND.PUBLIC, lon: 126.6040, lat: 37.6560,
+  { name: '양촌읍 행정복지센터', kind: KIND.PUBLIC, lon: 126.6032, lat: 37.6555,
     w: 36, h: 22, floors: 3, basement: 0 },   // 양곡1로68번길 37
   { name: '김포시 마산도서관', kind: KIND.PUBLIC, lon: 126.6428, lat: 37.6404,
     w: 36, h: 28, floors: 3, basement: 1,
@@ -66,13 +66,13 @@ export const PLACES = [
     w: 76, h: 24, floors: 4, basement: 0 },   // 김포한강9로 한가람초 교차로
   { name: '김포한가람중학교', kind: KIND.SCHOOL, lon: 126.6318, lat: 37.6472,
     w: 72, h: 22, floors: 4, basement: 0 },
-  { name: '나래중학교', kind: KIND.SCHOOL, lon: 126.6360, lat: 37.6432,
+  { name: '나래중학교', kind: KIND.SCHOOL, lon: 126.6352, lat: 37.6441,
     w: 72, h: 22, floors: 4, basement: 0 },
-  { name: '양곡초등학교', kind: KIND.SCHOOL, lon: 126.6068, lat: 37.6566,
+  { name: '양곡초등학교', kind: KIND.SCHOOL, lon: 126.6076, lat: 37.6559,
     w: 74, h: 24, floors: 4, basement: 0 },   // 양곡로 548
-  { name: '양곡중학교', kind: KIND.SCHOOL, lon: 126.6086, lat: 37.6582,
+  { name: '양곡중학교', kind: KIND.SCHOOL, lon: 126.6098, lat: 37.6577,
     w: 70, h: 22, floors: 4, basement: 0 },   // 양곡4로 138
-  { name: '양곡고등학교', kind: KIND.SCHOOL, lon: 126.6090, lat: 37.6600,
+  { name: '양곡고등학교', kind: KIND.SCHOOL, lon: 126.6102, lat: 37.6593,
     w: 84, h: 26, floors: 5, basement: 0,     // 양곡4로 138
     note: '급식실은 1층 끝' },
 

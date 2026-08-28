@@ -836,10 +836,15 @@ export function interiorTile(kind, variant) {
       for (let y = 3; y < S - 3; y += 6) px(ctx, 0, y, S, 1, shade(base, -0.1));
       break;
     }
-    case IN.EXIT: {
-      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
-      px(ctx, 2, 2, 12, 12, base);
-      px(ctx, 5, 5, 6, 6, shade(base, 0.3));
+    case IN.EXIT: { // 건물 현관 — 유리문과 비상구 표시
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.WALL]);
+      px(ctx, 1, 3, 14, 13, '#8fb8cc');          // 유리
+      px(ctx, 1, 3, 14, 1, '#d8e6ee');
+      px(ctx, 7, 3, 2, 13, INTERIOR_COLOR[IN.WALL]); // 문설주
+      px(ctx, 3, 9, 2, 2, '#e8d8a8');            // 손잡이
+      px(ctx, 10, 9, 2, 2, '#e8d8a8');
+      px(ctx, 4, 0, 8, 3, base);                 // 비상구 표시등
+      px(ctx, 6, 1, 4, 1, '#ffffff');
       break;
     }
     case IN.STAIR_UP: case IN.STAIR_DOWN: {
@@ -900,6 +905,28 @@ export function interiorTile(kind, variant) {
       px(ctx, 2, 3, 12, 10, base);
       px(ctx, 2, 3, 12, 2, shade(base, 0.2));
       px(ctx, 6, 6, 4, 4, '#f2f2ee');
+      break;
+    }
+    case IN.DOOR: { // 닫힌 문
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.WALL]);
+      px(ctx, 2, 1, 12, 14, base);
+      px(ctx, 2, 1, 12, 1, shade(base, 0.24));
+      px(ctx, 3, 3, 10, 10, shade(base, -0.12));
+      px(ctx, 11, 8, 2, 2, '#e8d8a8');   // 손잡이
+      break;
+    }
+    case IN.DOOR_OPEN: { // 열린 문 — 옆으로 젖혀져 있다
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 0, 0, 3, S, INTERIOR_COLOR[IN.WALL]);
+      px(ctx, 13, 0, 3, S, INTERIOR_COLOR[IN.WALL]);
+      px(ctx, 3, 0, 4, 14, base);
+      px(ctx, 3, 0, 4, 1, shade(base, 0.24));
+      break;
+    }
+    case IN.LOCKER: { // 복도 사물함
+      px(ctx, 0, 0, S, S, base);
+      for (let x = 1; x < S; x += 5) px(ctx, x, 1, 4, 14, shade(base, 0.1));
+      for (let x = 1; x < S; x += 5) px(ctx, x + 1, 7, 2, 1, shade(base, -0.35));
       break;
     }
     case IN.CAR: { // 주차된 차 (위에서 본 모습)

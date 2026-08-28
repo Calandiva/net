@@ -48,7 +48,7 @@ function init() {
   scene = new Scene(map, buildings);
   actors = new Actors(map);
   state.actors = actors;   // 그리는 쪽에서도 쓴다
-  traffic = new Traffic();
+  traffic = new Traffic(map);
   state.traffic = traffic;
   cam = new Camera();
   state.game = new GameState();
@@ -97,6 +97,7 @@ function init() {
   window.addEventListener('blur', () => keys.clear());
   canvas.addEventListener('pointerdown', (e) => {
     if (state.showHelp) { state.showHelp = false; return; }
+    if (!state.showWorldMap && hitMinimap(e)) { state.showWorldMap = true; return; }
     if (state.showWorldMap) {
       const rect = canvas.getBoundingClientRect();
       const hit = pickOnMap(state, e.clientX - rect.left, e.clientY - rect.top);
@@ -149,6 +150,15 @@ function nearestWalkable(tx, ty) {
   return { x: tx, y: ty };
 }
 
+// 미니맵을 눌렀는가 (누르면 전체지도가 열린다)
+function hitMinimap(e) {
+  const r = state.minimapRect;
+  if (!r || !state.showMinimap || state.mode !== 'outdoor') return false;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
 // 터치 입력 — 화면을 반으로 나눠 왼쪽은 이동, 오른쪽은 버튼
 function bindTouchEvents() {
   const pos = (e) => {
@@ -160,6 +170,7 @@ function bindTouchEvents() {
     const [x, y] = pos(e);
     // 대화창이 열려 있으면 그쪽이 먼저
     if (handleTouchUi(x, y)) { e.preventDefault(); return; }
+    if (hitMinimap(e)) { state.showWorldMap = true; e.preventDefault(); return; }
     touch.onDown(e.pointerId, x, y, window.innerWidth);
     e.preventDefault();
   });
@@ -291,7 +302,11 @@ function update(dt) {
     const c0y = Math.floor(view.y0 / TILE.chunk), c1y = Math.floor(view.y1 / TILE.chunk);
     actors.ensure(c0x, c0y, c1x, c1y);
     actors.update(dt, c0x, c0y, c1x, c1y);
-    traffic.update(dt, state.player);
+    const pad = 120;
+    traffic.update(dt, state.player, {
+      left: cam.left - pad, top: cam.top - pad,
+      right: cam.left + cam.viewW + pad, bottom: cam.top + cam.viewH + pad,
+    });
     cam.follow(state.player.x, state.player.y, dt);
     updatePlaceName();
     checkGoal();
@@ -299,6 +314,10 @@ function update(dt) {
     cam.follow(state.player.x, state.player.y, dt,
       { w: state.interior.w * S, h: state.interior.h * S });
     state.placeName = `${state.interiorBuilding.name} · ${floorLabel(state.floor)}`;
+    // 방 안에 들어서면 그 방은 밝아진다
+    const rIdx = state.interior.roomIndexAt(
+      Math.floor(state.player.x / S), Math.floor(state.player.y / S));
+    if (rIdx >= 0) state.interior.reveal(rIdx);
   }
 
   updatePrompt();
@@ -387,6 +406,14 @@ function nearestInteriorTarget() {
       return { type: 'gizmo', gizmo: g, label: g.name };
     }
   }
+  // 옆에 닫힌 문이 있으면 열 수 있다
+  for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+    if (it.tileAt(tx + dx, ty + dy) === IN.DOOR) {
+      const room = it.rooms.find((r) => r.door && r.door.x === tx + dx && r.door.y === ty + dy);
+      return { type: 'door', x: tx + dx, y: ty + dy, label: room ? room.name : '문' };
+    }
+  }
+
   const here = it.tileAt(tx, ty);
   if (here === IN.EXIT) return { type: 'exit', label: '나가기' };
   if (here === IN.STAIR_UP) return { type: 'stair', delta: 1, label: '올라가기' };
@@ -399,7 +426,8 @@ function updatePrompt() {
   const t = state.mode === 'outdoor' ? nearestOutdoorTarget() : nearestInteriorTarget();
   state.target = t;
   if (!t) { state.prompt = ''; return; }
-  const verb = t.type === 'enter' ? '들어가기'
+  const verb = t.type === 'door' ? '문 열기'
+    : t.type === 'enter' ? '들어가기'
     : t.type === 'exit' ? '나가기'
     : t.type === 'cat' ? '쓰다듬기'
     : t.type === 'stair' ? t.label
@@ -417,7 +445,19 @@ function interact() {
     case 'stair': return changeFloor(nextFloor(state.floor, t.delta));
     case 'elevator': return openPicker();
     case 'cat': return petCat(t.cat);
+    case 'door': return openDoor(t);
     case 'gizmo': return useGizmo(t.gizmo);
+  }
+}
+
+// 문을 열면 그 방이 보인다
+function openDoor(target) {
+  const it = state.interior;
+  it.setTile(target.x, target.y, IN.DOOR_OPEN);
+  const idx = it.rooms.findIndex((r) => r.door && r.door.x === target.x && r.door.y === target.y);
+  if (idx >= 0) {
+    it.reveal(idx);
+    toast(`${it.rooms[idx].name}`);
   }
 }
 

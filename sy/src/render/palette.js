@@ -103,6 +103,9 @@ export const INTERIOR_COLOR = {
   [IN.SEAT]: '#8f4a4a',
   [IN.SCREEN]: '#d8d8d0',
   [IN.CART]: '#b8bcc2',
+  [IN.DOOR]: '#8a6a45',
+  [IN.DOOR_OPEN]: '#8a6a45',
+  [IN.LOCKER]: '#7f8f9c',
 };
 
 // ── 인물 ────────────────────────────────────────────────────────────────

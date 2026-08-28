@@ -92,6 +92,7 @@ function drawMinimap(ctx, state, H, W) {
   // 터치 화면에서는 조이스틱 자리를 비켜 오른쪽 위에 붙인다
   const x = state.isTouch ? W - size - 12 : 12;
   const y = state.isTouch ? 56 : H - size - 12;
+  state.minimapRect = { x, y, w: size, h: size };   // 눌러서 전체지도를 열 수 있게
   panel(ctx, x - 4, y - 4, size + 8, size + 8);
 
   const mm = state.minimap;
@@ -126,7 +127,8 @@ function drawMinimap(ctx, state, H, W) {
 
   ctx.strokeStyle = UI_COLOR.minimapEdge;
   ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-  drawText(ctx, '← 양촌  ·  구래 →', x + size / 2, y + size + 14,
+  drawText(ctx, state.isTouch ? '눌러서 전체지도' : '클릭 · Tab 전체지도',
+    x + size / 2, y + size + 14,
     { size: 10, align: 'center', color: UI_COLOR.textDim });
 }
 

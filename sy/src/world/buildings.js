@@ -134,6 +134,28 @@ export function buildingAddress(rect, roads) {
   return `${best.seg.name} ${number}`;
 }
 
+// 이 자리가 길 위인가 (점검 스크립트에서도 쓴다)
+// carriageway 만 볼지(차도), 보도까지 볼지 고를 수 있다.
+// 건물이 보도에 딱 붙는 것은 정상이고, 차도를 물면 차가 건물을 통과하게 된다.
+export function hitsRoad(rect, roads, carriagewayOnly = false) {
+  const near = roads.index.query(rect.x - 10, rect.y - 10,
+    rect.x + rect.w + 10, rect.y + rect.h + 10);
+  for (const seg of near) {
+    const pad = carriagewayOnly ? seg.spec.width / 2 + 0.5 : seg.half + 0.5;
+    if (segmentHitsRect(seg, rect, pad)) return true;
+  }
+  return false;
+}
+
+// 이미 놓인 건물과 겹치는가
+function overlapsPlaced(rect, index) {
+  for (const other of index.query(rect.x - 2, rect.y - 2,
+      rect.x + rect.w + 2, rect.y + rect.h + 2)) {
+    if (rectsOverlap(rect, other, 1)) return true;
+  }
+  return false;
+}
+
 let nextId = 1;
 
 // 단지별로 실제 자리를 잡은 동 수를 센다 (번호를 건너뛰지 않게)
@@ -155,16 +177,27 @@ function makeBuilding(spec, roads, index, placed) {
   if (rect.w < BUILDING.minTiles || rect.h < BUILDING.minTiles) return null;
 
   // 이미 놓인 건물과 겹치면 버린다
-  for (const other of index.query(rect.x - 2, rect.y - 2,
-      rect.x + rect.w + 2, rect.y + rect.h + 2)) {
-    if (rectsOverlap(rect, other, 1)) return null;
-  }
-  // 길 위에 올라앉아도 버린다
-  if (!spec.landmark) {
-    const near = roads.index.query(rect.x - 8, rect.y - 8, rect.x + rect.w + 8, rect.y + rect.h + 8);
-    for (const seg of near) {
-      if (segmentHitsRect(seg, rect, seg.half + 0.5)) return null;
+  if (overlapsPlaced(rect, index)) return null;
+  // 길 위에 올라앉으면 버린다.
+  // 랜드마크는 버릴 수 없으니 대신 길에서 비켜날 자리를 찾는다 — 안 그러면 차가 건물을 통과한다.
+  if (spec.landmark) {
+    // 랜드마크는 버릴 수 없으니 차도를 물면 옆으로 비켜 세운다
+    if (hitsRoad(rect, roads, true)) {
+      for (let step = 2; step <= 20; step += 2) {
+        let moved = false;
+        for (const [dx, dy] of [[0, step], [0, -step], [step, 0], [-step, 0],
+          [step, step], [-step, step], [step, -step], [-step, -step]]) {
+          const moveRect = { x: rect.x + dx, y: rect.y + dy, w: rect.w, h: rect.h };
+          if (hitsRoad(moveRect, roads, true) || overlapsPlaced(moveRect, index)) continue;
+          rect.x = moveRect.x; rect.y = moveRect.y;
+          moved = true;
+          break;
+        }
+        if (moved) break;
+      }
     }
+  } else if (hitsRoad(rect, roads)) {
+    return null;
   }
 
   // 아파트 동은 자리를 잡은 순서대로 101동, 102동 … 번호를 매긴다.

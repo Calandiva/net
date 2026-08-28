@@ -77,6 +77,7 @@ export function drawBuildingLabels(ctx, cam, map, player) {
 // 실내 — 방 이름
 export function drawRoomLabels(ctx, cam, interior) {
   for (const room of interior.rooms) {
+    if (room.seen === false) continue;   // 아직 문을 안 연 방
     const wx = (room.x + room.w / 2) * S, wy = (room.y + 1) * S;
     const [sx, sy] = cam.worldToScreen(wx, wy);
     const view = viewSize(ctx);

@@ -9,6 +9,13 @@ import { ROAD_CLASS } from '../config.js';
 
 const S = TILE.size;
 
+// 화면(+여유) 안에 있는가
+function inView(car, view) {
+  if (!view) return true;
+  return car.x >= view.left && car.x <= view.right &&
+    car.y >= view.top && car.y <= view.bottom;
+}
+
 // 도로 하나를 방향별 차선 두 개로 만든다
 function makeLanes(road) {
   const spec = ROAD_CLASS[road.cls];
@@ -30,7 +37,8 @@ function makeLanes(road) {
 }
 
 export class Traffic {
-  constructor() {
+  constructor(map) {
+    this.map = map;
     this.lanes = [];
     for (const road of ROADS) this.lanes.push(...makeLanes(road));
 
@@ -80,10 +88,18 @@ export class Traffic {
     }
   }
 
-  update(dt, player) {
+  // view 는 화면 범위(월드 픽셀). 그 밖의 차는 위치만 굴리고 검사는 건너뛴다 —
+  // 안 그러면 차 천 대가 매 프레임 온 지도의 청크를 만들어 낸다.
+  update(dt, player, view) {
     for (const car of this.cars) {
       const lane = this.lanes[car.lane];
       // 앞에 사람이 있으면 선다
+      if (!inView(car, view)) {   // 화면 밖 차는 그냥 굴러간다
+        car.dist += car.speed * dt * lane.sign;
+        const far = this.locate(lane, car.dist);
+        car.x = far.x; car.y = far.y; car.angle = far.angle;
+        continue;
+      }
       const ahead = TRAFFIC.stopDistance;
       const dx = player.x - car.x, dy = player.y - car.y;
       const forwardX = Math.cos(car.angle), forwardY = Math.sin(car.angle);
@@ -95,6 +111,12 @@ export class Traffic {
       car.dist += car.speed * dt * lane.sign;
       const p = this.locate(lane, car.dist);
       car.x = p.x; car.y = p.y; car.angle = p.angle;
+      // 길이 건물을 스쳐 지나가는 구간에서는 차를 감춘다 (건물을 뚫고 가는 것처럼 보이지 않게).
+      // 화면 근처, 그것도 이미 만들어 둔 청크에서만 확인한다.
+      if (this.map && inView(car, view)) {
+        const tx = Math.floor(car.x / S), ty = Math.floor(car.y / S);
+        car.hidden = this.map.hasChunk(tx, ty) && this.map.isSolid(tx, ty);
+      }
     }
   }
 

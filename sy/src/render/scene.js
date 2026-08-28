@@ -267,13 +267,21 @@ export class Scene {
   }
 
   drawCar(ctx, car) {
+    if (car.hidden) return;                 // 건물이나 지붕 밑으로 들어간 차는 안 보인다
     const sprite = carSprite(car.kind, car.color, carDirIndex(car.angle));
     const half = sprite.width / 2;
+    // 그림자는 차체 모양으로 (네모난 그림자는 어색하다)
+    const len = car.kind === 'bus' ? 44 : car.kind === 'truck' ? 36 : 24;
+    const wide = car.kind === 'car' ? 10 : 12;
+    ctx.save();
     ctx.globalAlpha = RENDER.shadowAlpha;
     ctx.fillStyle = '#000000';
-    ctx.fillRect(Math.round(car.x - half + 2), Math.round(car.y - half + 4),
-      sprite.width - 4, sprite.height - 6);
-    ctx.globalAlpha = 1;
+    ctx.translate(car.x + 1, car.y + 3);
+    ctx.rotate(car.angle);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, len / 2, wide / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     ctx.drawImage(sprite, Math.round(car.x - half), Math.round(car.y - half));
   }
 
@@ -310,6 +318,12 @@ export class Scene {
       for (let x = x0; x <= x1; x++) {
         const t = it.tiles[y * it.w + x];
         if (t === IN.VOID) continue;
+        // 문을 열지 않은 방은 어둡다 — 안이 안 보인다
+        if (!it.visibleAt(x, y)) {
+          ctx.fillStyle = INTERIOR_COLOR[IN.VOID];
+          ctx.fillRect(x * S, y * S, S, S);
+          continue;
+        }
         // 벽·가구 아래에도 바닥을 먼저 깔아 둔다
         if (t !== IN.FLOOR && t !== IN.WALL) {
           ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3), x * S, y * S);
@@ -319,6 +333,7 @@ export class Scene {
     }
 
     for (const g of state.interiorGizmos) {
+      if (!it.visibleAt(g.tx, g.ty)) continue;   // 어두운 방 안의 물건은 안 보인다
       ctx.drawImage(gizmoSprite(g.icon, state.game.used.has(g.id)), g.tx * S, g.ty * S - 4);
     }
 

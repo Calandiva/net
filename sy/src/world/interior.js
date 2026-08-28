@@ -20,8 +20,12 @@ export function floorList(b) {
 // 실내 한 층. 결과는 그때그때 만들고 나가면 버린다 (작아서 부담 없다).
 export function makeInterior(b, floor) {
   const rng = makeRng(SEED, 'interior', b.seed, b.name, floor);
-  const w = clampInt(Math.round(b.w * INTERIOR.scale), INTERIOR.minW, INTERIOR.maxW);
-  const h = clampInt(Math.round(b.h * INTERIOR.scale), INTERIOR.minH, INTERIOR.maxH);
+  // 단독주택·농막은 실내도 작다. 큰 건물만 넓게.
+  const small = b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE;
+  const minW = small ? 13 : INTERIOR.minW;
+  const minH = small ? 11 : INTERIOR.minH;
+  const w = clampInt(Math.round(b.w * INTERIOR.scale), minW, INTERIOR.maxW);
+  const h = clampInt(Math.round(b.h * INTERIOR.scale), minH, INTERIOR.maxH);
   const tiles = new Uint8Array(w * h).fill(IN.FLOOR);
   const at = (x, y) => y * w + x;
   const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < w && y < h) tiles[at(x, y)] = v; };
@@ -64,6 +68,9 @@ export function makeInterior(b, floor) {
     if (exit) for (let y = corridorY; y < h - 1; y++) set(exit.x, y, IN.FLOOR);
   }
 
+  // 복도에 그 건물다운 것들을 놓는다
+  decorateCorridor(b, floor, w, h, corridorY, set, get, rng);
+
   // 방 이름과 가구. 특수 층(마트·주차장·상영관)은 이미 이름과 배치가 정해져 있다.
   const namer = roomNamer(b, floor, rng, layout);
   rooms.forEach((room, i) => {
@@ -94,6 +101,19 @@ export function makeInterior(b, floor) {
     }
   }
 
+  // 어느 칸이 어느 방인지 (문을 열기 전에는 그 방이 안 보인다)
+  const roomAt = new Int16Array(w * h).fill(-1);
+  rooms.forEach((room, i) => {
+    for (let y = room.y; y < room.y + room.h; y++) {
+      for (let x = room.x; x < room.x + room.w; x++) {
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        roomAt[y * w + x] = i;
+      }
+    }
+    // 문이 없는 방(마트 매장·주차장 같은 통짜 공간)은 처음부터 보인다
+    if (!room.door) room.seen = true;
+  });
+
   // 상호작용 물건을 놓을 자리 — 벽에 붙은 빈 바닥
   const slots = [];
   for (let y = 1; y < h - 1; y++) {
@@ -104,7 +124,21 @@ export function makeInterior(b, floor) {
   }
 
   return {
-    building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout,
+    building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout, roomAt,
+    // 이 칸이 지금 보이는가 (문을 안 연 방은 어둡다)
+    visibleAt(x, y) {
+      if (x < 0 || y < 0 || x >= w || y >= h) return false;
+      const idx = roomAt[y * w + x];
+      return idx < 0 || rooms[idx].seen;
+    },
+    // 방을 밝힌다
+    reveal(idx) {
+      if (idx >= 0 && idx < rooms.length) rooms[idx].seen = true;
+    },
+    roomIndexAt(x, y) {
+      if (x < 0 || y < 0 || x >= w || y >= h) return -1;
+      return roomAt[y * w + x];
+    },
     isSolid(x, y) {
       if (x < 0 || y < 0 || x >= w || y >= h) return true;
       return solidSet.has(tiles[y * w + x]);
@@ -135,7 +169,7 @@ function layoutOf(kind, floor, b) {
   return 'rooms';
 }
 
-// 한 줄에 방을 여러 개 만든다
+// 한 줄에 방을 여러 개 만든다. 복도 쪽에는 문이 달린다.
 function makeRoomRow(y0, y1, rooms, w, h, set, rng, top) {
   const height = y1 - y0;
   if (height < INTERIOR.minRoom) return;
@@ -150,8 +184,9 @@ function makeRoomRow(y0, y1, rooms, w, h, set, rng, top) {
     const doorX = x + Math.floor((right - x) / 2);
     const wallY = top ? y1 - 1 : y0;
     for (let xx = x; xx < right; xx++) set(xx, wallY, IN.WALL);
-    set(doorX, wallY, IN.FLOOR);
-    rooms.push({ x, y: top ? y0 : y0 + 1, w: right - x, h: height - 1, door: { x: doorX, y: wallY } });
+    set(doorX, wallY, IN.DOOR);        // 닫힌 문 — 열어야 방이 보인다
+    rooms.push({ x, y: top ? y0 : y0 + 1, w: right - x, h: height - 1,
+      door: { x: doorX, y: wallY }, seen: false });
     x = right + 1;
   }
 }
@@ -197,6 +232,35 @@ function fillOpen(tiles, w, h, set, get, rng, b, floor, layout, rooms) {
       if (rng.chance(0.7)) set(x, y, IN.MACHINE);
       if (rng.chance(0.3)) set(x + 1, y, IN.SHELF);
     }
+  }
+}
+
+// 복도 꾸미기 — 건물마다 다르게
+function decorateCorridor(b, floor, w, h, corridorY, set, get, rng) {
+  const put = (x, y, v) => { if (get(x, y) === IN.FLOOR) set(x, y, v); };
+  switch (b.kind) {
+    case KIND.SCHOOL:
+      // 복도 벽을 따라 사물함
+      for (let x = 7; x < w - 3; x += 2) {
+        if (rng.chance(0.75)) put(x, corridorY - 1, IN.LOCKER);
+      }
+      break;
+    case KIND.PUBLIC: case KIND.STATION:
+      // 1층에는 안내 카운터
+      if (floor === 1) {
+        for (let x = Math.floor(w / 2) - 2; x <= Math.floor(w / 2) + 2; x++) {
+          put(x, corridorY - 1, IN.COUNTER);
+        }
+      }
+      break;
+    case KIND.HOSPITAL:
+      for (let x = 8; x < w - 4; x += 6) put(x, corridorY - 1, IN.COUNTER);
+      break;
+    case KIND.TOWER: case KIND.SHOP:
+      for (let x = 8; x < w - 4; x += 7) if (rng.chance(0.5)) put(x, corridorY - 1, IN.PLANT);
+      break;
+    default:
+      break;
   }
 }
 
@@ -308,11 +372,35 @@ function roomNamer(b, floor, rng, layout) {
   return (i) => pool[i % pool.length];
 }
 
-// 방에 가구 놓기
+// 방에 가구 놓기 — 건물 종류마다 배치가 다르다
 function furnish(room, layout, set, get, rng, b) {
   const inside = (x, y) => x > room.x && x < room.x + room.w - 1 &&
     y > room.y && y < room.y + room.h - 1;
   const put = (x, y, v) => { if (inside(x, y) && get(x, y) === IN.FLOOR) set(x, y, v); };
+
+  // 교실 — 책상을 줄 맞춰 놓고 앞에 교탁
+  if (b.kind === KIND.SCHOOL && /반$/.test(room.name || '')) {
+    for (let y = room.y + 2; y < room.y + room.h - 1; y += 2) {
+      for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+    }
+    put(room.x + Math.floor(room.w / 2), room.y + 1, IN.COUNTER);
+    return;
+  }
+  // 세대 — 현관 쪽에 신발장, 안쪽에 침대와 식탁
+  if (b.kind === KIND.APARTMENT || b.kind === KIND.HOUSE) {
+    put(room.x + 1, room.y + 1, IN.SHELF);
+    put(room.x + room.w - 2, room.y + 1, IN.BED);
+    put(room.x + Math.floor(room.w / 2), room.y + Math.floor(room.h / 2), IN.TABLE);
+    if (rng.chance(0.5)) put(room.x + 1, room.y + room.h - 2, IN.PLANT);
+    return;
+  }
+  // 사무실·민원실 — 책상을 두 줄로
+  if (b.kind === KIND.PUBLIC || b.kind === KIND.TOWER || b.kind === KIND.STATION) {
+    for (let y = room.y + 1; y < room.y + room.h - 1; y += 3) {
+      for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+    }
+    return;
+  }
 
   const kit = furnitureKit(b.kind, room.name);
   const count = Math.max(1, Math.floor(room.w * room.h * 0.16));

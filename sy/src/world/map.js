@@ -288,6 +288,11 @@ export class WorldMap {
     return { ground: c.ground[i], prop: c.prop[i], solid: c.solid[i] };
   }
 
+  // 이미 만들어 둔 청크인가 (없는 곳을 조회하다 청크를 새로 만들지 않으려고)
+  hasChunk(tx, ty) {
+    return this.chunks.has(WorldMap.key(Math.floor(tx / CH), Math.floor(ty / CH)));
+  }
+
   isSolid(tx, ty) {
     if (!this.inBounds(tx, ty)) return true;   // 지도 밖은 벽
     const c = this.chunk(Math.floor(tx / CH), Math.floor(ty / CH));

@@ -161,9 +161,9 @@ export const KIND = {
 
 // ── 실내 ────────────────────────────────────────────────────────────────
 export const INTERIOR = {
-  scale: 1.6,        // 외관 footprint 대비 실내 크기 배율 (안이 더 넓다)
-  minW: 15, minH: 15,   // 복도 + 위아래 방 한 줄이 들어갈 최소 크기
-  maxW: 44, maxH: 32,
+  scale: 2.4,        // 외관 footprint 대비 실내 크기 배율 (안이 더 넓다)
+  minW: 19, minH: 17,   // 복도 + 위아래 방 한 줄이 들어갈 최소 크기
+  maxW: 68, maxH: 48,
   corridorWidth: 3,
   minRoom: 4,        // 방 한 변 최소 타일
   elevatorFrom: 6,   // 이 층수 이상이면 계단 대신 엘리베이터
@@ -176,10 +176,11 @@ export const IN = {
   ELEVATOR: 6, COUNTER: 7, SHELF: 8, DESK: 9, PLANT: 10, RUG: 11,
   WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
   CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
+  DOOR: 21, DOOR_OPEN: 22, LOCKER: 23,
 };
 export const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
   IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
-  IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART];
+  IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER];
 
 // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
 export const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
@@ -195,8 +196,9 @@ export const NPC = {
 // ── 도로 위의 차 ────────────────────────────────────────────────────────
 export const TRAFFIC = {
   classes: ['expressway', 'arterial', 'main', 'local'], // 차가 다니는 도로 등급
-  speed: { expressway: 190, arterial: 120, main: 95, local: 60 }, // 타일/초가 아니라 픽셀/초
-  spacing: 26,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
+  // 픽셀/초. 걷기 78, 달리기 164 이므로 차가 조금 빠른 정도로 맞춘다.
+  speed: { expressway: 125, arterial: 88, main: 68, local: 46 },
+  spacing: 34,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
   colors: 8,          // 차 색 가짓수
   stopDistance: 34,   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
   stopWidth: 12,      // 차선 폭 기준 좌우 판정
