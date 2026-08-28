@@ -372,14 +372,27 @@ export class WorldMap {
     return kind;
   }
 
-  // 지금 서 있는 곳이 어느 동네인가 (행정동 이름표 중 가장 가까운 것)
+  // 지금 서 있는 곳이 어디인가 (이름 표시용).
+  // 단지·공원·산단처럼 이름 있는 구역이 먼저, 없으면 행정동, 그것도 아니면 가까운 산 이름.
   regionNameAt(tx, ty) {
-    let best = '', bestD = Infinity;
+    let best = null, bestArea = Infinity;
+    for (const r of this.regionIndex.queryPoint(tx, ty)) {
+      if (!r.name) continue;
+      const area = (r.bounds.maxX - r.bounds.minX) * (r.bounds.maxY - r.bounds.minY);
+      if (area >= bestArea) continue;
+      if (!pointInPath(tx, ty, r.path)) continue;
+      best = r.name; bestArea = area;
+    }
+    if (best) return best;
+    for (const a of this.areaLabels) {
+      if (a.path && pointInPath(tx, ty, a.path)) return a.name;
+    }
+    let near = '', nearD = Infinity;
     for (const a of this.areaLabels) {
       const d = Math.hypot(a.x - tx, a.y - ty);
-      if (d < bestD) { bestD = d; best = a.name; }
+      if (d < nearD) { nearD = d; near = a.name; }
     }
-    return best;
+    return near;
   }
 }
 

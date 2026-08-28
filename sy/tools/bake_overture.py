@@ -322,12 +322,12 @@ def bake_roads():
         name = name_of(r)
         for line in lines(r['geom']):
             for part in clip_line([list(project(p[0], p[1])) for p in line]):
-                pts = simplify(part, 0.4)
+                pts = simplify(part, 0.9)
                 if len(pts) < 2:
                     continue
                 length = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
                              for i in range(len(pts) - 1))
-                if length < 4 and not name:   # 아주 짧은 이름 없는 토막은 버린다
+                if length < 6 and not name:   # 아주 짧은 이름 없는 토막은 버린다
                     continue
                 kept += 1
                 out.append((name, cls, pts))
@@ -488,7 +488,7 @@ def bake_ground():
             pts = clip_polygon([list(project(x, y)) for x, y in ring])
             if len(pts) < 4:
                 continue
-            pts = simplify(pts + [pts[0]], 0.8)
+            pts = simplify(pts + [pts[0]], 1.4)
             if len(pts) < 4:
                 continue
             area = abs(sum(pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1]
@@ -519,7 +519,7 @@ def bake_ground():
         width = WATER_WIDTH.get(row.get('class') or '', 6)
         for line in lines(row['geom']):
             for part in clip_line([list(project(x, y)) for x, y in line]):
-                pts = simplify(part, 0.5)
+                pts = simplify(part, 0.9)
                 if len(pts) < 2:
                     continue
                 waterways.append((name_of(row), width, pts))
@@ -528,8 +528,19 @@ def bake_ground():
     # 위의 토지이용 구역이 그 위를 덮는다.
     CITY_DONG = ('구래동', '마산동', '장기동', '장기본동', '운양동')
 
-    # 행정동 이름표 (오픈 데이터)
+    # 산봉우리 이름 (가현산 · 학운산 …)
     labels = []
+    for row in load('land'):
+        if row.get('class') != 'peak' or row['geom']['type'] != 'Point':
+            continue
+        nm = name_of(row)
+        if not nm:
+            continue
+        x, y = project(row['geom']['coordinates'][0], row['geom']['coordinates'][1])
+        if -PAD <= x <= WORLD_W + PAD and -PAD <= y <= WORLD_H + PAD:
+            labels.append((nm, x, y, None))
+
+    # 행정동 이름표 (오픈 데이터)
     if os.path.exists(os.path.join(CACHE, 'admdong.json')):
         with io.open(os.path.join(CACHE, 'admdong.json'), encoding='utf-8') as f:
             adm = json.load(f)
@@ -549,10 +560,11 @@ def bake_ground():
                 cx = sum(p[0] for p in inside) / len(inside)
                 cy = sum(p[1] for p in inside) / len(inside)
                 if best is None or len(inside) > best[2]:
-                    best = (cx, cy, len(inside))
+                    best = (cx, cy, len(inside), ring)
             if best:
                 x, y = project(best[0], best[1])
-                labels.append((short, x, y))
+                ring = clip_polygon([list(project(p[0], p[1])) for p in best[3]])
+                labels.append((short, x, y, simplify(ring + [ring[0]], 2.0) if len(ring) > 3 else None))
             if short in CITY_DONG:
                 for poly in polys:
                     pts = clip_polygon([list(project(p[0], p[1])) for p in poly[0]])
@@ -582,10 +594,12 @@ def bake_ground():
                     (json.dumps(name, ensure_ascii=False) if name else 'null', width, coords))
     body.append('];')
     body.append('')
-    body.append('// 행정동 이름표 (오픈 데이터 · 통계청 행정동 경계)')
+    body.append('// 동네·산 이름표. path 가 있으면 그 안에 있을 때 이 이름을 쓴다.')
     body.append('export const AREA_LABELS = [')
-    for name, x, y in labels:
-        body.append("  { name: '%s', x: %s, y: %s }," % (name, num(x), num(y)))
+    for name, x, y, path in labels:
+        coords = ('[' + ','.join('[%s,%s]' % (num(px2), num(py2)) for px2, py2 in path) + ']') \
+            if path else 'null'
+        body.append("  { name: '%s', x: %s, y: %s, path: %s }," % (name, num(x), num(y), coords))
     body.append('];')
     write('ground.js', header('실제 토지이용 · 수계 · 지형') + '\n'.join(body) + '\n')
     print('ground.js  구역 %d · 물길 %d · 이름표 %d' % (len(areas), len(waterways), len(labels)))
