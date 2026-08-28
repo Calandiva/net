@@ -384,6 +384,7 @@ function update(dt) {
       right: cam.left + cam.viewW + pad, bottom: cam.top + cam.viewH + pad,
     });
     cam.follow(state.player.x, state.player.y, dt);
+    checkCarHit();
     updatePlaceName();
     noticeOutdoorEvent();
     checkGoal();
@@ -488,7 +489,8 @@ function movePlayer(dt) {
   if (!p.moving) { stuckTime = 0; return; }
 
   const running = KEYS.run.some((k) => keys.has(k)) || (touch && touch.running);
-  const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
+  const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1)
+    * (state.game.has('hit') ? PLAYER.hurtSpeed : 1);
   const len = Math.hypot(dx, dy) || 1;
   const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
 
@@ -814,10 +816,12 @@ function enterBuilding(b) {
   state.mode = 'interior';
   cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
   toast(`${b.name} · ${floorLabel(state.floor)}`);
+  checkImmediateEnding();
 }
 
 function setFloor(b, floor, place) {
   state.floor = floor;
+  if (floor < 0) state.game.bump('basement');   // 지하로 다닌 횟수
   state.interior = makeInterior(b, floor);
   // 오늘 이 층에 무슨 일이 있는가
   state.indoorEvent = pickIndoorEvent(b, floor);
@@ -826,6 +830,10 @@ function setFloor(b, floor, place) {
   if (state.indoorEvent && state.indoorEvent.notice) {
     toast(state.indoorEvent.notice);
     state.game.bump('seen_event');
+  }
+  // 다친 채로 병원 층에 들어가면 오늘은 거기서 끝난다
+  if (state.game.has('hit') && String(floorUse(b, floor)).includes('병원')) {
+    state.game.set('hospital', '다친 채로 병원에 갔다');
   }
   state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
     const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
@@ -858,6 +866,7 @@ function changeFloor(floor) {
   setFloor(state.interiorBuilding, floor, dir);
   cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
   toast(`${state.interiorBuilding.name} · ${floorLabel(floor)}`);
+  checkImmediateEnding();
 }
 
 function openPicker() {
@@ -901,6 +910,18 @@ function rideTo(stationName) {
   state.game.clock += 4 * 60; // 4분
   placeOutdoors(out.x, out.y);
   toast(`${stationName} 도착`);
+}
+
+// 차에 치이면 그 뒤로는 절뚝이며 걷는다. 하루가 끝나지는 않는다.
+function checkCarHit() {
+  if (state.game.has('hit')) return;
+  const car = traffic.hitting(state.player);
+  if (!car) return;
+  state.game.set('hit', '차도에서 차에 치였다');
+  state.game.clock += 6 * 60;             // 정신 차리는 데 걸린 시간
+  stopAutoWalk();
+  toast('차에 치였다. 다리를 절며 걷는다.');
+  toast('두원타워 3층에 병원이 있다.');
 }
 
 // ── 결말 ────────────────────────────────────────────────────────────────

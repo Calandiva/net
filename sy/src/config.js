@@ -102,6 +102,7 @@ export const PLAYER = {
   drawWidth: 14,
   drawHeight: 20,
   animFps: 7,
+  hurtSpeed: 0.52,       // 차에 치인 뒤 걷는 속도 배수
   stuckSeconds: 1.4,     // 움직이려는데 이만큼 제자리면 갇힌 것으로 본다
   stuckEpsilon: 18,      // 제자리 판정 기준(초당 픽셀) — 걷는 속도보다 한참 느리면 못 가는 것
   safeArea: 80,          // 갇힘 판정 — 이만큼(타일) 돌아다닐 수 있어야 안전하다
@@ -218,7 +219,9 @@ export const TRAFFIC = {
   speed: { expressway: 125, arterial: 88, main: 68, local: 46 },
   spacing: 34,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
   colors: 8,          // 차 색 가짓수
-  stopDistance: 34,   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
+  stopDistance: 34,
+  hitRadius: 12,           // 이만큼 가까우면 치인다(픽셀)
+  hitSpeed: 30,            // 이보다 느린 차는 치지 않는다   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
   stopWidth: 12,      // 차선 폭 기준 좌우 판정
 };
 

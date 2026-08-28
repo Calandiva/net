@@ -120,6 +120,17 @@ export class Traffic {
     }
   }
 
+  // 사람을 친 차 (없으면 null).
+  // 차는 앞에 선 사람을 보고 서지만, 옆에서 갑자기 뛰어들면 못 선다.
+  hitting(player) {
+    for (const car of this.cars) {
+      if (car.stopped || car.hidden) continue;
+      const d = Math.hypot(car.x - player.x, car.y - player.y);
+      if (d < TRAFFIC.hitRadius && car.speed > TRAFFIC.hitSpeed) return car;
+    }
+    return null;
+  }
+
   // 화면 안의 차만 넘겨준다
   *visible(left, top, right, bottom) {
     for (const car of this.cars) {

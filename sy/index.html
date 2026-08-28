@@ -148,6 +148,7 @@ const __M = Object.create(null);
     drawWidth: 14,
     drawHeight: 20,
     animFps: 7,
+    hurtSpeed: 0.52,       // 차에 치인 뒤 걷는 속도 배수
     stuckSeconds: 1.4,     // 움직이려는데 이만큼 제자리면 갇힌 것으로 본다
     stuckEpsilon: 18,      // 제자리 판정 기준(초당 픽셀) — 걷는 속도보다 한참 느리면 못 가는 것
     safeArea: 80,          // 갇힘 판정 — 이만큼(타일) 돌아다닐 수 있어야 안전하다
@@ -264,7 +265,9 @@ const __M = Object.create(null);
     speed: { expressway: 125, arterial: 88, main: 68, local: 46 },
     spacing: 34,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
     colors: 8,          // 차 색 가짓수
-    stopDistance: 34,   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
+    stopDistance: 34,
+    hitRadius: 12,           // 이만큼 가까우면 치인다(픽셀)
+    hitSpeed: 30,            // 이보다 느린 차는 치지 않는다   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
     stopWidth: 12,      // 차선 폭 기준 좌우 판정
   };
 
@@ -4391,6 +4394,17 @@ const __M = Object.create(null);
       }
     }
 
+    // 사람을 친 차 (없으면 null).
+    // 차는 앞에 선 사람을 보고 서지만, 옆에서 갑자기 뛰어들면 못 선다.
+    hitting(player) {
+      for (const car of this.cars) {
+        if (car.stopped || car.hidden) continue;
+        const d = Math.hypot(car.x - player.x, car.y - player.y);
+        if (d < TRAFFIC.hitRadius && car.speed > TRAFFIC.hitSpeed) return car;
+      }
+      return null;
+    }
+
     // 화면 안의 차만 넘겨준다
     *visible(left, top, right, bottom) {
       for (const car of this.cars) {
@@ -7519,6 +7533,55 @@ const __M = Object.create(null);
 
     // ── 양촌공단에 닿았을 때 ───────────────────────────────────────
     {
+      id: 'E31', title: '절뚝이며 도착', tag: 'bad', when: 'goal',
+      hint: '차에 치이고도 그냥 공단까지 가면',
+      test: (s) => s.has('hit'),
+      lines: ['무릎이 계속 시큰거렸다. 걸음이 반으로 줄었다.',
+        '공단 정문에 도착했을 때 바지에 아직 흙이 묻어 있었다.',
+        '"첫날부터 왜 그래요?" 아무 일도 아니라고 했다. 아무 일이었다.'],
+    },
+    {
+      id: 'E32', title: '병원까지', tag: 'odd', when: 'any',
+      hint: '차에 치인 뒤 두원타워 3층 병원으로 올라가면',
+      test: (s) => s.has('hit') && s.has('hospital'),
+      lines: ['접수대에 이름과 생년월일을 적었다. 손이 떨려서 두 번 썼다.',
+        '엑스레이는 깨끗했고, 파스 두 장과 사흘치 약을 받았다.',
+        '회사에 전화를 걸었다. "오늘은 못 갈 것 같습니다."',
+        '창밖으로 구래동이 잘 보였다. 오늘은 여기까지다.'],
+    },
+    {
+      id: 'E33', title: '하루 종일 같은 걸 들고', tag: 'good', when: 'goal',
+      hint: '받은 물건 하나를 끝까지 들고 도착하면',
+      test: (s) => s.item && s.count('items') === 1,
+      lines: ['받은 그대로 손에 들고 왔다. 쓸 일은 없었다.',
+        '탈의실 사물함에 넣어 두었다.',
+        '언젠가 쓸 날이 온다면 그날은 오늘 같은 날은 아닐 것이다.'],
+    },
+    {
+      id: 'E34', title: '손이 하나뿐이라', tag: 'odd', when: 'goal',
+      hint: '물건을 네 번 넘게 바꿔 들고 도착하면',
+      test: (s) => s.count('items') >= 4,
+      lines: ['받고 놓고 받고 놓았다. 구래동 곳곳에 내가 놓고 온 것이 있다.',
+        '마지막에 남은 건 처음 것도 아니고 제일 쓸모 있는 것도 아니었다.',
+        '공단 정문에서 그걸 내려다봤다. 이게 오늘의 결과다.'],
+    },
+    {
+      id: 'E35', title: '사건 셋을 지나서', tag: 'true', when: 'goal',
+      hint: '하루에 사건을 세 번 마주하고도 도착하면',
+      test: (s) => s.count('encounter') >= 3,
+      lines: ['오전 여덟 시에서 아홉 시 사이에 세 가지 일이 있었다.',
+        '누구에게 말해도 하나씩만 믿을 것이다.',
+        '작업복으로 갈아입으며 생각했다. 내일도 이 길로 다녀야 한다.'],
+    },
+    {
+      id: 'E36', title: '지하로만', tag: 'odd', when: 'goal',
+      hint: '지하층을 다섯 번 넘게 드나들고 도착하면',
+      test: (s) => s.count('basement') >= 5,
+      lines: ['주차장, 대합실, 창고, 기계실, 또 주차장.',
+        '햇빛을 거의 안 보고 구래에서 양촌까지 왔다.',
+        '정문에서 고개를 드니 눈이 부셨다.'],
+    },
+    {
       id: 'E06', title: '전부 만졌다', tag: 'true', when: 'goal',
       hint: '스무 가지 넘게 건드리고 도착하면',
       test: (s) => s.touched >= 20,
@@ -7528,12 +7591,12 @@ const __M = Object.create(null);
         '아직 아무 일도 시작하지 않았다.'],
     },
     {
-      id: 'E29', title: '소문난 아침', tag: 'good', when: 'goal',
-      hint: '길에서 만난 사람들과 여덟 번 넘게 말을 섞으면',
+      id: 'E29', title: '동네 한 바퀴', tag: 'good', when: 'goal',
+      hint: '여덟 사람 넘게 말을 섞고 도착하면',
       test: (s) => s.count('talked') >= 8,
-      lines: ['구래역 앞 자판기부터 양촌 정문까지, 만나는 사람마다 말을 걸었다.',
-        '누구는 길을 알려 줬고 누구는 자기 얘기를 했다.',
-        '첫 출근인데 아는 얼굴이 벌써 여덟이다.'],
+      lines: ['경비실, 상가 계단, 논둑, 정류장. 서 있는 사람마다 붙잡고 물었다.',
+        '길을 물었는데 대개는 자기 얘기를 했고, 그게 더 도움이 됐다.',
+        '첫 출근인데 아는 얼굴이 벌써 여덟이다. 아직 회사 사람은 하나도 모른다.'],
     },
     {
       id: 'E30', title: '목격자', tag: 'odd', when: 'goal',
@@ -8997,6 +9060,7 @@ const __M = Object.create(null);
         right: cam.left + cam.viewW + pad, bottom: cam.top + cam.viewH + pad,
       });
       cam.follow(state.player.x, state.player.y, dt);
+      checkCarHit();
       updatePlaceName();
       noticeOutdoorEvent();
       checkGoal();
@@ -9101,7 +9165,8 @@ const __M = Object.create(null);
     if (!p.moving) { stuckTime = 0; return; }
 
     const running = KEYS.run.some((k) => keys.has(k)) || (touch && touch.running);
-    const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
+    const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1)
+      * (state.game.has('hit') ? PLAYER.hurtSpeed : 1);
     const len = Math.hypot(dx, dy) || 1;
     const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
 
@@ -9427,10 +9492,12 @@ const __M = Object.create(null);
     state.mode = 'interior';
     cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
     toast(`${b.name} · ${floorLabel(state.floor)}`);
+    checkImmediateEnding();
   }
 
   function setFloor(b, floor, place) {
     state.floor = floor;
+    if (floor < 0) state.game.bump('basement');   // 지하로 다닌 횟수
     state.interior = makeInterior(b, floor);
     // 오늘 이 층에 무슨 일이 있는가
     state.indoorEvent = pickIndoorEvent(b, floor);
@@ -9439,6 +9506,10 @@ const __M = Object.create(null);
     if (state.indoorEvent && state.indoorEvent.notice) {
       toast(state.indoorEvent.notice);
       state.game.bump('seen_event');
+    }
+    // 다친 채로 병원 층에 들어가면 오늘은 거기서 끝난다
+    if (state.game.has('hit') && String(floorUse(b, floor)).includes('병원')) {
+      state.game.set('hospital', '다친 채로 병원에 갔다');
     }
     state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
       const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
@@ -9471,6 +9542,7 @@ const __M = Object.create(null);
     setFloor(state.interiorBuilding, floor, dir);
     cam.snap(state.player.x, state.player.y, { w: state.interior.w * S, h: state.interior.h * S });
     toast(`${state.interiorBuilding.name} · ${floorLabel(floor)}`);
+    checkImmediateEnding();
   }
 
   function openPicker() {
@@ -9514,6 +9586,18 @@ const __M = Object.create(null);
     state.game.clock += 4 * 60; // 4분
     placeOutdoors(out.x, out.y);
     toast(`${stationName} 도착`);
+  }
+
+  // 차에 치이면 그 뒤로는 절뚝이며 걷는다. 하루가 끝나지는 않는다.
+  function checkCarHit() {
+    if (state.game.has('hit')) return;
+    const car = traffic.hitting(state.player);
+    if (!car) return;
+    state.game.set('hit', '차도에서 차에 치였다');
+    state.game.clock += 6 * 60;             // 정신 차리는 데 걸린 시간
+    stopAutoWalk();
+    toast('차에 치였다. 다리를 절며 걷는다.');
+    toast('두원타워 3층에 병원이 있다.');
   }
 
   // ── 결말 ────────────────────────────────────────────────────────────────
