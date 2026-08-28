@@ -72,6 +72,13 @@ export function groundTile(kind, variant) {
       }
       break;
     }
+    case GROUND.ASPHALT: { // 상가 마당 — 아스팔트에 기름 자국과 주차선 조각
+      for (let i = 0; i < 20; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+        shade(base, rng.chance(0.5) ? 0.08 : -0.08));
+      if (variant === 0) px(ctx, 2, 0, 1, S, shade(base, 0.24));
+      if (variant === 3) px(ctx, 0, 6, S, 1, shade(base, -0.14));
+      break;
+    }
     case GROUND.ROAD: { // 아스팔트 알갱이
       for (let i = 0; i < 22; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
         shade(base, rng.chance(0.5) ? 0.1 : -0.1));
@@ -262,6 +269,29 @@ export function wallHeight(b) {
   return Math.min(BUILDING.wallHeightMax, 8 + b.floors * BUILDING.wallHeightPerFloor);
 }
 
+// 건물 한 채의 생김새를 시드에서 뽑는다.
+// 같은 종류라도 채마다 파사드·차양·옥상 구조물이 달라진다.
+function pickStyle(b, rng) {
+  const tall = b.floors >= 8;
+  const wide = b.w >= 10;
+  return {
+    facade: rng.pick(tall ? ['glass', 'glass', 'grid'] : ['grid', 'tile', 'glass']),
+    awning: (b.kind === KIND.SHOP || b.kind === KIND.MART) && rng.chance(0.55),
+    awningColor: rng.pick(SIGN_COLORS),
+    signs: b.kind === KIND.SHOP ? rng.int(1, 3) : 1,
+    pillar: b.kind === KIND.SHOP && b.floors >= 4 && rng.chance(0.4),   // 옥상 광고탑
+    tank: rng.chance(tall ? 0.7 : 0.35),                                // 물탱크
+    solar: rng.chance(b.kind === KIND.HOUSE ? 0.35 : 0.2),              // 태양광
+    penthouse: tall && rng.chance(0.5),                                 // 옥탑방
+    units: rng.chance(0.5),                                             // 실외기 줄
+    roofShape: rng.pick(['gable', 'flat', 'hip']),                      // 주택 지붕
+    chimney: b.kind === KIND.FACTORY && rng.chance(0.5),
+    docks: (b.kind === KIND.WAREHOUSE || b.kind === KIND.FACTORY) && wide,
+    piloti: b.kind === KIND.APARTMENT && rng.chance(0.45),              // 1층 필로티
+    ridge: rng.chance(0.5),                                             // 공장 지붕 골 방향
+  };
+}
+
 // 건물 한 채를 통째로 그린 캔버스. 아래 끝이 건물 남쪽 벽에 맞는다.
 export function buildingSprite(b) {
   const wh = wallHeight(b);
@@ -277,9 +307,10 @@ export function buildingSprite(b) {
     col = { wall: '#e8eeea', roof: '#dfe6e2', trim: '#b8c4bc', accent: '#cfe0d8' };
   }
   const rng = makeRng(SEED, 'sprite', b.seed, b.kind);
-  // 같은 종류라도 채마다 색을 조금씩 흔든다
-  const wall = shade(col.wall, rng.range(-0.06, 0.06));
-  const roof = shade(col.roof, rng.range(-0.07, 0.07));
+  const style = pickStyle(b, rng);
+  // 같은 종류라도 채마다 색을 꽤 다르게 흔든다
+  const wall = shade(col.wall, rng.range(-0.10, 0.10));
+  const roof = shade(col.roof, rng.range(-0.12, 0.12));
   const trim = col.trim;
   const roofH = b.h * S;
 
@@ -287,7 +318,7 @@ export function buildingSprite(b) {
   px(ctx, 0, 0, pw, roofH, roof);
   px(ctx, 0, 0, pw, 1, shade(roof, 0.18));
   px(ctx, 0, roofH - 1, pw, 1, shade(roof, -0.2));
-  drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng);
+  drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng, style);
 
   // 앞벽
   px(ctx, 0, roofH, pw, wh, wall);
@@ -296,8 +327,8 @@ export function buildingSprite(b) {
   px(ctx, 0, roofH, 1, wh, shade(wall, -0.12));
   px(ctx, pw - 1, roofH, 1, wh, shade(wall, -0.12));
 
-  drawWindows(ctx, b, pw, roofH, wh, wall, col, rng);
-  drawFrontDoor(ctx, b, pw, roofH, wh, col, rng);
+  drawWindows(ctx, b, pw, roofH, wh, wall, col, rng, style);
+  drawFrontDoor(ctx, b, pw, roofH, wh, col, rng, style);
 
   hit = canvas;
   buildingCache.set(key, hit);
@@ -308,7 +339,7 @@ export function buildingSprite(b) {
   return hit;
 }
 
-function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng) {
+function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng, style) {
   const dark = shade(roof, -0.16), light = shade(roof, 0.12);
   switch (b.kind) {
     case KIND.APARTMENT: case KIND.TOWER: {
@@ -334,18 +365,53 @@ function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng) {
       break;
     }
     case KIND.HOUSE: case KIND.FARMHOUSE: {
-      // 경사 지붕 — 가운데 용마루
-      const mid = Math.floor(roofH / 2);
-      px(ctx, 0, 0, pw, mid, shade(roof, 0.1));
-      px(ctx, 0, mid, pw, roofH - mid, dark);
-      px(ctx, 0, mid - 1, pw, 2, shade(roof, -0.35));
+      if (style.roofShape === 'flat') {
+        // 평지붕 — 옥상에 물탱크와 장독대, 가끔 태양광
+        px(ctx, 1, 1, pw - 2, roofH - 3, shade(roof, -0.06));
+        px(ctx, 1, 1, pw - 2, 1, light);
+        if (style.tank) { px(ctx, 4, 4, 7, 6, dark); px(ctx, 5, 5, 5, 2, light); }
+        if (style.solar) {
+          for (let x = pw - 16; x < pw - 4 && x > 2; x += 6) px(ctx, x, 5, 5, 8, '#3f5f8a');
+        }
+        for (let i = 0; i < 3; i++) px(ctx, pw - 10 + i * 3, roofH - 9, 2, 3, '#7a5a3a');
+      } else if (style.roofShape === 'hip') {
+        // 모임지붕 — 네 방향으로 흐른다
+        px(ctx, 0, 0, pw, roofH, shade(roof, 0.06));
+        for (let i = 0; i < Math.min(pw, roofH) / 2; i++) {
+          px(ctx, i, i, pw - i * 2, 1, shade(roof, 0.02 - i * 0.02));
+        }
+        px(ctx, 0, roofH - 2, pw, 2, dark);
+      } else {
+        // 박공지붕 — 가운데 용마루
+        const mid = Math.floor(roofH / 2);
+        px(ctx, 0, 0, pw, mid, shade(roof, 0.1));
+        px(ctx, 0, mid, pw, roofH - mid, dark);
+        px(ctx, 0, mid - 1, pw, 2, shade(roof, -0.35));
+        for (let x = 2; x < pw - 2; x += 5) px(ctx, x, 1, 1, roofH - 2, shade(roof, -0.06));
+      }
       break;
     }
     case KIND.FACTORY: case KIND.WAREHOUSE: {
-      // 톱날 지붕 + 환기구
-      for (let x = 2; x < pw - 4; x += 10) {
-        px(ctx, x, 2, 6, roofH - 5, dark);
-        px(ctx, x, 2, 6, 2, col.accent);
+      // 샌드위치 패널 골. 방향은 건물마다 다르다.
+      if (style.ridge) {
+        for (let x = 2; x < pw - 3; x += 9) {
+          px(ctx, x, 2, 5, roofH - 5, dark);
+          px(ctx, x, 2, 5, 2, shade(roof, 0.18));
+        }
+      } else {
+        for (let y = 2; y < roofH - 3; y += 9) {
+          px(ctx, 2, y, pw - 4, 5, dark);
+          px(ctx, 2, y, pw - 4, 2, shade(roof, 0.18));
+        }
+      }
+      // 지붕 환기구 줄
+      for (let x = 6; x < pw - 8; x += 16) px(ctx, x, Math.floor(roofH / 2) - 2, 6, 4, '#c8ccd0');
+      // 굴뚝
+      if (style.chimney) {
+        const cx2 = pw - 14;
+        px(ctx, cx2, 3, 6, 16, '#b8bec4');
+        px(ctx, cx2, 3, 6, 3, '#e2554a');
+        px(ctx, cx2 + 1, 6, 4, 2, '#8f979e');
       }
       break;
     }
@@ -377,62 +443,139 @@ function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng) {
       break;
     }
     default: {
-      // 상가 옥상 — 난간, 실외기 줄, 물탱크, 옥상 출입문
+      // 상가 옥상 — 난간, 실외기 줄, 물탱크, 옥탑방, 광고탑
       px(ctx, 1, 1, pw - 2, roofH - 3, shade(roof, -0.05));
       px(ctx, 1, 1, pw - 2, 1, light);
       px(ctx, 1, roofH - 3, pw - 2, 1, dark);
-      for (let x = 5; x < pw - 8; x += 11) {
-        if (!rng.chance(0.55)) continue;
-        px(ctx, x, 5, 7, 5, shade(roof, -0.2));
-        px(ctx, x + 1, 6, 5, 3, shade(roof, 0.1));
+      // 실외기 — 상가 옥상은 이것들로 빼곡하다
+      const acRows = Math.max(1, Math.floor(roofH / 26));
+      for (let r = 0; r < acRows; r++) {
+        const ay = 5 + r * 14;
+        if (ay + 6 > roofH - 6) break;
+        for (let x = 4; x < pw - 8; x += 10) {
+          if (!rng.chance(style.units ? 0.85 : 0.45)) continue;
+          px(ctx, x, ay, 7, 6, shade(roof, -0.24));
+          px(ctx, x + 1, ay + 1, 5, 3, shade(roof, 0.12));
+          px(ctx, x + 1, ay + 5, 5, 1, shade(roof, -0.34));
+        }
       }
-      if (roofH > 26) {
-        px(ctx, pw - 14, roofH - 14, 9, 8, dark);       // 옥상 출입문
+      // 배관과 난간 그림자
+      const pipeY = Math.floor(roofH * 0.72);
+      px(ctx, 3, pipeY, pw - 6, 1, shade(roof, -0.2));
+      if (rng.chance(0.5)) px(ctx, Math.floor(pw / 3), 3, 1, roofH - 8, shade(roof, -0.16));
+      if (roofH > 24) {
+        px(ctx, pw - 14, roofH - 14, 9, 8, dark);        // 옥상 출입문
         px(ctx, pw - 12, roofH - 12, 5, 5, shade(roof, 0.2));
       }
-      if (roofH > 20 && rng.chance(0.6)) {
+      if (style.tank && roofH > 18) {
         px(ctx, 4, roofH - 13, 8, 7, shade(roof, -0.28)); // 물탱크
         px(ctx, 5, roofH - 12, 6, 2, light);
+      }
+      if (style.penthouse && roofH > 26) {
+        px(ctx, Math.floor(pw / 2) - 7, 5, 15, 11, shade(roof, -0.18));
+        px(ctx, Math.floor(pw / 2) - 5, 7, 11, 4, shade(col.accent, 0.2));
+      }
+      if (style.pillar) {
+        // 옥상 광고탑 — 간판 기둥이 하늘로 솟아 있다
+        const sx = Math.floor(pw * 0.25);
+        px(ctx, sx, 2, 3, roofH - 6, '#8f959c');
+        px(ctx, sx - 5, 1, 13, 7, rng.pick(SIGN_COLORS));
+        px(ctx, sx - 3, 3, 9, 1, '#fffdf2');
       }
     }
   }
 }
 
-function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng) {
-  if (b.kind === KIND.APARTMENT) return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng);
+function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng, style) {
+  if (b.kind === KIND.APARTMENT) {
+    return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng, style);
+  }
   if (b.kind === KIND.FARMHOUSE && b.w < 6) return;
   const glass = shade(col.accent, rng.range(-0.05, 0.1));
-  const rows = Math.max(1, Math.min(4, Math.floor((wh - 8) / 9)));
-  const step = b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE ? 14 : 9;
-  for (let r = 0; r < rows; r++) {
-    const y = roofH + 4 + r * 9;
-    if (y + 5 > roofH + wh - 3) break;
-    for (let x = 4; x < pw - 6; x += step) {
-      if (rng.chance(0.12)) continue; // 불 꺼진 창
-      px(ctx, x, y, 5, 5, glass);
-      px(ctx, x, y, 5, 1, shade(glass, 0.25));
-      px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
+
+  // 창고·공장 앞면은 하역 도크 셔터가 늘어선다
+  if (b.kind === KIND.WAREHOUSE || b.kind === KIND.FACTORY) {
+    const y = roofH + Math.max(2, wh - 14);
+    if (style.docks) {
+      for (let x = 4; x < pw - 12; x += 18) {
+        px(ctx, x, y, 13, Math.min(12, wh - 3), shade(wall, -0.22));
+        for (let i = 1; i < 5; i++) px(ctx, x, y + i * 3, 13, 1, shade(wall, -0.32));
+      }
+    } else {
+      for (let x = 4; x < pw - 8; x += 14) px(ctx, x, y + 2, 9, 5, glass);
+    }
+    return;
+  }
+
+  if (style.facade === 'glass') {
+    // 커튼월 — 층마다 통유리 띠
+    for (let r = 0; ; r++) {
+      const y = roofH + 3 + r * 8;
+      if (y + 6 > roofH + wh - 4) break;
+      px(ctx, 2, y, pw - 4, 5, glass);
+      px(ctx, 2, y, pw - 4, 1, shade(glass, 0.28));
+      for (let x = 4; x < pw - 4; x += 7) px(ctx, x, y, 1, 5, shade(wall, -0.1));
+    }
+  } else if (style.facade === 'tile') {
+    // 타일 벽 — 작은 창이 드문드문
+    for (let y = roofH + 2; y < roofH + wh - 4; y += 4) {
+      px(ctx, 1, y, pw - 2, 1, shade(wall, -0.06));
+    }
+    for (let r = 0; ; r++) {
+      const y = roofH + 4 + r * 9;
+      if (y + 5 > roofH + wh - 4) break;
+      for (let x = 5; x < pw - 7; x += 12) {
+        if (rng.chance(0.2)) continue;
+        px(ctx, x, y, 6, 5, glass);
+        px(ctx, x, y + 4, 6, 1, shade(glass, -0.3));
+      }
+    }
+  } else {
+    // 격자 창 — 가장 흔한 모습
+    const step = 9;
+    for (let r = 0; ; r++) {
+      const y = roofH + 4 + r * 9;
+      if (y + 5 > roofH + wh - 4) break;
+      for (let x = 4; x < pw - 6; x += step) {
+        if (rng.chance(0.12)) continue;
+        px(ctx, x, y, 5, 5, glass);
+        px(ctx, x, y, 5, 1, shade(glass, 0.25));
+        px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
+      }
     }
   }
-  // 상가는 1층에 간판띠. 색은 건물마다 다르다 (실제 간판이 그렇듯)
-  if ((b.kind === KIND.SHOP || b.kind === KIND.MART) && wh > 14) {
-    const sign = b.kind === KIND.MART ? col.accent : rng.pick(SIGN_COLORS);
-    const y = roofH + wh - 14;
-    px(ctx, 1, y, pw - 2, 5, sign);
-    px(ctx, 1, y, pw - 2, 1, shade(sign, 0.25));
-    for (let x = 3; x < pw - 5; x += 4) px(ctx, x, y + 2, 2, 1, '#fffdf2');
-    // 위층에도 간판이 하나씩 붙는다
-    if (wh > 26 && rng.chance(0.7)) {
-      const y2 = roofH + wh - 26;
-      const sign2 = rng.pick(SIGN_COLORS);
-      px(ctx, 2, y2, Math.max(6, pw - 8), 4, sign2);
-      for (let x = 4; x < pw - 8; x += 4) px(ctx, x, y2 + 1, 2, 1, '#fffdf2');
+
+  // 상가는 1층 유리 파사드와 간판띠. 간판 수와 색은 건물마다 다르다.
+  if ((b.kind === KIND.SHOP || b.kind === KIND.MART || b.kind === KIND.TOWER) && wh > 14) {
+    // 1층 통유리
+    px(ctx, 1, roofH + wh - 9, pw - 2, 7, shade(col.accent, 0.3));
+    for (let x = 4; x < pw - 3; x += 6) px(ctx, x, roofH + wh - 9, 1, 7, shade(wall, -0.15));
+
+    const signCount = b.kind === KIND.MART ? 1 : style.signs;
+    for (let i = 0; i < signCount; i++) {
+      const y = roofH + wh - 14 - i * 11;
+      if (y < roofH + 2) break;
+      const sign = b.kind === KIND.MART ? col.accent : rng.pick(SIGN_COLORS);
+      const inset = i === 0 ? 1 : 3;
+      px(ctx, inset, y, pw - inset * 2, i === 0 ? 5 : 4, sign);
+      px(ctx, inset, y, pw - inset * 2, 1, shade(sign, 0.25));
+      for (let x = inset + 2; x < pw - inset - 3; x += 4) {
+        px(ctx, x, y + 2, 2, 1, '#fffdf2');
+      }
+    }
+    // 차양(어닝)
+    if (style.awning) {
+      const y = roofH + wh - 10;
+      for (let x = 1; x < pw - 3; x += 6) {
+        px(ctx, x, y, 5, 3, style.awningColor);
+        px(ctx, x, y + 3, 5, 1, shade(style.awningColor, -0.3));
+      }
     }
   }
 }
 
 // 아파트 앞면 — 세대 구획선과 발코니 띠, 그 사이 창문
-function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng) {
+function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng, style) {
   const unit = 22;                    // 세대 하나의 폭(픽셀)
   const glass = shade(col.accent, rng.range(-0.04, 0.08));
   const line = shade(wall, -0.16);
@@ -451,27 +594,34 @@ function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng) {
   }
   // 세대 사이 벽선
   for (let x = 0; x < pw; x += unit) px(ctx, x, roofH + 1, 1, wh - 3, line);
-  // 1층 출입구 캐노피
+  // 1층 — 필로티(기둥만 있는 층)인 단지가 있고, 아닌 단지가 있다
+  if (style.piloti) {
+    const y = roofH + wh - 9;
+    px(ctx, 1, y, pw - 2, 9, shade(wall, -0.42));
+    for (let x = 3; x < pw - 4; x += unit / 2) px(ctx, x, y, 3, 9, shade(wall, -0.05));
+  }
+  // 출입구 캐노피
   const dx = Math.max(2, Math.min(pw - 16, (b.door.x - b.x) * S));
   px(ctx, dx, roofH + wh - 8, 14, 8, shade(col.trim, -0.1));
   px(ctx, dx + 2, roofH + wh - 7, 10, 4, shade(col.accent, 0.15));
 }
 
-function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng) {
-  const doorW = Math.min(10, Math.max(5, Math.floor(pw / 5)));
-  const y = roofH + wh - 9;
+function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng, style) {
+  // 문은 언제나 앞면에 있다 (world/buildings.js 의 placeDoor 참고).
+  // 실제 출입구 타일 x 에 맞춰 그려서, 땅에 깔린 매트와 자리가 어긋나지 않게 한다.
+  const doorW = Math.min(12, Math.max(6, Math.floor(pw / 6)));
+  const y = roofH + wh - 10;
   const dark = shade(col.trim, -0.2);
-  if (b.door.dir === 'S') {
-    // 앞면 정중앙 근처 — 실제 출입구 타일 위치에 맞춘다
-    const dx = Math.max(1, Math.min(pw - doorW - 1, (b.door.x - b.x) * S + (S - doorW) / 2));
-    px(ctx, dx, y, doorW, 9, dark);
-    px(ctx, dx + 1, y + 1, doorW - 2, 6, shade(col.accent, 0.2));
-    px(ctx, dx, y + 8, doorW, 1, shade(dark, -0.3));
-  } else {
-    // 옆·뒷면 출입구는 앞벽에 셔터나 창고문으로 표시만 한다
-    const dx = Math.floor(pw / 2) - doorW / 2;
-    px(ctx, dx, y + 2, doorW, 7, shade(col.trim, -0.05));
-  }
+  const dx = Math.max(1, Math.min(pw - doorW - 1,
+    (b.door.x - b.x) * S + (S - doorW) / 2));
+
+  // 차양
+  px(ctx, dx - 2, y - 3, doorW + 4, 3, shade(col.trim, 0.05));
+  // 문틀과 유리문
+  px(ctx, dx, y, doorW, 10, dark);
+  px(ctx, dx + 1, y + 1, doorW - 2, 7, shade(col.accent, 0.25));
+  px(ctx, dx + doorW / 2 - 0.5, y + 1, 1, 7, dark);   // 가운데 문설주
+  px(ctx, dx, y + 9, doorW, 1, shade(dark, -0.3));
 }
 
 // 출입구 발판 (땅에 깔리는 매트) — 문 찾기 쉬우라고
@@ -594,6 +744,71 @@ export function catSprite(variant) {
   return catSprites[variant % catSprites.length];
 }
 
+// ── 자동차 ──────────────────────────────────────────────────────────────
+// 방향마다 미리 돌려서 구워 둔다. 매 프레임 회전시키면 도트가 지저분해진다.
+const CAR_DIRS = 16;
+const CAR_COLORS = ['#d8d8dc', '#3a3f46', '#8f97a0', '#5f7fa8', '#b8452f',
+  '#2f5a3f', '#e2e2d8', '#7a5a8f'];
+const carCache = new Map();
+
+export function carSprite(kind, color, dirIndex) {
+  const key = `${kind}|${color}|${dirIndex}`;
+  let hit = carCache.get(key);
+  if (hit) return hit;
+
+  const size = kind === 'bus' ? 46 : kind === 'truck' ? 38 : 26;
+  const body = kind === 'car' ? 11 : 13;
+  const box = Math.ceil(Math.hypot(size, body)) + 2;
+  const { canvas, ctx } = makeCanvas(box, box);
+  const c = CAR_COLORS[color % CAR_COLORS.length];
+
+  ctx.save();
+  ctx.translate(box / 2, box / 2);
+  ctx.rotate((dirIndex / CAR_DIRS) * Math.PI * 2);
+  ctx.translate(-size / 2, -body / 2);
+
+  // 차체
+  px(ctx, 0, 0, size, body, c);
+  px(ctx, 0, 0, size, 1, shade(c, 0.22));
+  px(ctx, 0, body - 1, size, 1, shade(c, -0.28));
+  if (kind === 'bus') {
+    // 버스 — 창문 줄과 노선 색띠
+    for (let x = 4; x < size - 6; x += 6) px(ctx, x, 2, 4, body - 4, '#9fc0dd');
+    px(ctx, 0, Math.floor(body / 2), size, 2, '#3f7fbf');
+    px(ctx, size - 4, 2, 3, body - 4, shade(c, -0.2));
+  } else if (kind === 'truck') {
+    // 트럭 — 앞칸과 적재함
+    px(ctx, 0, 0, 11, body, shade(c, -0.12));
+    px(ctx, 2, 2, 6, body - 4, '#9fc0dd');
+    px(ctx, 12, 1, size - 13, body - 2, shade(c, 0.1));
+    for (let x = 14; x < size - 2; x += 5) px(ctx, x, 1, 1, body - 2, shade(c, -0.15));
+  } else {
+    // 승용차 — 앞유리, 뒷유리, 지붕
+    px(ctx, 5, 1, size - 11, body - 2, shade(c, -0.08));
+    px(ctx, 6, 2, 4, body - 4, '#9fc0dd');
+    px(ctx, size - 10, 2, 4, body - 4, '#8fb0cc');
+  }
+  // 바퀴와 등
+  px(ctx, 3, -1, 4, 1, '#2a2a30');
+  px(ctx, size - 8, -1, 4, 1, '#2a2a30');
+  px(ctx, 3, body, 4, 1, '#2a2a30');
+  px(ctx, size - 8, body, 4, 1, '#2a2a30');
+  px(ctx, size - 2, 1, 2, 2, '#f2e2a8');
+  px(ctx, size - 2, body - 3, 2, 2, '#f2e2a8');
+  px(ctx, 0, 1, 1, 2, '#d8564a');
+  px(ctx, 0, body - 3, 1, 2, '#d8564a');
+  ctx.restore();
+
+  hit = canvas;
+  carCache.set(key, hit);
+  return hit;
+}
+
+export function carDirIndex(angle) {
+  const step = (Math.PI * 2) / CAR_DIRS;
+  return ((Math.round(angle / step) % CAR_DIRS) + CAR_DIRS) % CAR_DIRS;
+}
+
 // ── 실내 타일 ───────────────────────────────────────────────────────────
 const interiorCache = new Map();
 
@@ -687,6 +902,41 @@ export function interiorTile(kind, variant) {
       px(ctx, 6, 6, 4, 4, '#f2f2ee');
       break;
     }
+    case IN.CAR: { // 주차된 차 (위에서 본 모습)
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 2, 1, 12, 14, base);
+      px(ctx, 3, 3, 10, 4, '#9fc0dd');
+      px(ctx, 3, 9, 10, 4, shade(base, -0.15));
+      px(ctx, 2, 0, 12, 1, shade(base, 0.2));
+      break;
+    }
+    case IN.PILLAR: { // 기둥
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 2, 2, 12, 12, base);
+      px(ctx, 2, 2, 12, 2, shade(base, 0.18));
+      px(ctx, 2, 12, 12, 2, shade(base, -0.25));
+      break;
+    }
+    case IN.SEAT: { // 상영관 좌석
+      px(ctx, 0, 0, S, S, '#2a2530');
+      px(ctx, 1, 4, 6, 10, base);
+      px(ctx, 9, 4, 6, 10, base);
+      px(ctx, 1, 4, 6, 2, shade(base, 0.2));
+      px(ctx, 9, 4, 6, 2, shade(base, 0.2));
+      break;
+    }
+    case IN.SCREEN: { // 스크린
+      px(ctx, 0, 0, S, S, '#2a2530');
+      px(ctx, 0, 2, S, 11, base);
+      px(ctx, 0, 2, S, 1, '#ffffff');
+      break;
+    }
+    case IN.CART: { // 카트 보관대
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      for (let i = 0; i < 3; i++) px(ctx, 2 + i * 4, 4, 3, 9, base);
+      px(ctx, 1, 3, 14, 1, shade(base, -0.2));
+      break;
+    }
     case IN.MACHINE: {
       px(ctx, 1, 1, 14, 14, base);
       px(ctx, 3, 3, 10, 5, shade(base, -0.3));
@@ -756,7 +1006,7 @@ export function gizmoSprite(icon, active) {
 
 // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
 export function clearSpriteCaches() {
-  groundCache.clear(); propCache.clear(); buildingCache.clear();
+  groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
   buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
   npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
 }

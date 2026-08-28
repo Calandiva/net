@@ -23,6 +23,13 @@ export function drawText(ctx, text, x, y, opts = {}) {
   ctx.fillText(text, x, y);
 }
 
+// 캔버스는 DPR 배율로 그려지므로, UI 위치는 CSS 픽셀 기준으로 계산해야 한다.
+// (고해상도 폰에서 HUD 가 화면 밖으로 나가던 문제)
+export function viewSize(ctx) {
+  const m = ctx.getTransform();
+  return { w: ctx.canvas.width / (m.a || 1), h: ctx.canvas.height / (m.d || 1) };
+}
+
 export function textWidth(ctx, text, size) {
   ctx.font = `${size || UI.hudSize}px ${UI.font}`;
   return ctx.measureText(text).width;
@@ -72,7 +79,8 @@ export function drawRoomLabels(ctx, cam, interior) {
   for (const room of interior.rooms) {
     const wx = (room.x + room.w / 2) * S, wy = (room.y + 1) * S;
     const [sx, sy] = cam.worldToScreen(wx, wy);
-    if (sx < -60 || sy < -20 || sx > ctx.canvas.width + 60 || sy > ctx.canvas.height + 20) continue;
+    const view = viewSize(ctx);
+    if (sx < -60 || sy < -20 || sx > view.w + 60 || sy > view.h + 20) continue;
     drawText(ctx, room.name, sx, sy, {
       size: UI.labelSize, align: 'center', color: UI_COLOR.label,
     });

@@ -41,7 +41,8 @@ function fillBlock(district, rect, rng, out) {
     out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
       w: rect.w, h: parkingDepth, ground: 'parking' });
   } else if (district.kind === 'commercial') {
-    out.areas.push({ ...rect, ground: 'plaza' });
+    // 구래동 상권은 건물 사이가 거의 다 아스팔트다. 골목·주차·하역 공간이 이어진다.
+    out.areas.push({ ...rect, ground: 'asphalt' });
     out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
       w: rect.w, h: parkingDepth, ground: 'parking' });
   }
@@ -54,20 +55,57 @@ function fillBlock(district, rect, rng, out) {
   }
 }
 
-// 아파트 — 긴 판상형 동을 줄지어 놓고 번호를 매긴다.
+// 아파트 — 남향 판상형 동을 줄지어 놓고 번호를 매긴다.
+// 동 수는 데이터의 units 를 넘지 않는다 (실제 단지 규모에 맞추기 위해).
 function fillApartment(d, rect, rng, out, f) {
   const bw = Math.round(T(f.bw)), bh = Math.round(T(f.bh));
   const gap = Math.round(T(f.gap));
   const rowPitch = bh + gap;
+  const limit = f.units || 999;
   for (let y = rect.y + 2; y + bh <= rect.y + rect.h - 2; y += rowPitch) {
     for (let x = rect.x + 2; x + bw <= rect.x + rect.w - 2; x += bw + Math.round(gap * 0.6)) {
-      const n = f.start + out.aptCount[d.id]++;
+      if (out.aptCount[d.id]++ >= limit * 3) return;  // 후보를 너무 많이 만들지 않는다
       out.buildings.push({
-        name: `${d.name} ${n}동`, kind: KIND.APARTMENT,
+        // 이름과 동 번호는 실제로 자리를 잡은 것만 세어 붙인다 (world/buildings.js)
+        complex: d.name, unitStart: f.start, units: limit,
+        kind: KIND.APARTMENT,
         x, y, w: bw, h: bh,
         floors: rng.int(f.floors[0], f.floors[1]), basement: 1,
         districtId: d.id,
       });
+    }
+  }
+  // 동 사이 마당에 놀이터를 하나 둔다
+  if (rng.chance(0.6)) {
+    const pw = 9, ph = 7;
+    const x = rect.x + rng.int(2, Math.max(2, rect.w - pw - 2));
+    const y = rect.y + rect.h - ph - 8;
+    out.areas.push({ x, y, w: pw, h: ph, ground: 'playground' });
+  }
+}
+
+// 단지 부대시설 — 관리사무소, 경비실, 어린이집, 단지내상가.
+// 실제 아파트 단지에 다 있는 것들이고 이름도 그렇게 부른다.
+function addComplexFacilities(d, path, bounds, rng, out) {
+  const specs = [
+    { suffix: '관리사무소', kind: KIND.PARK_FACILITY, w: 10, h: 6, floors: 2 },
+    { suffix: '경비실', kind: KIND.PARK_FACILITY, w: 4, h: 3, floors: 1 },
+    { suffix: '어린이집', kind: KIND.PUBLIC, w: 12, h: 7, floors: 2 },
+    { suffix: '단지내상가', kind: KIND.SHOP, w: 14, h: 8, floors: 2 },
+  ];
+  const y0 = Math.floor(bounds.maxY) - 12;   // 단지 남쪽 입구 쪽
+  let x = Math.floor(bounds.minX) + 4;
+  for (const spec of specs) {
+    for (let tries = 0; tries < 14; tries++) {
+      const px = x + tries * 5;
+      if (!pointInPath(px + spec.w / 2, y0 + spec.h / 2, path)) continue;
+      out.buildings.push({
+        name: `${d.name} ${spec.suffix}`, kind: spec.kind,
+        x: px, y: y0, w: spec.w, h: spec.h,
+        floors: spec.floors, basement: 0, districtId: d.id,
+      });
+      x = px + spec.w + 3;
+      break;
     }
   }
 }
@@ -120,7 +158,7 @@ function pushShop(d, rng, out, x, y, w, h, f) {
   const floors = rng.int(f.floors[0], f.floors[1]);
   // 이름은 나중에 도로명주소로 붙인다 (world/buildings.js)
   out.buildings.push({
-    address: true, suffix: '', kind: KIND.SHOP, x, y, w, h,
+    address: true, suffix: '', locality: d.name, kind: KIND.SHOP, x, y, w, h,
     floors, basement: floors >= 5 ? 1 : 0, districtId: d.id,
   });
 }
@@ -136,7 +174,7 @@ function fillHouse(d, rect, rng, out, f) {
       const w = size + rng.int(-1, 2), h = size + rng.int(-1, 1);
       const floors = rng.int(f.floors[0], f.floors[1]);
       out.buildings.push({
-        address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '',
+        address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '', locality: d.name,
         kind: KIND.HOUSE, x, y, w: Math.max(3, w), h: Math.max(3, h),
         floors, basement: 0, districtId: d.id,
       });
@@ -155,7 +193,7 @@ function fillIndustrial(d, rect, rng, out, f) {
     const x = rect.x + rng.int(2, Math.max(2, rect.w - w - 2));
     const warehouse = rng.chance(0.3);
     out.buildings.push({
-      address: true, suffix: warehouse ? '물류창고' : '공장',
+      address: true, suffix: warehouse ? '물류창고' : '공장', locality: d.name,
       kind: warehouse ? KIND.WAREHOUSE : KIND.FACTORY,
       x, y: cursorY, w, h,
       floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -172,7 +210,7 @@ function fillRural(d, rect, rng, out, f) {
     for (let x = rect.x + 2; x + size <= rect.x + rect.w - 2; x += pitch) {
       if (!rng.chance(f.rate)) continue;
       out.buildings.push({
-        address: true, suffix: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
+        address: true, suffix: rng.pick(RURAL_NAME), locality: d.name, kind: KIND.FARMHOUSE,
         x: x + rng.int(0, 3), y: y + rng.int(0, 3),
         w: size + rng.int(-1, 3), h: size + rng.int(-1, 1),
         floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -190,6 +228,8 @@ export function expandDistricts() {
     const b = pathBounds(path);
     const rng = makeRng(SEED, 'district', d.id);
     out.aptCount[d.id] = 0;
+    // 관리사무소·경비실 같은 부대시설을 먼저 앉힌다 (동에 밀리지 않도록)
+    if (d.kind === 'apartment') addComplexFacilities(d, path, b, rng, out);
 
     const streetW = ROAD_CLASS[d.street].width + ROAD_CLASS[d.street].sidewalk * 2;
     const pitchX = Math.round(T(d.block.w)) + streetW;

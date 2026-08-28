@@ -8,6 +8,7 @@ import { WORLD_W, WORLD_H, projectPath, pathBounds, pointInPath, distToSegment, 
   from './geo.js';
 import { GridIndex } from './spatial.js';
 import { noiseAt, fbm, seedOf } from '../util/rng.js';
+import { MAP_KIND } from '../render/palette.js';
 import { REGIONS, WATERWAYS } from './data/regions.js';
 
 const CH = TILE.chunk;
@@ -44,7 +45,8 @@ export class WorldMap {
     // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
     this.areaIndex = new GridIndex(CH);
     const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA,
-      yard: GROUND.YARD, lawn: GROUND.GRASS };
+      yard: GROUND.YARD, lawn: GROUND.GRASS, playground: GROUND.SAND,
+      asphalt: GROUND.ASPHALT };
     for (const a of buildings.areas || []) {
       const area = { ...a, kind: areaGround[a.ground] };
       this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
@@ -88,6 +90,7 @@ export class WorldMap {
     const ground = new Uint8Array(n);
     const prop = new Uint8Array(n);
     const solid = new Uint8Array(n);
+    const noProp = new Uint8Array(n);   // 도로 가장자리처럼 소품이 있으면 안 되는 칸
     const ox = cx * CH, oy = cy * CH;
 
     // 1) 바탕 — 논밭에 얼룩진 풀밭
@@ -95,7 +98,8 @@ export class WorldMap {
       for (let x = 0; x < CH; x++) {
         const tx = ox + x, ty = oy + y;
         const v = fbm(S_BASE, tx, ty, 26, 3);
-        ground[y * CH + x] = v > 0.62 ? GROUND.GRASS : v < 0.36 ? GROUND.DIRT : GROUND.FIELD;
+        // 논이 기본이고, 밭(흙)과 묵힌 땅(풀)이 드문드문 섞인다
+        ground[y * CH + x] = v > 0.78 ? GROUND.GRASS : v < 0.34 ? GROUND.DIRT : GROUND.FIELD;
       }
     }
 
@@ -115,9 +119,11 @@ export class WorldMap {
           const i = y * CH + x;
           ground[i] = r.ground;
           regionRate[i] = r.propRate || 0;
-          // 도시 바닥은 잔디와 포장이 얼룩덜룩 섞인다 (주차장·광장 자리)
-          if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.74) {
-            ground[i] = GROUND.PLAZA;
+          if (r.kind === 'city') {
+            // 신도시 바닥은 대부분 보도블럭과 포장이다. 녹지는 가로수 띠 정도.
+            const v = fbm(S_CITY, ox + x, oy + y, 9, 2);
+            ground[i] = v > 0.66 ? GROUND.GRASS : v < 0.32 ? GROUND.PLAZA : GROUND.SIDEWALK;
+            regionRate[i] = v > 0.66 ? 0.05 : 0.015;
           }
         }
       }
@@ -130,10 +136,13 @@ export class WorldMap {
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const i = y * CH + x;
-          // 포장 바닥에도 화단이 조금씩 섞인다
-          const green = a.kind !== GROUND.GRASS && fbm(S_CITY, ox + x, oy + y, 7, 2) > 0.78;
-          ground[i] = green ? GROUND.GRASS : a.kind;
-          regionRate[i] = a.kind === GROUND.GRASS ? 0.05 : green ? 0.02 : 0;
+          // 단지 마당은 조경과 포장이 섞인다. 상가 아스팔트에는 화단이 없다.
+          const noise = fbm(S_CITY, ox + x, oy + y, 7, 2);
+          let g = a.kind;
+          if (a.kind === GROUND.GRASS) g = noise > 0.44 ? GROUND.GRASS : GROUND.PLAZA;
+          else if (a.kind !== GROUND.ASPHALT && noise > 0.86) g = GROUND.GRASS;
+          ground[i] = g;
+          regionRate[i] = g === GROUND.GRASS ? 0.04 : 0;
         }
       }
     }
@@ -165,11 +174,14 @@ export class WorldMap {
         const len2 = dx * dx + dy * dy || 1;
         const halfRoad = s.spec.width / 2;
         const outer = halfRoad + s.spec.sidewalk;
+        // 안쪽 반경 — 타일이 도로 안에 확실히 들어올 때만 칠한다
+        const inner = Math.max(0.4, halfRoad - 0.8);
         return { s, dx, dy, len2, len: Math.sqrt(len2), halfRoad2: halfRoad * halfRoad,
-          outer2: outer * outer,
+          inner2: inner * inner, outer2: outer * outer,
           minX: Math.min(s.ax, s.bx) - outer - 1, maxX: Math.max(s.ax, s.bx) + outer + 1,
           minY: Math.min(s.ay, s.by) - outer - 1, maxY: Math.max(s.ay, s.by) + outer + 1,
           ground: s.spec.ground !== undefined ? s.spec.ground : GROUND.ROAD,
+          sidewalk: s.spec.sidewalk > 0,
           centerLine: s.spec.ground === undefined && s.spec.width >= 4,
           crossing: s.spec.crossing, dist0: s.dist0 };
       });
@@ -188,11 +200,13 @@ export class WorldMap {
             const ex = tx - (q.s.ax + t * q.dx), ey = ty - (q.s.ay + t * q.dy);
             const d2 = ex * ex + ey * ey;
             if (d2 <= q.halfRoad2) {
-              paint = q.ground;
-              // 폭이 넉넉한 차도에는 점선 중앙선을 넣는다
-              if (q.centerLine && d2 < 0.62) {
-                const dash = ((q.dist0 + t * q.len) % 5);
-                if (dash < 2.6) paint = GROUND.ROAD_LINE;
+              // 차도 안쪽만 도로로 칠한다. 가장자리 한 겹은 원래 지면으로 두고
+              // 그리는 쪽에서 선으로 덮는다 — 그래야 도로 경계가 계단처럼 각지지 않는다.
+              noProp[i] = 1;
+              if (d2 <= q.inner2) {
+                paint = q.ground;
+              } else if (q.sidewalk) {
+                paint = GROUND.SIDEWALK;
               }
               if (q.crossing) {
                 // 도로를 따라 일정 간격으로 횡단보도를 놓는다
@@ -205,10 +219,14 @@ export class WorldMap {
               break;
             } else if (d2 <= q.outer2 && paint < 0) {
               paint = GROUND.SIDEWALK;
+              noProp[i] = 1;
             }
           }
-          if (paint >= 0) {
-            ground[i] = cross ? GROUND.CROSSWALK : paint;
+          if (cross) {
+            ground[i] = GROUND.CROSSWALK;
+            regionRate[i] = 0;
+          } else if (paint >= 0) {
+            ground[i] = paint;
             regionRate[i] = 0;
           }
         }
@@ -219,6 +237,7 @@ export class WorldMap {
     for (let y = 0; y < CH; y++) {
       for (let x = 0; x < CH; x++) {
         const i = y * CH + x;
+        if (noProp[i]) continue;
         const g = ground[i];
         const rule = PROP_RULES[g];
         const extra = regionRate[i];
@@ -291,27 +310,36 @@ export class WorldMap {
 }
 
 // 미니맵·전체지도용 저해상도 그림. 시작할 때 한 번만 만든다.
+// 지형색이 아니라 지도 기호색 코드(MAP_KIND)를 담는다.
 export function buildOverview(map, scale) {
   const w = Math.ceil(WORLD_W / scale), h = Math.ceil(WORLD_H / scale);
   const data = new Uint8Array(w * h);
+  const kindOf = {
+    city: MAP_KIND.CITY, industrial: MAP_KIND.INDUSTRIAL, park: MAP_KIND.PARK,
+    forest: MAP_KIND.FOREST, water: MAP_KIND.WATER, field: MAP_KIND.FIELD,
+  };
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const tx = x * scale + scale / 2, ty = y * scale + scale / 2;
-      let g = GROUND.FIELD;
+      let v = MAP_KIND.FIELD;
       for (const r of map.regionIndex.queryPoint(tx, ty)) {
-        if (pointInPath(tx, ty, r.path)) g = r.ground;
+        if (pointInPath(tx, ty, r.path)) v = kindOf[r.kind] !== undefined ? kindOf[r.kind] : v;
       }
       for (const s of map.waterIndex.queryPoint(tx, ty)) {
-        if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.half) g = GROUND.WATER;
-      }
-      // 미니맵에서는 큰길만, 대신 실제보다 굵게 그린다 (안 그러면 안 보인다)
-      for (const s of map.buildings.roads.index.query(tx - scale, ty - scale, tx + scale, ty + scale)) {
-        if (s.spec.width < 4) continue;
-        if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.spec.width / 2 + scale * 0.45) {
-          g = GROUND.ROAD;
+        if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.half + scale * 0.3) {
+          v = MAP_KIND.WATER;
         }
       }
-      data[y * w + x] = g;
+      // 도로는 실제보다 굵게 그려야 이 축척에서 보인다
+      for (const s of map.buildings.roads.index.query(tx - scale, ty - scale,
+          tx + scale, ty + scale)) {
+        if (s.spec.width < 4) continue;
+        const d = distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by);
+        if (d < s.spec.width / 2 + scale * 0.45) {
+          v = s.spec.width >= 8 ? MAP_KIND.MAIN_ROAD : MAP_KIND.ROAD;
+        }
+      }
+      data[y * w + x] = v;
     }
   }
   return { w, h, scale, data };

@@ -6,7 +6,7 @@
 import { SEED, BUILDING, KIND, TILE, GEO } from '../config.js';
 import { project, projectPath, metersToTiles } from './geo.js';
 import { GridIndex, rectsOverlap } from './spatial.js';
-import { makeRng } from '../util/rng.js';
+import { makeRng, hash32 } from '../util/rng.js';
 import { expandDistricts } from './blocks.js';
 import { PLACES } from './data/places.js';
 import { ROADS } from './data/roads.js';
@@ -17,13 +17,16 @@ import { ROAD_CLASS } from '../config.js';
 export function buildRoadIndex(generatedRoads) {
   const index = new GridIndex(TILE.chunk);
   const all = [];
+  const paths = [];          // 도로 한 줄 전체 (그릴 때 이어서 그리려고)
   const add = (name, cls, tiles) => {
+    const roadIndex = paths.length;
+    paths.push({ name, cls, spec: ROAD_CLASS[cls], tiles });
     const spec = ROAD_CLASS[cls];
     const half = spec.width / 2 + spec.sidewalk;
     let travelled = 0; // 도로 시작점부터의 누적 길이 — 횡단보도 간격에 쓴다
     for (let i = 0; i < tiles.length - 1; i++) {
       const [ax, ay] = tiles[i], [bx, by] = tiles[i + 1];
-      const seg = { name, cls, spec, half, ax, ay, bx, by, dist0: travelled };
+      const seg = { name, cls, spec, half, ax, ay, bx, by, dist0: travelled, roadIndex };
       travelled += Math.hypot(bx - ax, by - ay);
       all.push(seg);
       index.insert(seg,
@@ -33,7 +36,7 @@ export function buildRoadIndex(generatedRoads) {
   };
   for (const road of ROADS) add(road.name, road.cls, projectPath(road.path));
   for (const road of generatedRoads) add(road.name, road.cls, road.tiles);
-  return { index, all };
+  return { index, all, paths };
 }
 
 // 선분이 사각형(여유 pad 포함)을 지나가는가 — 굵은 선 vs 상자 간이 판정
@@ -59,13 +62,17 @@ function segmentHitsRect(seg, rect, pad) {
   return true;
 }
 
-// 출입구 자리 정하기: 가장 가까운 길 쪽 벽 한가운데
+// 출입구 자리 정하기.
+//
+// 문은 언제나 **앞면(남쪽)** 에 둔다. 탑뷰지만 건물을 층수만큼 위로 솟게 그리기 때문에
+// 앞벽만 보이고 뒷면은 지붕에 가린다. 뒤나 옆에 문을 두면 보이지도 않고,
+// 건물 뒤로 돌아 들어가야 해서 이상하다.
+// 대신 앞벽에서 어느 지점에 낼지는 가장 가까운 길 쪽으로 맞춘다.
 function placeDoor(rect, roads, rng) {
   const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
   const r = BUILDING.doorProbeRadius;
-  const near = roads.index.query(cx - r, cy - r, cx + r, cy + r);
   let best = null, bestD = Infinity;
-  for (const seg of near) {
+  for (const seg of roads.index.query(cx - r, cy - r, cx + r, cy + r)) {
     // 선분 위에서 건물 중심에 가장 가까운 점
     const dx = seg.bx - seg.ax, dy = seg.by - seg.ay;
     const len2 = dx * dx + dy * dy || 1;
@@ -73,25 +80,20 @@ function placeDoor(rect, roads, rng) {
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const px = seg.ax + t * dx, py = seg.ay + t * dy;
     const d = Math.hypot(px - cx, py - cy);
-    if (d < bestD) { bestD = d; best = { px, py }; }
+    if (d < bestD) { bestD = d; best = px; }
   }
 
-  let dir = 'S';
-  if (best) {
-    const vx = best.px - cx, vy = best.py - cy;
-    if (Math.abs(vx) > Math.abs(vy)) dir = vx > 0 ? 'E' : 'W';
-    else dir = vy > 0 ? 'S' : 'N';
+  // 길 쪽 x 로 붙이되 모서리는 피한다. 길이 멀면 가운데에서 살짝 흔든다.
+  const lo = rect.x + 1;
+  const hi = rect.x + rect.w - 2;
+  let x;
+  if (best !== null) {
+    x = Math.round(best);
+  } else {
+    x = rect.x + Math.floor(rect.w / 2) + (rect.w > 6 ? rng.int(-1, 1) : 0);
   }
-
-  // 벽 가운데에서 살짝 흔들어 배치 (전부 정가운데면 심심하다)
-  const jx = rect.w > 6 ? rng.int(-1, 1) : 0;
-  const jy = rect.h > 6 ? rng.int(-1, 1) : 0;
-  switch (dir) {
-    case 'N': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y, dir };
-    case 'S': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y + rect.h - 1, dir };
-    case 'W': return { x: rect.x, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
-    default: return { x: rect.x + rect.w - 1, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
-  }
+  x = Math.max(lo, Math.min(hi, x));
+  return { x, y: rect.y + rect.h - 1, dir: 'S' };
 }
 
 // 문 앞(건물 바깥) 한 칸 — 나올 때 여기에 선다
@@ -134,6 +136,20 @@ export function buildingAddress(rect, roads) {
 
 let nextId = 1;
 
+// 단지별로 실제 자리를 잡은 동 수를 센다 (번호를 건너뛰지 않게)
+const complexCount = new Map();
+// 같은 주소가 두 번 나오지 않게 (실제 도로명주소도 겹치지 않는다)
+const usedAddress = new Set();
+
+function uniqueAddress(base) {
+  if (!usedAddress.has(base)) { usedAddress.add(base); return base; }
+  for (let n = 1; n < 40; n++) {
+    const candidate = `${base}-${n}`;   // 실제로도 쓰는 부번 형식
+    if (!usedAddress.has(candidate)) { usedAddress.add(candidate); return candidate; }
+  }
+  return base;
+}
+
 function makeBuilding(spec, roads, index, placed) {
   const rect = { x: spec.x, y: spec.y, w: spec.w, h: spec.h };
   if (rect.w < BUILDING.minTiles || rect.h < BUILDING.minTiles) return null;
@@ -151,12 +167,20 @@ function makeBuilding(spec, roads, index, placed) {
     }
   }
 
-  // 이름이 없는 건물은 도로명주소로 부른다
+  // 아파트 동은 자리를 잡은 순서대로 101동, 102동 … 번호를 매긴다.
+  // 단지 정원(units)을 채우면 더 놓지 않는다.
   let name = spec.name;
+  if (!name && spec.complex) {
+    const placedSoFar = complexCount.get(spec.complex) || 0;
+    if (placedSoFar >= spec.units) return null;
+    name = `${spec.complex} ${spec.unitStart + placedSoFar}동`;
+  }
   if (!name && spec.address) {
     const addr = buildingAddress(rect, roads);
-    name = addr ? (spec.suffix ? `${addr} ${spec.suffix}` : addr)
-      : (spec.suffix || '이름 없는 건물');
+    // 이름 있는 도로가 멀면 지번으로 부른다 — 농촌은 실제로도 그렇다
+    const base = addr || `${spec.locality || '구래동'} ${1 + (hash32('jibun', rect.x, rect.y) % 3000)}`;
+    const unique = uniqueAddress(base);   // 주소 자체가 겹치지 않게 (부번을 붙인다)
+    name = spec.suffix ? `${unique} ${spec.suffix}` : unique;
   }
 
   const rng = makeRng(SEED, 'building', name, rect.x, rect.y);
@@ -167,12 +191,14 @@ function makeBuilding(spec, roads, index, placed) {
     floors: Math.max(1, spec.floors | 0),
     basement: spec.basement | 0,
     note: spec.note || '',
+    floorNames: spec.floorNames || null,
     metro: spec.metro || null,
     districtId: spec.districtId || null,
     seed: rng.int(0, 0xffff),
     landmark: !!spec.landmark,
   };
   b.door = placeDoor(rect, roads, rng);
+  if (spec.complex) complexCount.set(spec.complex, (complexCount.get(spec.complex) || 0) + 1);
   placed.push(b);
   index.insert(b, b.x, b.y, b.x + b.w, b.y + b.h);
   return b;
@@ -180,6 +206,8 @@ function makeBuilding(spec, roads, index, placed) {
 
 // 세상의 모든 건물을 만든다. 시작할 때 한 번.
 export function buildBuildings() {
+  complexCount.clear();
+  usedAddress.clear();
   const districts = expandDistricts();
   const roads = buildRoadIndex(districts.roads);
   const index = new GridIndex(TILE.chunk);
@@ -220,6 +248,27 @@ export function buildingAtTile(buildings, tx, ty) {
 // 층 이름 (지하 표기)
 export function floorLabel(floor) {
   return floor < 0 ? `지하 ${-floor}층` : `${floor}층`;
+}
+
+// 층에 무엇이 있는지. 데이터에 적힌 게 있으면 그걸 쓰고, 없으면 종류로 짐작한다.
+const DEFAULT_FLOOR_USE = {
+  [KIND.APARTMENT]: (f) => (f < 0 ? '주차장' : f === 1 ? '현관·경비' : '세대'),
+  [KIND.SHOP]: (f) => (f < 0 ? '창고' : f === 1 ? '상가' : f === 2 ? '학원·식당' : '사무실'),
+  [KIND.TOWER]: (f) => (f < 0 ? '주차장' : f <= 3 ? '상가' : '오피스텔'),
+  [KIND.MART]: (f) => (f < 0 ? '주차장' : '매장'),
+  [KIND.SCHOOL]: (f) => (f === 1 ? '교무실·급식실' : '교실'),
+  [KIND.PUBLIC]: (f) => (f < 0 ? '주차장' : f === 1 ? '민원실' : '사무실'),
+  [KIND.STATION]: (f) => (f === -2 ? '승강장' : f === -1 ? '대합실' : '출입구'),
+  [KIND.FACTORY]: (f) => (f === 1 ? '생산라인' : '사무실'),
+  [KIND.WAREHOUSE]: () => '창고',
+  [KIND.HOUSE]: (f) => (f === 1 ? '거실' : '방'),
+  [KIND.FARMHOUSE]: () => '창고',
+};
+
+export function floorUse(b, floor) {
+  if (b.floorNames && b.floorNames[floor] !== undefined) return b.floorNames[floor];
+  const fn = DEFAULT_FLOOR_USE[b.kind];
+  return fn ? fn(floor) : '';
 }
 
 // 건물이 몇 층부터 몇 층까지 있는가

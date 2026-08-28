@@ -35,6 +35,7 @@ MODULES = [
     'world/map.js',
     'world/interior.js',
     'world/actors.js',
+    'world/traffic.js',
     'render/sprites.js',
     'render/camera.js',
     'render/scene.js',
@@ -44,7 +45,9 @@ MODULES = [
     'game/endings.js',
     'game/gizmos.js',
     'ui/ending.js',
+    'ui/worldmap.js',
     'ui/fullscreen.js',
+    'ui/touch.js',
     'main.js',
 ]
 

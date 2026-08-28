@@ -44,6 +44,7 @@ export const GROUND = {
   FLOOR: 11,     // 건물 바닥(외곽 데크)
   TRACK: 12,     // 공원 산책로
   ROAD_LINE: 13, // 차도 중앙선
+  ASPHALT: 14,   // 상가 블록 안 포장 마당 (차도가 아니다)
 };
 
 // 통과할 수 없는 지면
@@ -71,9 +72,9 @@ export const PROP_SOLID = [PROP.TREE, PROP.LAMP, PROP.BENCH, PROP.SIGN,
 
 // 지면별 소품 등장 확률과 후보 (절차적 채움)
 export const PROP_RULES = {
-  [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
+  [GROUND.GRASS]: { rate: 0.035, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
   [GROUND.FIELD]: { rate: 0.004, pick: [PROP.ROCK, PROP.BUSH] },
-  [GROUND.SIDEWALK]: { rate: 0.03, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
+  [GROUND.SIDEWALK]: { rate: 0.026, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
   [GROUND.PLAZA]: { rate: 0.02, pick: [PROP.BENCH, PROP.PLANTER, PROP.LAMP] },
   [GROUND.TRACK]: { rate: 0.04, pick: [PROP.BENCH, PROP.LAMP, PROP.BUSH] },
   [GROUND.SAND]: { rate: 0.02, pick: [PROP.ROCK, PROP.BUSH] },
@@ -127,6 +128,8 @@ export const RENDER = {
   occludeAlpha: 0.38,
   occludeFadeSpeed: 9,   // 초당 알파 변화 속도
   occludePad: 3,         // 가림 판정에 두는 여유(픽셀)
+  centerLine: '#e0b63c', // 중앙선 (노란색)
+  laneLine: 'rgba(240,240,232,0.8)', // 차선 (흰 점선)
 };
 
 // ── 건물 ────────────────────────────────────────────────────────────────
@@ -172,9 +175,14 @@ export const IN = {
   VOID: 0, FLOOR: 1, WALL: 2, EXIT: 3, STAIR_UP: 4, STAIR_DOWN: 5,
   ELEVATOR: 6, COUNTER: 7, SHELF: 8, DESK: 9, PLANT: 10, RUG: 11,
   WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
+  CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
 };
 export const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
-  IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE];
+  IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
+  IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART];
+
+// 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
+export const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
 
 // ── NPC ────────────────────────────────────────────────────────────────
 export const NPC = {
@@ -182,6 +190,16 @@ export const NPC = {
   speed: 26,
   wanderRadius: 90,  // 태어난 자리에서 이 픽셀 이상 벗어나지 않는다
   spawnGrounds: [GROUND.SIDEWALK, GROUND.PLAZA, GROUND.TRACK],
+};
+
+// ── 도로 위의 차 ────────────────────────────────────────────────────────
+export const TRAFFIC = {
+  classes: ['expressway', 'arterial', 'main', 'local'], // 차가 다니는 도로 등급
+  speed: { expressway: 190, arterial: 120, main: 95, local: 60 }, // 타일/초가 아니라 픽셀/초
+  spacing: 26,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
+  colors: 8,          // 차 색 가짓수
+  stopDistance: 34,   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
+  stopWidth: 12,      // 차선 폭 기준 좌우 판정
 };
 
 // ── UI ─────────────────────────────────────────────────────────────────
@@ -204,6 +222,7 @@ export const KEYS = {
   interact: ['Space', 'Enter', 'KeyE'],
   fullscreen: ['KeyF'],
   map: ['KeyM'],
+  worldmap: ['Tab'],
   help: ['KeyH', 'Slash'],
   zoomIn: ['Equal', 'NumpadAdd'],
   zoomOut: ['Minus', 'NumpadSubtract'],

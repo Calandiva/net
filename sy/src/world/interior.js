@@ -1,7 +1,7 @@
 // 실내 생성 · 층 전환. 건물에 들어갈 때마다 그 층을 즉석에서 만든다.
 // 모든 건물이 시드로 만들어지므로 같은 건물의 같은 층은 언제나 같은 모습이다.
 
-import { SEED, INTERIOR, IN, IN_SOLID, KIND } from '../config.js';
+import { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS } from '../config.js';
 import { makeRng } from '../util/rng.js';
 import { ROOM_NAMES } from './data/names.js';
 
@@ -54,8 +54,8 @@ export function makeInterior(b, floor) {
   // 복도와 방
   const corridorY = Math.floor(h / 2);
   const cw = Math.min(INTERIOR.corridorWidth, h - 4);
-  if (layout === 'open') {
-    fillOpen(tiles, w, h, set, get, rng, b, floor);
+  if (layout === 'open' || layout === 'parking' || layout === 'mart' || layout === 'cinema') {
+    fillOpen(tiles, w, h, set, get, rng, b, floor, layout, rooms);
   } else {
     // 위·아래 두 줄로 방을 나눈다
     makeRoomRow(1, corridorY - Math.floor(cw / 2), rooms, w, h, set, rng, true);
@@ -64,32 +64,34 @@ export function makeInterior(b, floor) {
     if (exit) for (let y = corridorY; y < h - 1; y++) set(exit.x, y, IN.FLOOR);
   }
 
-  // 방 이름과 가구
+  // 방 이름과 가구. 특수 층(마트·주차장·상영관)은 이미 이름과 배치가 정해져 있다.
   const namer = roomNamer(b, floor, rng, layout);
   rooms.forEach((room, i) => {
+    if (room.custom) return;
     room.name = namer(i, room);
     furnish(room, layout, set, get, rng, b);
   });
 
-  // 층 이동 장치
+  // 층 이동 장치 — 실제 건물처럼 계단은 늘 있고, 큰 건물에는 엘리베이터가 더 있다
   const floors = floorList(b);
   const stairs = {};
-  const useElevator = b.floors >= INTERIOR.elevatorFrom;
-  const spot = { x: 2, y: corridorY };
-  const spot2 = { x: 3, y: corridorY };
+  const useElevator = b.floors >= INTERIOR.elevatorFrom ||
+    (ELEVATOR_KINDS.includes(b.kind) && floors.length >= 3);
   if (floors.length > 1) {
-    const kindUp = useElevator ? IN.ELEVATOR : IN.STAIR_UP;
     const idx = floors.indexOf(floor);
+    const upSpot = { x: 2, y: corridorY };
+    const downSpot = { x: 3, y: corridorY };
+    if (idx < floors.length - 1) { set(upSpot.x, upSpot.y, IN.STAIR_UP); stairs.up = { ...upSpot }; }
+    if (idx > 0) { set(downSpot.x, downSpot.y, IN.STAIR_DOWN); stairs.down = { ...downSpot }; }
+    set(upSpot.x, upSpot.y + 1, IN.FLOOR);
+    set(downSpot.x, downSpot.y + 1, IN.FLOOR);
+
     if (useElevator) {
-      set(spot.x, spot.y, IN.ELEVATOR);
-      stairs.elevator = { ...spot };
-    } else {
-      if (idx < floors.length - 1) { set(spot.x, spot.y, kindUp); stairs.up = { ...spot }; }
-      if (idx > 0) { set(spot2.x, spot2.y, IN.STAIR_DOWN); stairs.down = { ...spot2 }; }
+      const elevator = { x: 5, y: corridorY };
+      set(elevator.x, elevator.y, IN.ELEVATOR);
+      set(elevator.x, elevator.y + 1, IN.FLOOR);
+      stairs.elevator = elevator;
     }
-    // 계단 앞은 비워 둔다
-    set(spot.x, spot.y + 1, IN.FLOOR);
-    set(spot2.x, spot2.y + 1, IN.FLOOR);
   }
 
   // 상호작용 물건을 놓을 자리 — 벽에 붙은 빈 바닥
@@ -119,7 +121,14 @@ export function groundFloorOf(b) { return 1; }
 
 // 종류·층에 따른 실내 형태
 function layoutOf(kind, floor, b) {
-  if (kind === KIND.MART || kind === KIND.FACTORY || kind === KIND.WAREHOUSE) return 'open';
+  // 지하는 대개 주차장이다
+  if (floor < 0 && (kind === KIND.MART || kind === KIND.TOWER ||
+      kind === KIND.APARTMENT || kind === KIND.PUBLIC)) return 'parking';
+  if (kind === KIND.MART) return 'mart';
+  // 두원타워 8·9층은 메가박스다
+  if (b.floorNames && b.floorNames[floor] &&
+      String(b.floorNames[floor]).includes('메가박스')) return 'cinema';
+  if (kind === KIND.FACTORY || kind === KIND.WAREHOUSE) return 'open';
   if (kind === KIND.STATION && floor < 0) return 'open';
   if (kind === KIND.CHURCH && floor === 1) return 'open';
   if (kind === KIND.APARTMENT) return 'units';
@@ -147,8 +156,11 @@ function makeRoomRow(y0, y1, rooms, w, h, set, rng, top) {
   }
 }
 
-// 넓은 한 칸짜리 층 (마트·공장·승강장)
-function fillOpen(tiles, w, h, set, get, rng, b, floor) {
+// 넓은 한 칸짜리 층 (마트·공장·승강장·주차장·상영관)
+function fillOpen(tiles, w, h, set, get, rng, b, floor, layout, rooms) {
+  if (layout === 'parking') return fillParking(w, h, set, rng, rooms);
+  if (layout === 'mart') return fillMart(w, h, set, rng, b, floor, rooms);
+  if (layout === 'cinema') return fillCinema(w, h, set, rng, rooms);
   if (b.kind === KIND.STATION && floor < 0) {
     // 승강장 — 가운데가 선로
     const railY = Math.floor(h / 2);
@@ -186,6 +198,70 @@ function fillOpen(tiles, w, h, set, get, rng, b, floor) {
       if (rng.chance(0.3)) set(x + 1, y, IN.SHELF);
     }
   }
+}
+
+// 지하주차장 — 기둥과 주차면, 차 몇 대
+function fillParking(w, h, set, rng, rooms) {
+  for (let y = 3; y < h - 3; y += 6) {
+    for (let x = 2; x < w - 2; x++) {
+      if ((x - 2) % 7 === 0) continue;            // 차로
+      if (rng.chance(0.45)) set(x, y, IN.CAR);    // 주차된 차
+    }
+  }
+  for (let y = 4; y < h - 2; y += 7) {
+    for (let x = 4; x < w - 2; x += 8) set(x, y, IN.PILLAR);
+  }
+  rooms.push({ x: 1, y: 1, w: w - 2, h: h - 2, name: '지하주차장', custom: true });
+}
+
+// 마트 매장 — 진열대 통로와 계산대, 카트
+function fillMart(w, h, set, rng, b, floor, rooms) {
+  // 계산대는 출입구 쪽(아래)에 한 줄
+  for (let x = 3; x < w - 6; x += 4) {
+    set(x, h - 4, IN.COUNTER);
+    set(x + 1, h - 4, IN.COUNTER);
+  }
+  set(w - 4, h - 4, IN.CART);
+  set(w - 3, h - 4, IN.CART);
+  // 진열대 — 통로를 두고 줄지어
+  for (let y = 3; y < h - 7; y += 3) {
+    for (let x = 2; x < w - 2; x++) {
+      if (x % 8 === 0 || x % 8 === 1) continue;   // 통로
+      set(x, y, IN.SHELF);
+    }
+  }
+  // 벽면 냉장고
+  for (let x = 2; x < w - 2; x++) if (x % 3 !== 0) set(x, 1, IN.MACHINE);
+  const use = b.floorNames && b.floorNames[floor];
+  rooms.push({ x: 1, y: 1, w: w - 2, h: h - 2, name: use || '매장', custom: true });
+}
+
+// 상영관 — 매표소와 스크린, 좌석
+function fillCinema(w, h, set, rng, rooms) {
+  const hallW = Math.floor((w - 3) / 2);
+  const midY = Math.floor(h * 0.55);
+  // 로비: 매표소와 매점
+  for (let x = 3; x < w - 3; x += 5) set(x, h - 3, IN.COUNTER);
+  set(2, h - 3, IN.CART);
+
+  // 상영관 둘 (왼쪽·오른쪽)
+  for (let i = 0; i < 2; i++) {
+    const x0 = 1 + i * (hallW + 1);
+    const x1 = x0 + hallW;
+    for (let y = 1; y < midY; y++) { set(x0, y, IN.WALL); set(x1, y, IN.WALL); }
+    for (let x = x0; x <= x1; x++) set(x, midY, IN.WALL);
+    set(x0 + Math.floor(hallW / 2), midY, IN.FLOOR);      // 상영관 문
+    for (let x = x0 + 1; x < x1; x++) set(x, 1, IN.SCREEN); // 스크린
+    for (let y = 3; y < midY - 1; y += 2) {
+      for (let x = x0 + 1; x < x1; x++) {
+        if (x === x0 + Math.floor(hallW / 2)) continue;     // 가운데 통로
+        set(x, y, IN.SEAT);
+      }
+    }
+    rooms.push({ x: x0 + 1, y: 2, w: hallW - 1, h: midY - 3,
+      name: `${i + 1}관`, custom: true });
+  }
+  rooms.push({ x: 1, y: midY + 1, w: w - 2, h: h - midY - 2, name: '매표소', custom: true });
 }
 
 // 방 이름 짓기

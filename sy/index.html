@@ -90,6 +90,7 @@ const __M = Object.create(null);
     FLOOR: 11,     // 건물 바닥(외곽 데크)
     TRACK: 12,     // 공원 산책로
     ROAD_LINE: 13, // 차도 중앙선
+    ASPHALT: 14,   // 상가 블록 안 포장 마당 (차도가 아니다)
   };
 
   // 통과할 수 없는 지면
@@ -117,9 +118,9 @@ const __M = Object.create(null);
 
   // 지면별 소품 등장 확률과 후보 (절차적 채움)
   const PROP_RULES = {
-    [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
+    [GROUND.GRASS]: { rate: 0.035, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
     [GROUND.FIELD]: { rate: 0.004, pick: [PROP.ROCK, PROP.BUSH] },
-    [GROUND.SIDEWALK]: { rate: 0.03, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
+    [GROUND.SIDEWALK]: { rate: 0.026, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
     [GROUND.PLAZA]: { rate: 0.02, pick: [PROP.BENCH, PROP.PLANTER, PROP.LAMP] },
     [GROUND.TRACK]: { rate: 0.04, pick: [PROP.BENCH, PROP.LAMP, PROP.BUSH] },
     [GROUND.SAND]: { rate: 0.02, pick: [PROP.ROCK, PROP.BUSH] },
@@ -173,6 +174,8 @@ const __M = Object.create(null);
     occludeAlpha: 0.38,
     occludeFadeSpeed: 9,   // 초당 알파 변화 속도
     occludePad: 3,         // 가림 판정에 두는 여유(픽셀)
+    centerLine: '#e0b63c', // 중앙선 (노란색)
+    laneLine: 'rgba(240,240,232,0.8)', // 차선 (흰 점선)
   };
 
   // ── 건물 ────────────────────────────────────────────────────────────────
@@ -218,9 +221,14 @@ const __M = Object.create(null);
     VOID: 0, FLOOR: 1, WALL: 2, EXIT: 3, STAIR_UP: 4, STAIR_DOWN: 5,
     ELEVATOR: 6, COUNTER: 7, SHELF: 8, DESK: 9, PLANT: 10, RUG: 11,
     WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
+    CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
   };
   const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
-    IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE];
+    IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
+    IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART];
+
+  // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
+  const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
 
   // ── NPC ────────────────────────────────────────────────────────────────
   const NPC = {
@@ -228,6 +236,16 @@ const __M = Object.create(null);
     speed: 26,
     wanderRadius: 90,  // 태어난 자리에서 이 픽셀 이상 벗어나지 않는다
     spawnGrounds: [GROUND.SIDEWALK, GROUND.PLAZA, GROUND.TRACK],
+  };
+
+  // ── 도로 위의 차 ────────────────────────────────────────────────────────
+  const TRAFFIC = {
+    classes: ['expressway', 'arterial', 'main', 'local'], // 차가 다니는 도로 등급
+    speed: { expressway: 190, arterial: 120, main: 95, local: 60 }, // 타일/초가 아니라 픽셀/초
+    spacing: 26,        // 차 한 대당 차선 길이(타일). 작을수록 차가 많다
+    colors: 8,          // 차 색 가짓수
+    stopDistance: 34,   // 앞에 사람이 이만큼(픽셀) 안에 있으면 선다
+    stopWidth: 12,      // 차선 폭 기준 좌우 판정
   };
 
   // ── UI ─────────────────────────────────────────────────────────────────
@@ -250,6 +268,7 @@ const __M = Object.create(null);
     interact: ['Space', 'Enter', 'KeyE'],
     fullscreen: ['KeyF'],
     map: ['KeyM'],
+    worldmap: ['Tab'],
     help: ['KeyH', 'Slash'],
     zoomIn: ['Equal', 'NumpadAdd'],
     zoomOut: ['Minus', 'NumpadSubtract'],
@@ -274,7 +293,7 @@ const __M = Object.create(null);
     intervalSeconds: 5,
   };
 
-  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.NPC = NPC; __M.UI = UI; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
+  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.ELEVATOR_KINDS = ELEVATOR_KINDS; __M.NPC = NPC; __M.TRAFFIC = TRAFFIC; __M.UI = UI; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
 })();
 
 // ── util/rng.js ─────────────────────────────
@@ -474,6 +493,7 @@ const __M = Object.create(null);
     [GROUND.FLOOR]: '#b0aaa0',
     [GROUND.TRACK]: '#c49a72',      // 산책로 · 등산로
     [GROUND.ROAD_LINE]: '#5a5c62',
+    [GROUND.ASPHALT]: '#5f6167',   // 상가 마당 — 차도보다 아주 살짝 밝다
   };
 
   // 타일마다 살짝 흔들 밝기 폭 (0 이면 단색)
@@ -492,6 +512,7 @@ const __M = Object.create(null);
     [GROUND.FLOOR]: 0.03,
     [GROUND.TRACK]: 0.06,
     [GROUND.ROAD_LINE]: 0.03,
+    [GROUND.ASPHALT]: 0.05,
   };
 
   // ── 소품 ────────────────────────────────────────────────────────────────
@@ -549,6 +570,11 @@ const __M = Object.create(null);
     [IN.BED]: '#dcd2e2',
     [IN.TABLE]: '#cba97e',
     [IN.MACHINE]: '#93a2ac',
+    [IN.CAR]: '#7f8790',
+    [IN.PILLAR]: '#9a938a',
+    [IN.SEAT]: '#8f4a4a',
+    [IN.SCREEN]: '#d8d8d0',
+    [IN.CART]: '#b8bcc2',
   };
 
   // ── 인물 ────────────────────────────────────────────────────────────────
@@ -562,6 +588,22 @@ const __M = Object.create(null);
     hair: ['#3c2f2a', '#5a4030', '#20202a', '#7a5a3a', '#a06a4a'],
     top: ['#8fb8d8', '#e2a0b8', '#8fc48a', '#f2c14e', '#c8a8ee', '#e88a6a', '#dfe6ec'],
     bottom: ['#4a5a78', '#5a5a62', '#7a6a52', '#3c4a5a'],
+  };
+
+  // ── 지도 ────────────────────────────────────────────────────────────────
+  // 미니맵·전체지도는 실제 지형색 대신 지도 기호색을 쓴다. 그래야 시가지와 논이 구분된다.
+  const MAP_KIND = {
+    FIELD: 0, CITY: 1, INDUSTRIAL: 2, PARK: 3, FOREST: 4, WATER: 5, ROAD: 6, MAIN_ROAD: 7,
+  };
+  const MAP_COLOR = {
+    [MAP_KIND.FIELD]: '#cfd8a8',       // 논밭
+    [MAP_KIND.CITY]: '#e6dfd2',        // 시가지
+    [MAP_KIND.INDUSTRIAL]: '#c9cdd2',  // 산업단지
+    [MAP_KIND.PARK]: '#a8d49a',        // 공원
+    [MAP_KIND.FOREST]: '#7fae74',      // 산
+    [MAP_KIND.WATER]: '#8fc0d8',       // 물
+    [MAP_KIND.ROAD]: '#a8a49c',        // 이면도로
+    [MAP_KIND.MAIN_ROAD]: '#f2c14e',   // 간선도로
   };
 
   // ── UI ─────────────────────────────────────────────────────────────────
@@ -603,7 +645,7 @@ const __M = Object.create(null);
     return rgbToHex([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
   }
 
-  __M.GROUND_COLOR = GROUND_COLOR; __M.GROUND_JITTER = GROUND_JITTER; __M.PROP_COLOR = PROP_COLOR; __M.BUILDING_COLOR = BUILDING_COLOR; __M.INTERIOR_COLOR = INTERIOR_COLOR; __M.PLAYER_COLOR = PLAYER_COLOR; __M.NPC_COLORS = NPC_COLORS; __M.UI_COLOR = UI_COLOR; __M.hexToRgb = hexToRgb; __M.rgbToHex = rgbToHex; __M.shade = shade; __M.mix = mix;
+  __M.GROUND_COLOR = GROUND_COLOR; __M.GROUND_JITTER = GROUND_JITTER; __M.PROP_COLOR = PROP_COLOR; __M.BUILDING_COLOR = BUILDING_COLOR; __M.INTERIOR_COLOR = INTERIOR_COLOR; __M.PLAYER_COLOR = PLAYER_COLOR; __M.NPC_COLORS = NPC_COLORS; __M.MAP_KIND = MAP_KIND; __M.MAP_COLOR = MAP_COLOR; __M.UI_COLOR = UI_COLOR; __M.hexToRgb = hexToRgb; __M.rgbToHex = rgbToHex; __M.shade = shade; __M.mix = mix;
 })();
 
 // ── world/spatial.js ─────────────────────────────
@@ -937,6 +979,8 @@ const __M = Object.create(null);
   //           이름 있는 도로만 실제 방위각대로 비스듬히 지나간다.
   //   street  블록 사이 도로 등급 (config.js ROAD_CLASS 키)
   //   fill    종류별 세부 규칙. 크기는 전부 미터.
+  //           아파트는 units(동 수)와 households(세대수)를 지킨다. 세대수는 확인값이고,
+  //           동 수는 한가람마을 우미린(14개 동)만 확인, 나머지는 세대수에서 추정한 값이다.
 
   const DISTRICTS = [
     // ── 구래동 아파트 ───────────────────────────────────────────────
@@ -944,55 +988,55 @@ const __M = Object.create(null);
       // 2011년 입주 · 26층 · 1,058세대 · 김포한강5로 417
       id: 'hangaram-umiline', name: '한가람마을 우미린', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [24, 26], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [24, 26], start: 101, units: 14, households: 1058 },
       path: [[126.6313, 37.6452], [126.6349, 37.6448], [126.6347, 37.6428], [126.6311, 37.6432]],
     },
     {
       // 2018년 입주 · 1,230세대
       id: 'hangang-ipark', name: '김포한강아이파크', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101, units: 13, households: 1230 },
       path: [[126.6231, 37.6474], [126.6267, 37.6470], [126.6265, 37.6450], [126.6229, 37.6454]],
     },
     {
       // 2017년 입주 · 1,510세대 · 김포한강8로 409
       id: 'prugio3', name: '한강신도시 3차 푸르지오', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 301 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 301, units: 15, households: 1510 },
       path: [[126.6343, 37.6428], [126.6379, 37.6424], [126.6377, 37.6404], [126.6341, 37.6408]],
     },
     {
       // 2018년 입주
       id: 'yuborah4', name: '한강신도시 4차 반도유보라', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 401 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 401, units: 11, households: 1000 },
       path: [[126.6188, 37.6444], [126.6224, 37.6440], [126.6222, 37.6420], [126.6186, 37.6424]],
     },
     {
       // 2013년 입주
       id: 'epyeonhansesang-hosu', name: 'e편한세상 호수마을', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 22], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 22], start: 101, units: 8, households: 700 },
       path: [[126.6251, 37.6394], [126.6287, 37.6390], [126.6285, 37.6370], [126.6249, 37.6374]],
     },
     {
       // 1,770세대 · 김포한강9로
       id: 'yemiji', name: '김포한강예미지', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 29], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 29], start: 101, units: 18, households: 1770 },
       path: [[126.6270, 37.6512], [126.6308, 37.6508], [126.6306, 37.6486], [126.6268, 37.6490]],
     },
     {
       // 2014년 입주 · LH
       id: 'nabi-lh3', name: '나비마을 김포한강3단지', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 20], start: 301 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 20], start: 301, units: 9, households: 800 },
       path: [[126.6182, 37.6508], [126.6218, 37.6504], [126.6216, 37.6484], [126.6180, 37.6488]],
     },
     {
       id: 'moaelga2', name: '김포한강신도시 모아엘가 2차', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 201 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 201, units: 7, households: 600 },
       path: [[126.6331, 37.6390], [126.6367, 37.6386], [126.6365, 37.6366], [126.6329, 37.6370]],
     },
 
@@ -1001,25 +1045,25 @@ const __M = Object.create(null);
       // 2020년 입주 · 1,021세대
       id: 'dongil1', name: '김포한강동일스위트 더파크뷰 1단지', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101, units: 11, households: 1021 },
       path: [[126.6418, 37.6422], [126.6454, 37.6418], [126.6452, 37.6398], [126.6416, 37.6402]],
     },
     {
       id: 'dongil2', name: '김포한강동일스위트 더파크뷰 2단지', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 201 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 201, units: 11, households: 1000 },
       path: [[126.6418, 37.6377], [126.6454, 37.6373], [126.6452, 37.6353], [126.6416, 37.6357]],
     },
     {
       id: 'hangang-hillstate', name: '한강힐스테이트', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101, units: 9, households: 800 },
       path: [[126.6338, 37.6354], [126.6374, 37.6350], [126.6372, 37.6330], [126.6336, 37.6334]],
     },
     {
       id: 'jayeonand-desiang', name: '김포양촌자연앤데시앙', kind: 'apartment',
       block: { w: 150, h: 112 }, street: 'local',
-      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101, units: 8, households: 700 },
       path: [[126.6055, 37.6478], [126.6091, 37.6474], [126.6089, 37.6454], [126.6053, 37.6458]],
     },
 
@@ -1027,16 +1071,18 @@ const __M = Object.create(null);
     {
       // 한강신도시에서 가장 큰 상권. 구래역 남쪽 C지구.
       id: 'gurae-center', name: '구래동 중심상가', kind: 'commercial',
-      block: { w: 82, h: 64 }, street: 'alley',
-      fill: { depth: 13, minW: 8, maxW: 16, floors: [3, 8] },
-      path: [[126.6262, 37.6444], [126.6314, 37.6438], [126.6310, 37.6410], [126.6258, 37.6416]],
+      block: { w: 62, h: 48 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 15, floors: [3, 9] },
+      path: [[126.6244, 37.6448], [126.6330, 37.6438], [126.6322, 37.6396],
+        [126.6236, 37.6406]]
     },
     {
       // 호수공원에서 구래역을 지나 중심상가까지 이어지는 1.4km 축
       id: 'gurae-culture', name: '구래동 문화의 거리', kind: 'commercial',
-      block: { w: 78, h: 60 }, street: 'alley',
-      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
-      path: [[126.6270, 37.6472], [126.6304, 37.6468], [126.6302, 37.6454], [126.6268, 37.6458]],
+      block: { w: 60, h: 46 }, street: 'alley',
+      fill: { depth: 11, minW: 7, maxW: 14, floors: [2, 7] },
+      path: [[126.6262, 37.6478], [126.6322, 37.6470], [126.6318, 37.6446],
+        [126.6258, 37.6454]]
     },
     {
       id: 'masan-sanggwon', name: '마산역 상가', kind: 'commercial',
@@ -1142,10 +1188,10 @@ const __M = Object.create(null);
     },
     {
       id: 'gurae-neighborhood', name: '구래동 근린생활시설', kind: 'commercial',
-      block: { w: 80, h: 62 }, street: 'alley',
-      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 5] },
-      path: [[126.6206, 37.6412], [126.6262, 37.6406], [126.6258, 37.6380],
-        [126.6202, 37.6386]],
+      block: { w: 62, h: 48 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 15, floors: [2, 6] },
+      path: [[126.6196, 37.6414], [126.6262, 37.6406], [126.6256, 37.6376],
+        [126.6190, 37.6384]]
     },
     {
       id: 'masan-neighborhood', name: '마산동 근린생활시설', kind: 'commercial',
@@ -1156,10 +1202,34 @@ const __M = Object.create(null);
     },
     {
       id: 'gurae-office', name: '구래동 오피스텔', kind: 'commercial',
-      block: { w: 78, h: 60 }, street: 'alley',
-      fill: { depth: 14, minW: 10, maxW: 18, floors: [8, 15] },
-      path: [[126.6238, 37.6444], [126.6262, 37.6441], [126.6260, 37.6424],
-        [126.6236, 37.6427]],
+      block: { w: 60, h: 46 }, street: 'alley',
+      fill: { depth: 13, minW: 9, maxW: 17, floors: [8, 16] },
+      path: [[126.6224, 37.6446], [126.6262, 37.6442], [126.6258, 37.6414],
+        [126.6220, 37.6418]]
+    },
+    {
+      // 구래역 동측 상가 (김포한강8로 변)
+      id: 'gurae-east-shops', name: '구래동 상가', kind: 'commercial',
+      block: { w: 60, h: 46 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 15, floors: [3, 8] },
+      path: [[126.6330, 37.6462], [126.6382, 37.6454], [126.6376, 37.6424],
+        [126.6324, 37.6432]],
+    },
+    {
+      // 구래역 남측 상가
+      id: 'gurae-south-shops', name: '구래동 상가', kind: 'commercial',
+      block: { w: 60, h: 46 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 15, floors: [2, 7] },
+      path: [[126.6250, 37.6396], [126.6322, 37.6388], [126.6316, 37.6362],
+        [126.6244, 37.6370]],
+    },
+    {
+      // 마산역 남측 상가
+      id: 'masan-south-shops', name: '마산동 상가', kind: 'commercial',
+      block: { w: 60, h: 46 }, street: 'alley',
+      fill: { depth: 12, minW: 7, maxW: 14, floors: [2, 6] },
+      path: [[126.6366, 37.6382], [126.6416, 37.6376], [126.6412, 37.6352],
+        [126.6362, 37.6358]],
     },
   ];
 
@@ -1181,6 +1251,7 @@ const __M = Object.create(null);
   //   floors  지상 층수, basement 지하 층수
   //   note    실내 안내판에 뜨는 한 줄
   //   metro   지하철역이면 { line, order }
+  //   floorNames  층별 안내. 엘리베이터 대화창과 실내 표시에 쓴다.
 
   const { KIND } = __M;
 
@@ -1189,6 +1260,7 @@ const __M = Object.create(null);
     { name: '구래역', kind: KIND.STATION, lon: 126.6285, lat: 37.6437,
       w: 34, h: 22, floors: 1, basement: 2,     // 김포한강7로 87 (구래동 6880-8)
       note: '김포 골드라인 · 양촌 ↔ 마산',
+      floorNames: { '-2': '승강장', '-1': '대합실', 1: '역사 출입구' },
       metro: { line: '김포 골드라인', order: 2 } },
     { name: '마산역', kind: KIND.STATION, lon: 126.6395, lat: 37.6392,
       w: 30, h: 20, floors: 1, basement: 2,     // 김포한강3로 지하442 (마산동 641-3)
@@ -1202,10 +1274,15 @@ const __M = Object.create(null);
     // ── 상업 ───────────────────────────────────────────────────────
     { name: '이마트 김포한강점', kind: KIND.MART, lon: 126.6301, lat: 37.6428,
       w: 100, h: 66, floors: 4, basement: 2,    // 구래동 6880-9 · 구래역 4번 출구
-      note: '구래역 4번 출구 · 10:00 ~ 23:00' },
+      note: '구래역 4번 출구 · 10:00 ~ 23:00',
+      floorNames: { '-2': '주차장', '-1': '주차장', 1: '식품매장', 2: '생활용품',
+        3: '가전·푸드코트', 4: '문화센터' } },
     { name: '두원타워', kind: KIND.TOWER, lon: 126.6262, lat: 37.6456,
       w: 42, h: 34, floors: 12, basement: 2,    // 김포한강9로75번길 180
-      note: '8층 메가박스 김포한강신도시 · 5개관 712석' },
+      note: '8층 메가박스 김포한강신도시 · 5개관 712석',
+      floorNames: { '-2': '주차장', '-1': '주차장', 1: '로비·은행', 2: '학원',
+        3: '병원', 4: '학원', 5: '사무실', 6: '사무실', 7: '사무실',
+        8: '메가박스', 9: '메가박스 상영관', 10: '사무실', 11: '사무실', 12: '옥상' } },
 
     // ── 관공서 ─────────────────────────────────────────────────────
     { name: '구래동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6270, lat: 37.6478,
@@ -1217,7 +1294,8 @@ const __M = Object.create(null);
       w: 36, h: 22, floors: 3, basement: 0 },   // 양곡1로68번길 37
     { name: '김포시 마산도서관', kind: KIND.PUBLIC, lon: 126.6428, lat: 37.6404,
       w: 36, h: 28, floors: 3, basement: 1,
-      note: '3층 열람실 · 2층 어린이자료실' },
+      note: '3층 열람실 · 2층 어린이자료실',
+      floorNames: { '-1': '주차장', 1: '종합자료실', 2: '어린이자료실', 3: '열람실' } },
 
     // ── 학교 ───────────────────────────────────────────────────────
     { name: '김포구래초등학교', kind: KIND.SCHOOL, lon: 126.6228, lat: 37.6472,
@@ -1323,7 +1401,8 @@ const __M = Object.create(null);
       out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
         w: rect.w, h: parkingDepth, ground: 'parking' });
     } else if (district.kind === 'commercial') {
-      out.areas.push({ ...rect, ground: 'plaza' });
+      // 구래동 상권은 건물 사이가 거의 다 아스팔트다. 골목·주차·하역 공간이 이어진다.
+      out.areas.push({ ...rect, ground: 'asphalt' });
       out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
         w: rect.w, h: parkingDepth, ground: 'parking' });
     }
@@ -1336,20 +1415,57 @@ const __M = Object.create(null);
     }
   }
 
-  // 아파트 — 긴 판상형 동을 줄지어 놓고 번호를 매긴다.
+  // 아파트 — 남향 판상형 동을 줄지어 놓고 번호를 매긴다.
+  // 동 수는 데이터의 units 를 넘지 않는다 (실제 단지 규모에 맞추기 위해).
   function fillApartment(d, rect, rng, out, f) {
     const bw = Math.round(T(f.bw)), bh = Math.round(T(f.bh));
     const gap = Math.round(T(f.gap));
     const rowPitch = bh + gap;
+    const limit = f.units || 999;
     for (let y = rect.y + 2; y + bh <= rect.y + rect.h - 2; y += rowPitch) {
       for (let x = rect.x + 2; x + bw <= rect.x + rect.w - 2; x += bw + Math.round(gap * 0.6)) {
-        const n = f.start + out.aptCount[d.id]++;
+        if (out.aptCount[d.id]++ >= limit * 3) return;  // 후보를 너무 많이 만들지 않는다
         out.buildings.push({
-          name: `${d.name} ${n}동`, kind: KIND.APARTMENT,
+          // 이름과 동 번호는 실제로 자리를 잡은 것만 세어 붙인다 (world/buildings.js)
+          complex: d.name, unitStart: f.start, units: limit,
+          kind: KIND.APARTMENT,
           x, y, w: bw, h: bh,
           floors: rng.int(f.floors[0], f.floors[1]), basement: 1,
           districtId: d.id,
         });
+      }
+    }
+    // 동 사이 마당에 놀이터를 하나 둔다
+    if (rng.chance(0.6)) {
+      const pw = 9, ph = 7;
+      const x = rect.x + rng.int(2, Math.max(2, rect.w - pw - 2));
+      const y = rect.y + rect.h - ph - 8;
+      out.areas.push({ x, y, w: pw, h: ph, ground: 'playground' });
+    }
+  }
+
+  // 단지 부대시설 — 관리사무소, 경비실, 어린이집, 단지내상가.
+  // 실제 아파트 단지에 다 있는 것들이고 이름도 그렇게 부른다.
+  function addComplexFacilities(d, path, bounds, rng, out) {
+    const specs = [
+      { suffix: '관리사무소', kind: KIND.PARK_FACILITY, w: 10, h: 6, floors: 2 },
+      { suffix: '경비실', kind: KIND.PARK_FACILITY, w: 4, h: 3, floors: 1 },
+      { suffix: '어린이집', kind: KIND.PUBLIC, w: 12, h: 7, floors: 2 },
+      { suffix: '단지내상가', kind: KIND.SHOP, w: 14, h: 8, floors: 2 },
+    ];
+    const y0 = Math.floor(bounds.maxY) - 12;   // 단지 남쪽 입구 쪽
+    let x = Math.floor(bounds.minX) + 4;
+    for (const spec of specs) {
+      for (let tries = 0; tries < 14; tries++) {
+        const px = x + tries * 5;
+        if (!pointInPath(px + spec.w / 2, y0 + spec.h / 2, path)) continue;
+        out.buildings.push({
+          name: `${d.name} ${spec.suffix}`, kind: spec.kind,
+          x: px, y: y0, w: spec.w, h: spec.h,
+          floors: spec.floors, basement: 0, districtId: d.id,
+        });
+        x = px + spec.w + 3;
+        break;
       }
     }
   }
@@ -1402,7 +1518,7 @@ const __M = Object.create(null);
     const floors = rng.int(f.floors[0], f.floors[1]);
     // 이름은 나중에 도로명주소로 붙인다 (world/buildings.js)
     out.buildings.push({
-      address: true, suffix: '', kind: KIND.SHOP, x, y, w, h,
+      address: true, suffix: '', locality: d.name, kind: KIND.SHOP, x, y, w, h,
       floors, basement: floors >= 5 ? 1 : 0, districtId: d.id,
     });
   }
@@ -1418,7 +1534,7 @@ const __M = Object.create(null);
         const w = size + rng.int(-1, 2), h = size + rng.int(-1, 1);
         const floors = rng.int(f.floors[0], f.floors[1]);
         out.buildings.push({
-          address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '',
+          address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '', locality: d.name,
           kind: KIND.HOUSE, x, y, w: Math.max(3, w), h: Math.max(3, h),
           floors, basement: 0, districtId: d.id,
         });
@@ -1437,7 +1553,7 @@ const __M = Object.create(null);
       const x = rect.x + rng.int(2, Math.max(2, rect.w - w - 2));
       const warehouse = rng.chance(0.3);
       out.buildings.push({
-        address: true, suffix: warehouse ? '물류창고' : '공장',
+        address: true, suffix: warehouse ? '물류창고' : '공장', locality: d.name,
         kind: warehouse ? KIND.WAREHOUSE : KIND.FACTORY,
         x, y: cursorY, w, h,
         floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -1454,7 +1570,7 @@ const __M = Object.create(null);
       for (let x = rect.x + 2; x + size <= rect.x + rect.w - 2; x += pitch) {
         if (!rng.chance(f.rate)) continue;
         out.buildings.push({
-          address: true, suffix: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
+          address: true, suffix: rng.pick(RURAL_NAME), locality: d.name, kind: KIND.FARMHOUSE,
           x: x + rng.int(0, 3), y: y + rng.int(0, 3),
           w: size + rng.int(-1, 3), h: size + rng.int(-1, 1),
           floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -1472,6 +1588,8 @@ const __M = Object.create(null);
       const b = pathBounds(path);
       const rng = makeRng(SEED, 'district', d.id);
       out.aptCount[d.id] = 0;
+      // 관리사무소·경비실 같은 부대시설을 먼저 앉힌다 (동에 밀리지 않도록)
+      if (d.kind === 'apartment') addComplexFacilities(d, path, b, rng, out);
 
       const streetW = ROAD_CLASS[d.street].width + ROAD_CLASS[d.street].sidewalk * 2;
       const pitchX = Math.round(T(d.block.w)) + streetW;
@@ -1528,7 +1646,7 @@ const __M = Object.create(null);
   const { SEED, BUILDING, KIND, TILE, GEO } = __M;
   const { project, projectPath, metersToTiles } = __M;
   const { GridIndex, rectsOverlap } = __M;
-  const { makeRng } = __M;
+  const { makeRng, hash32 } = __M;
   const { expandDistricts } = __M;
   const { PLACES } = __M;
   const { ROADS } = __M;
@@ -1539,13 +1657,16 @@ const __M = Object.create(null);
   function buildRoadIndex(generatedRoads) {
     const index = new GridIndex(TILE.chunk);
     const all = [];
+    const paths = [];          // 도로 한 줄 전체 (그릴 때 이어서 그리려고)
     const add = (name, cls, tiles) => {
+      const roadIndex = paths.length;
+      paths.push({ name, cls, spec: ROAD_CLASS[cls], tiles });
       const spec = ROAD_CLASS[cls];
       const half = spec.width / 2 + spec.sidewalk;
       let travelled = 0; // 도로 시작점부터의 누적 길이 — 횡단보도 간격에 쓴다
       for (let i = 0; i < tiles.length - 1; i++) {
         const [ax, ay] = tiles[i], [bx, by] = tiles[i + 1];
-        const seg = { name, cls, spec, half, ax, ay, bx, by, dist0: travelled };
+        const seg = { name, cls, spec, half, ax, ay, bx, by, dist0: travelled, roadIndex };
         travelled += Math.hypot(bx - ax, by - ay);
         all.push(seg);
         index.insert(seg,
@@ -1555,7 +1676,7 @@ const __M = Object.create(null);
     };
     for (const road of ROADS) add(road.name, road.cls, projectPath(road.path));
     for (const road of generatedRoads) add(road.name, road.cls, road.tiles);
-    return { index, all };
+    return { index, all, paths };
   }
 
   // 선분이 사각형(여유 pad 포함)을 지나가는가 — 굵은 선 vs 상자 간이 판정
@@ -1581,13 +1702,17 @@ const __M = Object.create(null);
     return true;
   }
 
-  // 출입구 자리 정하기: 가장 가까운 길 쪽 벽 한가운데
+  // 출입구 자리 정하기.
+  //
+  // 문은 언제나 **앞면(남쪽)** 에 둔다. 탑뷰지만 건물을 층수만큼 위로 솟게 그리기 때문에
+  // 앞벽만 보이고 뒷면은 지붕에 가린다. 뒤나 옆에 문을 두면 보이지도 않고,
+  // 건물 뒤로 돌아 들어가야 해서 이상하다.
+  // 대신 앞벽에서 어느 지점에 낼지는 가장 가까운 길 쪽으로 맞춘다.
   function placeDoor(rect, roads, rng) {
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
     const r = BUILDING.doorProbeRadius;
-    const near = roads.index.query(cx - r, cy - r, cx + r, cy + r);
     let best = null, bestD = Infinity;
-    for (const seg of near) {
+    for (const seg of roads.index.query(cx - r, cy - r, cx + r, cy + r)) {
       // 선분 위에서 건물 중심에 가장 가까운 점
       const dx = seg.bx - seg.ax, dy = seg.by - seg.ay;
       const len2 = dx * dx + dy * dy || 1;
@@ -1595,25 +1720,20 @@ const __M = Object.create(null);
       t = t < 0 ? 0 : t > 1 ? 1 : t;
       const px = seg.ax + t * dx, py = seg.ay + t * dy;
       const d = Math.hypot(px - cx, py - cy);
-      if (d < bestD) { bestD = d; best = { px, py }; }
+      if (d < bestD) { bestD = d; best = px; }
     }
 
-    let dir = 'S';
-    if (best) {
-      const vx = best.px - cx, vy = best.py - cy;
-      if (Math.abs(vx) > Math.abs(vy)) dir = vx > 0 ? 'E' : 'W';
-      else dir = vy > 0 ? 'S' : 'N';
+    // 길 쪽 x 로 붙이되 모서리는 피한다. 길이 멀면 가운데에서 살짝 흔든다.
+    const lo = rect.x + 1;
+    const hi = rect.x + rect.w - 2;
+    let x;
+    if (best !== null) {
+      x = Math.round(best);
+    } else {
+      x = rect.x + Math.floor(rect.w / 2) + (rect.w > 6 ? rng.int(-1, 1) : 0);
     }
-
-    // 벽 가운데에서 살짝 흔들어 배치 (전부 정가운데면 심심하다)
-    const jx = rect.w > 6 ? rng.int(-1, 1) : 0;
-    const jy = rect.h > 6 ? rng.int(-1, 1) : 0;
-    switch (dir) {
-      case 'N': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y, dir };
-      case 'S': return { x: rect.x + Math.floor(rect.w / 2) + jx, y: rect.y + rect.h - 1, dir };
-      case 'W': return { x: rect.x, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
-      default: return { x: rect.x + rect.w - 1, y: rect.y + Math.floor(rect.h / 2) + jy, dir };
-    }
+    x = Math.max(lo, Math.min(hi, x));
+    return { x, y: rect.y + rect.h - 1, dir: 'S' };
   }
 
   // 문 앞(건물 바깥) 한 칸 — 나올 때 여기에 선다
@@ -1656,6 +1776,20 @@ const __M = Object.create(null);
 
   let nextId = 1;
 
+  // 단지별로 실제 자리를 잡은 동 수를 센다 (번호를 건너뛰지 않게)
+  const complexCount = new Map();
+  // 같은 주소가 두 번 나오지 않게 (실제 도로명주소도 겹치지 않는다)
+  const usedAddress = new Set();
+
+  function uniqueAddress(base) {
+    if (!usedAddress.has(base)) { usedAddress.add(base); return base; }
+    for (let n = 1; n < 40; n++) {
+      const candidate = `${base}-${n}`;   // 실제로도 쓰는 부번 형식
+      if (!usedAddress.has(candidate)) { usedAddress.add(candidate); return candidate; }
+    }
+    return base;
+  }
+
   function makeBuilding(spec, roads, index, placed) {
     const rect = { x: spec.x, y: spec.y, w: spec.w, h: spec.h };
     if (rect.w < BUILDING.minTiles || rect.h < BUILDING.minTiles) return null;
@@ -1673,12 +1807,20 @@ const __M = Object.create(null);
       }
     }
 
-    // 이름이 없는 건물은 도로명주소로 부른다
+    // 아파트 동은 자리를 잡은 순서대로 101동, 102동 … 번호를 매긴다.
+    // 단지 정원(units)을 채우면 더 놓지 않는다.
     let name = spec.name;
+    if (!name && spec.complex) {
+      const placedSoFar = complexCount.get(spec.complex) || 0;
+      if (placedSoFar >= spec.units) return null;
+      name = `${spec.complex} ${spec.unitStart + placedSoFar}동`;
+    }
     if (!name && spec.address) {
       const addr = buildingAddress(rect, roads);
-      name = addr ? (spec.suffix ? `${addr} ${spec.suffix}` : addr)
-        : (spec.suffix || '이름 없는 건물');
+      // 이름 있는 도로가 멀면 지번으로 부른다 — 농촌은 실제로도 그렇다
+      const base = addr || `${spec.locality || '구래동'} ${1 + (hash32('jibun', rect.x, rect.y) % 3000)}`;
+      const unique = uniqueAddress(base);   // 주소 자체가 겹치지 않게 (부번을 붙인다)
+      name = spec.suffix ? `${unique} ${spec.suffix}` : unique;
     }
 
     const rng = makeRng(SEED, 'building', name, rect.x, rect.y);
@@ -1689,12 +1831,14 @@ const __M = Object.create(null);
       floors: Math.max(1, spec.floors | 0),
       basement: spec.basement | 0,
       note: spec.note || '',
+      floorNames: spec.floorNames || null,
       metro: spec.metro || null,
       districtId: spec.districtId || null,
       seed: rng.int(0, 0xffff),
       landmark: !!spec.landmark,
     };
     b.door = placeDoor(rect, roads, rng);
+    if (spec.complex) complexCount.set(spec.complex, (complexCount.get(spec.complex) || 0) + 1);
     placed.push(b);
     index.insert(b, b.x, b.y, b.x + b.w, b.y + b.h);
     return b;
@@ -1702,6 +1846,8 @@ const __M = Object.create(null);
 
   // 세상의 모든 건물을 만든다. 시작할 때 한 번.
   function buildBuildings() {
+    complexCount.clear();
+    usedAddress.clear();
     const districts = expandDistricts();
     const roads = buildRoadIndex(districts.roads);
     const index = new GridIndex(TILE.chunk);
@@ -1744,6 +1890,27 @@ const __M = Object.create(null);
     return floor < 0 ? `지하 ${-floor}층` : `${floor}층`;
   }
 
+  // 층에 무엇이 있는지. 데이터에 적힌 게 있으면 그걸 쓰고, 없으면 종류로 짐작한다.
+  const DEFAULT_FLOOR_USE = {
+    [KIND.APARTMENT]: (f) => (f < 0 ? '주차장' : f === 1 ? '현관·경비' : '세대'),
+    [KIND.SHOP]: (f) => (f < 0 ? '창고' : f === 1 ? '상가' : f === 2 ? '학원·식당' : '사무실'),
+    [KIND.TOWER]: (f) => (f < 0 ? '주차장' : f <= 3 ? '상가' : '오피스텔'),
+    [KIND.MART]: (f) => (f < 0 ? '주차장' : '매장'),
+    [KIND.SCHOOL]: (f) => (f === 1 ? '교무실·급식실' : '교실'),
+    [KIND.PUBLIC]: (f) => (f < 0 ? '주차장' : f === 1 ? '민원실' : '사무실'),
+    [KIND.STATION]: (f) => (f === -2 ? '승강장' : f === -1 ? '대합실' : '출입구'),
+    [KIND.FACTORY]: (f) => (f === 1 ? '생산라인' : '사무실'),
+    [KIND.WAREHOUSE]: () => '창고',
+    [KIND.HOUSE]: (f) => (f === 1 ? '거실' : '방'),
+    [KIND.FARMHOUSE]: () => '창고',
+  };
+
+  function floorUse(b, floor) {
+    if (b.floorNames && b.floorNames[floor] !== undefined) return b.floorNames[floor];
+    const fn = DEFAULT_FLOOR_USE[b.kind];
+    return fn ? fn(floor) : '';
+  }
+
   // 건물이 몇 층부터 몇 층까지 있는가
   function floorRange(b) {
     return { min: b.basement ? -b.basement : 1, max: b.floors };
@@ -1751,7 +1918,7 @@ const __M = Object.create(null);
 
   const BUILDING_KINDS = KIND;
 
-  __M.buildRoadIndex = buildRoadIndex; __M.doorOutside = doorOutside; __M.buildingAddress = buildingAddress; __M.buildBuildings = buildBuildings; __M.buildingAtTile = buildingAtTile; __M.floorLabel = floorLabel; __M.floorRange = floorRange; __M.BUILDING_KINDS = BUILDING_KINDS;
+  __M.buildRoadIndex = buildRoadIndex; __M.doorOutside = doorOutside; __M.buildingAddress = buildingAddress; __M.buildBuildings = buildBuildings; __M.buildingAtTile = buildingAtTile; __M.floorLabel = floorLabel; __M.floorUse = floorUse; __M.floorRange = floorRange; __M.BUILDING_KINDS = BUILDING_KINDS;
 })();
 
 // ── world/map.js ─────────────────────────────
@@ -1765,6 +1932,7 @@ const __M = Object.create(null);
   const { WORLD_W, WORLD_H, projectPath, pathBounds, pointInPath, distToSegment, metersToTiles } = __M;
   const { GridIndex } = __M;
   const { noiseAt, fbm, seedOf } = __M;
+  const { MAP_KIND } = __M;
   const { REGIONS, WATERWAYS } = __M;
 
   const CH = TILE.chunk;
@@ -1801,7 +1969,8 @@ const __M = Object.create(null);
       // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
       this.areaIndex = new GridIndex(CH);
       const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA,
-        yard: GROUND.YARD, lawn: GROUND.GRASS };
+        yard: GROUND.YARD, lawn: GROUND.GRASS, playground: GROUND.SAND,
+        asphalt: GROUND.ASPHALT };
       for (const a of buildings.areas || []) {
         const area = { ...a, kind: areaGround[a.ground] };
         this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
@@ -1845,6 +2014,7 @@ const __M = Object.create(null);
       const ground = new Uint8Array(n);
       const prop = new Uint8Array(n);
       const solid = new Uint8Array(n);
+      const noProp = new Uint8Array(n);   // 도로 가장자리처럼 소품이 있으면 안 되는 칸
       const ox = cx * CH, oy = cy * CH;
 
       // 1) 바탕 — 논밭에 얼룩진 풀밭
@@ -1852,7 +2022,8 @@ const __M = Object.create(null);
         for (let x = 0; x < CH; x++) {
           const tx = ox + x, ty = oy + y;
           const v = fbm(S_BASE, tx, ty, 26, 3);
-          ground[y * CH + x] = v > 0.62 ? GROUND.GRASS : v < 0.36 ? GROUND.DIRT : GROUND.FIELD;
+          // 논이 기본이고, 밭(흙)과 묵힌 땅(풀)이 드문드문 섞인다
+          ground[y * CH + x] = v > 0.78 ? GROUND.GRASS : v < 0.34 ? GROUND.DIRT : GROUND.FIELD;
         }
       }
 
@@ -1872,9 +2043,11 @@ const __M = Object.create(null);
             const i = y * CH + x;
             ground[i] = r.ground;
             regionRate[i] = r.propRate || 0;
-            // 도시 바닥은 잔디와 포장이 얼룩덜룩 섞인다 (주차장·광장 자리)
-            if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.74) {
-              ground[i] = GROUND.PLAZA;
+            if (r.kind === 'city') {
+              // 신도시 바닥은 대부분 보도블럭과 포장이다. 녹지는 가로수 띠 정도.
+              const v = fbm(S_CITY, ox + x, oy + y, 9, 2);
+              ground[i] = v > 0.66 ? GROUND.GRASS : v < 0.32 ? GROUND.PLAZA : GROUND.SIDEWALK;
+              regionRate[i] = v > 0.66 ? 0.05 : 0.015;
             }
           }
         }
@@ -1887,10 +2060,13 @@ const __M = Object.create(null);
         for (let y = y0; y < y1; y++) {
           for (let x = x0; x < x1; x++) {
             const i = y * CH + x;
-            // 포장 바닥에도 화단이 조금씩 섞인다
-            const green = a.kind !== GROUND.GRASS && fbm(S_CITY, ox + x, oy + y, 7, 2) > 0.78;
-            ground[i] = green ? GROUND.GRASS : a.kind;
-            regionRate[i] = a.kind === GROUND.GRASS ? 0.05 : green ? 0.02 : 0;
+            // 단지 마당은 조경과 포장이 섞인다. 상가 아스팔트에는 화단이 없다.
+            const noise = fbm(S_CITY, ox + x, oy + y, 7, 2);
+            let g = a.kind;
+            if (a.kind === GROUND.GRASS) g = noise > 0.44 ? GROUND.GRASS : GROUND.PLAZA;
+            else if (a.kind !== GROUND.ASPHALT && noise > 0.86) g = GROUND.GRASS;
+            ground[i] = g;
+            regionRate[i] = g === GROUND.GRASS ? 0.04 : 0;
           }
         }
       }
@@ -1922,11 +2098,14 @@ const __M = Object.create(null);
           const len2 = dx * dx + dy * dy || 1;
           const halfRoad = s.spec.width / 2;
           const outer = halfRoad + s.spec.sidewalk;
+          // 안쪽 반경 — 타일이 도로 안에 확실히 들어올 때만 칠한다
+          const inner = Math.max(0.4, halfRoad - 0.8);
           return { s, dx, dy, len2, len: Math.sqrt(len2), halfRoad2: halfRoad * halfRoad,
-            outer2: outer * outer,
+            inner2: inner * inner, outer2: outer * outer,
             minX: Math.min(s.ax, s.bx) - outer - 1, maxX: Math.max(s.ax, s.bx) + outer + 1,
             minY: Math.min(s.ay, s.by) - outer - 1, maxY: Math.max(s.ay, s.by) + outer + 1,
             ground: s.spec.ground !== undefined ? s.spec.ground : GROUND.ROAD,
+            sidewalk: s.spec.sidewalk > 0,
             centerLine: s.spec.ground === undefined && s.spec.width >= 4,
             crossing: s.spec.crossing, dist0: s.dist0 };
         });
@@ -1945,11 +2124,13 @@ const __M = Object.create(null);
               const ex = tx - (q.s.ax + t * q.dx), ey = ty - (q.s.ay + t * q.dy);
               const d2 = ex * ex + ey * ey;
               if (d2 <= q.halfRoad2) {
-                paint = q.ground;
-                // 폭이 넉넉한 차도에는 점선 중앙선을 넣는다
-                if (q.centerLine && d2 < 0.62) {
-                  const dash = ((q.dist0 + t * q.len) % 5);
-                  if (dash < 2.6) paint = GROUND.ROAD_LINE;
+                // 차도 안쪽만 도로로 칠한다. 가장자리 한 겹은 원래 지면으로 두고
+                // 그리는 쪽에서 선으로 덮는다 — 그래야 도로 경계가 계단처럼 각지지 않는다.
+                noProp[i] = 1;
+                if (d2 <= q.inner2) {
+                  paint = q.ground;
+                } else if (q.sidewalk) {
+                  paint = GROUND.SIDEWALK;
                 }
                 if (q.crossing) {
                   // 도로를 따라 일정 간격으로 횡단보도를 놓는다
@@ -1962,10 +2143,14 @@ const __M = Object.create(null);
                 break;
               } else if (d2 <= q.outer2 && paint < 0) {
                 paint = GROUND.SIDEWALK;
+                noProp[i] = 1;
               }
             }
-            if (paint >= 0) {
-              ground[i] = cross ? GROUND.CROSSWALK : paint;
+            if (cross) {
+              ground[i] = GROUND.CROSSWALK;
+              regionRate[i] = 0;
+            } else if (paint >= 0) {
+              ground[i] = paint;
               regionRate[i] = 0;
             }
           }
@@ -1976,6 +2161,7 @@ const __M = Object.create(null);
       for (let y = 0; y < CH; y++) {
         for (let x = 0; x < CH; x++) {
           const i = y * CH + x;
+          if (noProp[i]) continue;
           const g = ground[i];
           const rule = PROP_RULES[g];
           const extra = regionRate[i];
@@ -2048,27 +2234,36 @@ const __M = Object.create(null);
   }
 
   // 미니맵·전체지도용 저해상도 그림. 시작할 때 한 번만 만든다.
+  // 지형색이 아니라 지도 기호색 코드(MAP_KIND)를 담는다.
   function buildOverview(map, scale) {
     const w = Math.ceil(WORLD_W / scale), h = Math.ceil(WORLD_H / scale);
     const data = new Uint8Array(w * h);
+    const kindOf = {
+      city: MAP_KIND.CITY, industrial: MAP_KIND.INDUSTRIAL, park: MAP_KIND.PARK,
+      forest: MAP_KIND.FOREST, water: MAP_KIND.WATER, field: MAP_KIND.FIELD,
+    };
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const tx = x * scale + scale / 2, ty = y * scale + scale / 2;
-        let g = GROUND.FIELD;
+        let v = MAP_KIND.FIELD;
         for (const r of map.regionIndex.queryPoint(tx, ty)) {
-          if (pointInPath(tx, ty, r.path)) g = r.ground;
+          if (pointInPath(tx, ty, r.path)) v = kindOf[r.kind] !== undefined ? kindOf[r.kind] : v;
         }
         for (const s of map.waterIndex.queryPoint(tx, ty)) {
-          if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.half) g = GROUND.WATER;
-        }
-        // 미니맵에서는 큰길만, 대신 실제보다 굵게 그린다 (안 그러면 안 보인다)
-        for (const s of map.buildings.roads.index.query(tx - scale, ty - scale, tx + scale, ty + scale)) {
-          if (s.spec.width < 4) continue;
-          if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.spec.width / 2 + scale * 0.45) {
-            g = GROUND.ROAD;
+          if (distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by) < s.half + scale * 0.3) {
+            v = MAP_KIND.WATER;
           }
         }
-        data[y * w + x] = g;
+        // 도로는 실제보다 굵게 그려야 이 축척에서 보인다
+        for (const s of map.buildings.roads.index.query(tx - scale, ty - scale,
+            tx + scale, ty + scale)) {
+          if (s.spec.width < 4) continue;
+          const d = distToSegment(tx, ty, s.ax, s.ay, s.bx, s.by);
+          if (d < s.spec.width / 2 + scale * 0.45) {
+            v = s.spec.width >= 8 ? MAP_KIND.MAIN_ROAD : MAP_KIND.ROAD;
+          }
+        }
+        data[y * w + x] = v;
       }
     }
     return { w, h, scale, data };
@@ -2082,7 +2277,7 @@ const __M = Object.create(null);
   // 실내 생성 · 층 전환. 건물에 들어갈 때마다 그 층을 즉석에서 만든다.
   // 모든 건물이 시드로 만들어지므로 같은 건물의 같은 층은 언제나 같은 모습이다.
 
-  const { SEED, INTERIOR, IN, IN_SOLID, KIND } = __M;
+  const { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS } = __M;
   const { makeRng } = __M;
   const { ROOM_NAMES } = __M;
 
@@ -2135,8 +2330,8 @@ const __M = Object.create(null);
     // 복도와 방
     const corridorY = Math.floor(h / 2);
     const cw = Math.min(INTERIOR.corridorWidth, h - 4);
-    if (layout === 'open') {
-      fillOpen(tiles, w, h, set, get, rng, b, floor);
+    if (layout === 'open' || layout === 'parking' || layout === 'mart' || layout === 'cinema') {
+      fillOpen(tiles, w, h, set, get, rng, b, floor, layout, rooms);
     } else {
       // 위·아래 두 줄로 방을 나눈다
       makeRoomRow(1, corridorY - Math.floor(cw / 2), rooms, w, h, set, rng, true);
@@ -2145,32 +2340,34 @@ const __M = Object.create(null);
       if (exit) for (let y = corridorY; y < h - 1; y++) set(exit.x, y, IN.FLOOR);
     }
 
-    // 방 이름과 가구
+    // 방 이름과 가구. 특수 층(마트·주차장·상영관)은 이미 이름과 배치가 정해져 있다.
     const namer = roomNamer(b, floor, rng, layout);
     rooms.forEach((room, i) => {
+      if (room.custom) return;
       room.name = namer(i, room);
       furnish(room, layout, set, get, rng, b);
     });
 
-    // 층 이동 장치
+    // 층 이동 장치 — 실제 건물처럼 계단은 늘 있고, 큰 건물에는 엘리베이터가 더 있다
     const floors = floorList(b);
     const stairs = {};
-    const useElevator = b.floors >= INTERIOR.elevatorFrom;
-    const spot = { x: 2, y: corridorY };
-    const spot2 = { x: 3, y: corridorY };
+    const useElevator = b.floors >= INTERIOR.elevatorFrom ||
+      (ELEVATOR_KINDS.includes(b.kind) && floors.length >= 3);
     if (floors.length > 1) {
-      const kindUp = useElevator ? IN.ELEVATOR : IN.STAIR_UP;
       const idx = floors.indexOf(floor);
+      const upSpot = { x: 2, y: corridorY };
+      const downSpot = { x: 3, y: corridorY };
+      if (idx < floors.length - 1) { set(upSpot.x, upSpot.y, IN.STAIR_UP); stairs.up = { ...upSpot }; }
+      if (idx > 0) { set(downSpot.x, downSpot.y, IN.STAIR_DOWN); stairs.down = { ...downSpot }; }
+      set(upSpot.x, upSpot.y + 1, IN.FLOOR);
+      set(downSpot.x, downSpot.y + 1, IN.FLOOR);
+
       if (useElevator) {
-        set(spot.x, spot.y, IN.ELEVATOR);
-        stairs.elevator = { ...spot };
-      } else {
-        if (idx < floors.length - 1) { set(spot.x, spot.y, kindUp); stairs.up = { ...spot }; }
-        if (idx > 0) { set(spot2.x, spot2.y, IN.STAIR_DOWN); stairs.down = { ...spot2 }; }
+        const elevator = { x: 5, y: corridorY };
+        set(elevator.x, elevator.y, IN.ELEVATOR);
+        set(elevator.x, elevator.y + 1, IN.FLOOR);
+        stairs.elevator = elevator;
       }
-      // 계단 앞은 비워 둔다
-      set(spot.x, spot.y + 1, IN.FLOOR);
-      set(spot2.x, spot2.y + 1, IN.FLOOR);
     }
 
     // 상호작용 물건을 놓을 자리 — 벽에 붙은 빈 바닥
@@ -2200,7 +2397,14 @@ const __M = Object.create(null);
 
   // 종류·층에 따른 실내 형태
   function layoutOf(kind, floor, b) {
-    if (kind === KIND.MART || kind === KIND.FACTORY || kind === KIND.WAREHOUSE) return 'open';
+    // 지하는 대개 주차장이다
+    if (floor < 0 && (kind === KIND.MART || kind === KIND.TOWER ||
+        kind === KIND.APARTMENT || kind === KIND.PUBLIC)) return 'parking';
+    if (kind === KIND.MART) return 'mart';
+    // 두원타워 8·9층은 메가박스다
+    if (b.floorNames && b.floorNames[floor] &&
+        String(b.floorNames[floor]).includes('메가박스')) return 'cinema';
+    if (kind === KIND.FACTORY || kind === KIND.WAREHOUSE) return 'open';
     if (kind === KIND.STATION && floor < 0) return 'open';
     if (kind === KIND.CHURCH && floor === 1) return 'open';
     if (kind === KIND.APARTMENT) return 'units';
@@ -2228,8 +2432,11 @@ const __M = Object.create(null);
     }
   }
 
-  // 넓은 한 칸짜리 층 (마트·공장·승강장)
-  function fillOpen(tiles, w, h, set, get, rng, b, floor) {
+  // 넓은 한 칸짜리 층 (마트·공장·승강장·주차장·상영관)
+  function fillOpen(tiles, w, h, set, get, rng, b, floor, layout, rooms) {
+    if (layout === 'parking') return fillParking(w, h, set, rng, rooms);
+    if (layout === 'mart') return fillMart(w, h, set, rng, b, floor, rooms);
+    if (layout === 'cinema') return fillCinema(w, h, set, rng, rooms);
     if (b.kind === KIND.STATION && floor < 0) {
       // 승강장 — 가운데가 선로
       const railY = Math.floor(h / 2);
@@ -2267,6 +2474,70 @@ const __M = Object.create(null);
         if (rng.chance(0.3)) set(x + 1, y, IN.SHELF);
       }
     }
+  }
+
+  // 지하주차장 — 기둥과 주차면, 차 몇 대
+  function fillParking(w, h, set, rng, rooms) {
+    for (let y = 3; y < h - 3; y += 6) {
+      for (let x = 2; x < w - 2; x++) {
+        if ((x - 2) % 7 === 0) continue;            // 차로
+        if (rng.chance(0.45)) set(x, y, IN.CAR);    // 주차된 차
+      }
+    }
+    for (let y = 4; y < h - 2; y += 7) {
+      for (let x = 4; x < w - 2; x += 8) set(x, y, IN.PILLAR);
+    }
+    rooms.push({ x: 1, y: 1, w: w - 2, h: h - 2, name: '지하주차장', custom: true });
+  }
+
+  // 마트 매장 — 진열대 통로와 계산대, 카트
+  function fillMart(w, h, set, rng, b, floor, rooms) {
+    // 계산대는 출입구 쪽(아래)에 한 줄
+    for (let x = 3; x < w - 6; x += 4) {
+      set(x, h - 4, IN.COUNTER);
+      set(x + 1, h - 4, IN.COUNTER);
+    }
+    set(w - 4, h - 4, IN.CART);
+    set(w - 3, h - 4, IN.CART);
+    // 진열대 — 통로를 두고 줄지어
+    for (let y = 3; y < h - 7; y += 3) {
+      for (let x = 2; x < w - 2; x++) {
+        if (x % 8 === 0 || x % 8 === 1) continue;   // 통로
+        set(x, y, IN.SHELF);
+      }
+    }
+    // 벽면 냉장고
+    for (let x = 2; x < w - 2; x++) if (x % 3 !== 0) set(x, 1, IN.MACHINE);
+    const use = b.floorNames && b.floorNames[floor];
+    rooms.push({ x: 1, y: 1, w: w - 2, h: h - 2, name: use || '매장', custom: true });
+  }
+
+  // 상영관 — 매표소와 스크린, 좌석
+  function fillCinema(w, h, set, rng, rooms) {
+    const hallW = Math.floor((w - 3) / 2);
+    const midY = Math.floor(h * 0.55);
+    // 로비: 매표소와 매점
+    for (let x = 3; x < w - 3; x += 5) set(x, h - 3, IN.COUNTER);
+    set(2, h - 3, IN.CART);
+
+    // 상영관 둘 (왼쪽·오른쪽)
+    for (let i = 0; i < 2; i++) {
+      const x0 = 1 + i * (hallW + 1);
+      const x1 = x0 + hallW;
+      for (let y = 1; y < midY; y++) { set(x0, y, IN.WALL); set(x1, y, IN.WALL); }
+      for (let x = x0; x <= x1; x++) set(x, midY, IN.WALL);
+      set(x0 + Math.floor(hallW / 2), midY, IN.FLOOR);      // 상영관 문
+      for (let x = x0 + 1; x < x1; x++) set(x, 1, IN.SCREEN); // 스크린
+      for (let y = 3; y < midY - 1; y += 2) {
+        for (let x = x0 + 1; x < x1; x++) {
+          if (x === x0 + Math.floor(hallW / 2)) continue;     // 가운데 통로
+          set(x, y, IN.SEAT);
+        }
+      }
+      rooms.push({ x: x0 + 1, y: 2, w: hallW - 1, h: midY - 3,
+        name: `${i + 1}관`, custom: true });
+    }
+    rooms.push({ x: 1, y: midY + 1, w: w - 2, h: h - midY - 2, name: '매표소', custom: true });
   }
 
   // 방 이름 짓기
@@ -2476,6 +2747,120 @@ const __M = Object.create(null);
   __M.Actors = Actors;
 })();
 
+// ── world/traffic.js ─────────────────────────────
+(function () {
+  // 도로 위의 차. 이름 있는 도로를 차선 삼아 차들이 오간다.
+  // 사람이 차도에 서 있으면 앞차가 선다 — 밟고 지나가지는 않는다.
+
+  const { SEED, TILE, TRAFFIC } = __M;
+  const { makeRng } = __M;
+  const { projectPath } = __M;
+  const { ROADS } = __M;
+  const { ROAD_CLASS } = __M;
+
+  const S = TILE.size;
+
+  // 도로 하나를 방향별 차선 두 개로 만든다
+  function makeLanes(road) {
+    const spec = ROAD_CLASS[road.cls];
+    if (!TRAFFIC.classes.includes(road.cls)) return [];
+    const pts = projectPath(road.path);
+    // 누적 길이
+    let total = 0;
+    const nodes = pts.map((p, i) => {
+      if (i > 0) total += Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]);
+      return { x: p[0], y: p[1], dist: total };
+    });
+    if (total < 20) return [];
+
+    const offset = spec.width / 4;   // 중앙선에서 차선 중앙까지
+    return [1, -1].map((sign) => ({
+      road: road.name, nodes, length: total, sign, offset: offset * sign,
+      speed: TRAFFIC.speed[road.cls] || 40,
+    }));
+  }
+
+  class Traffic {
+    constructor() {
+      this.lanes = [];
+      for (const road of ROADS) this.lanes.push(...makeLanes(road));
+
+      const rng = makeRng(SEED, 'traffic');
+      this.cars = [];
+      for (let i = 0; i < this.lanes.length; i++) {
+        const lane = this.lanes[i];
+        const count = Math.max(1, Math.round(lane.length / TRAFFIC.spacing));
+        for (let c = 0; c < count; c++) {
+          this.cars.push({
+            lane: i,
+            dist: (lane.length * (c + rng.range(0, 0.8))) / count,
+            speed: lane.speed * rng.range(0.85, 1.15),
+            color: rng.int(0, TRAFFIC.colors - 1),
+            kind: rng.chance(0.16) ? 'truck' : rng.chance(0.1) ? 'bus' : 'car',
+            x: 0, y: 0, angle: 0, stopped: false,
+          });
+        }
+      }
+      this.place();
+    }
+
+    // 차선 위 거리(dist)로부터 실제 위치와 방향을 구한다
+    locate(lane, dist) {
+      const nodes = lane.nodes;
+      const d = ((dist % lane.length) + lane.length) % lane.length;
+      let i = 1;
+      while (i < nodes.length - 1 && nodes[i].dist < d) i++;
+      const a = nodes[i - 1], b = nodes[i];
+      const segLen = b.dist - a.dist || 1;
+      const t = (d - a.dist) / segLen;
+      const dx = (b.x - a.x) / segLen, dy = (b.y - a.y) / segLen;
+      // 진행 방향과 직각으로 차선만큼 비켜 선다
+      const nx = -dy, ny = dx;
+      return {
+        x: (a.x + (b.x - a.x) * t + nx * lane.offset) * S,
+        y: (a.y + (b.y - a.y) * t + ny * lane.offset) * S,
+        angle: Math.atan2(dy * lane.sign, dx * lane.sign),
+      };
+    }
+
+    place() {
+      for (const car of this.cars) {
+        const lane = this.lanes[car.lane];
+        const p = this.locate(lane, car.dist);
+        car.x = p.x; car.y = p.y; car.angle = p.angle;
+      }
+    }
+
+    update(dt, player) {
+      for (const car of this.cars) {
+        const lane = this.lanes[car.lane];
+        // 앞에 사람이 있으면 선다
+        const ahead = TRAFFIC.stopDistance;
+        const dx = player.x - car.x, dy = player.y - car.y;
+        const forwardX = Math.cos(car.angle), forwardY = Math.sin(car.angle);
+        const along = dx * forwardX + dy * forwardY;
+        const side = Math.abs(dx * -forwardY + dy * forwardX);
+        car.stopped = along > 0 && along < ahead && side < TRAFFIC.stopWidth;
+        if (car.stopped) continue;
+
+        car.dist += car.speed * dt * lane.sign;
+        const p = this.locate(lane, car.dist);
+        car.x = p.x; car.y = p.y; car.angle = p.angle;
+      }
+    }
+
+    // 화면 안의 차만 넘겨준다
+    *visible(left, top, right, bottom) {
+      for (const car of this.cars) {
+        if (car.x < left || car.x > right || car.y < top || car.y > bottom) continue;
+        yield car;
+      }
+    }
+  }
+
+  __M.Traffic = Traffic;
+})();
+
 // ── render/sprites.js ─────────────────────────────
 (function () {
   // 절차적 스프라이트 생성 — 이 파일이 게임의 모든 그림을 만든다.
@@ -2550,6 +2935,13 @@ const __M = Object.create(null);
           const x = rng.int(0, S - 1), y = rng.int(0, S - 2);
           px(ctx, x, y, 1, 2, shade(base, 0.16));
         }
+        break;
+      }
+      case GROUND.ASPHALT: { // 상가 마당 — 아스팔트에 기름 자국과 주차선 조각
+        for (let i = 0; i < 20; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, rng.chance(0.5) ? 0.08 : -0.08));
+        if (variant === 0) px(ctx, 2, 0, 1, S, shade(base, 0.24));
+        if (variant === 3) px(ctx, 0, 6, S, 1, shade(base, -0.14));
         break;
       }
       case GROUND.ROAD: { // 아스팔트 알갱이
@@ -2742,6 +3134,29 @@ const __M = Object.create(null);
     return Math.min(BUILDING.wallHeightMax, 8 + b.floors * BUILDING.wallHeightPerFloor);
   }
 
+  // 건물 한 채의 생김새를 시드에서 뽑는다.
+  // 같은 종류라도 채마다 파사드·차양·옥상 구조물이 달라진다.
+  function pickStyle(b, rng) {
+    const tall = b.floors >= 8;
+    const wide = b.w >= 10;
+    return {
+      facade: rng.pick(tall ? ['glass', 'glass', 'grid'] : ['grid', 'tile', 'glass']),
+      awning: (b.kind === KIND.SHOP || b.kind === KIND.MART) && rng.chance(0.55),
+      awningColor: rng.pick(SIGN_COLORS),
+      signs: b.kind === KIND.SHOP ? rng.int(1, 3) : 1,
+      pillar: b.kind === KIND.SHOP && b.floors >= 4 && rng.chance(0.4),   // 옥상 광고탑
+      tank: rng.chance(tall ? 0.7 : 0.35),                                // 물탱크
+      solar: rng.chance(b.kind === KIND.HOUSE ? 0.35 : 0.2),              // 태양광
+      penthouse: tall && rng.chance(0.5),                                 // 옥탑방
+      units: rng.chance(0.5),                                             // 실외기 줄
+      roofShape: rng.pick(['gable', 'flat', 'hip']),                      // 주택 지붕
+      chimney: b.kind === KIND.FACTORY && rng.chance(0.5),
+      docks: (b.kind === KIND.WAREHOUSE || b.kind === KIND.FACTORY) && wide,
+      piloti: b.kind === KIND.APARTMENT && rng.chance(0.45),              // 1층 필로티
+      ridge: rng.chance(0.5),                                             // 공장 지붕 골 방향
+    };
+  }
+
   // 건물 한 채를 통째로 그린 캔버스. 아래 끝이 건물 남쪽 벽에 맞는다.
   function buildingSprite(b) {
     const wh = wallHeight(b);
@@ -2757,9 +3172,10 @@ const __M = Object.create(null);
       col = { wall: '#e8eeea', roof: '#dfe6e2', trim: '#b8c4bc', accent: '#cfe0d8' };
     }
     const rng = makeRng(SEED, 'sprite', b.seed, b.kind);
-    // 같은 종류라도 채마다 색을 조금씩 흔든다
-    const wall = shade(col.wall, rng.range(-0.06, 0.06));
-    const roof = shade(col.roof, rng.range(-0.07, 0.07));
+    const style = pickStyle(b, rng);
+    // 같은 종류라도 채마다 색을 꽤 다르게 흔든다
+    const wall = shade(col.wall, rng.range(-0.10, 0.10));
+    const roof = shade(col.roof, rng.range(-0.12, 0.12));
     const trim = col.trim;
     const roofH = b.h * S;
 
@@ -2767,7 +3183,7 @@ const __M = Object.create(null);
     px(ctx, 0, 0, pw, roofH, roof);
     px(ctx, 0, 0, pw, 1, shade(roof, 0.18));
     px(ctx, 0, roofH - 1, pw, 1, shade(roof, -0.2));
-    drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng);
+    drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng, style);
 
     // 앞벽
     px(ctx, 0, roofH, pw, wh, wall);
@@ -2776,8 +3192,8 @@ const __M = Object.create(null);
     px(ctx, 0, roofH, 1, wh, shade(wall, -0.12));
     px(ctx, pw - 1, roofH, 1, wh, shade(wall, -0.12));
 
-    drawWindows(ctx, b, pw, roofH, wh, wall, col, rng);
-    drawFrontDoor(ctx, b, pw, roofH, wh, col, rng);
+    drawWindows(ctx, b, pw, roofH, wh, wall, col, rng, style);
+    drawFrontDoor(ctx, b, pw, roofH, wh, col, rng, style);
 
     hit = canvas;
     buildingCache.set(key, hit);
@@ -2788,7 +3204,7 @@ const __M = Object.create(null);
     return hit;
   }
 
-  function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng) {
+  function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng, style) {
     const dark = shade(roof, -0.16), light = shade(roof, 0.12);
     switch (b.kind) {
       case KIND.APARTMENT: case KIND.TOWER: {
@@ -2814,18 +3230,53 @@ const __M = Object.create(null);
         break;
       }
       case KIND.HOUSE: case KIND.FARMHOUSE: {
-        // 경사 지붕 — 가운데 용마루
-        const mid = Math.floor(roofH / 2);
-        px(ctx, 0, 0, pw, mid, shade(roof, 0.1));
-        px(ctx, 0, mid, pw, roofH - mid, dark);
-        px(ctx, 0, mid - 1, pw, 2, shade(roof, -0.35));
+        if (style.roofShape === 'flat') {
+          // 평지붕 — 옥상에 물탱크와 장독대, 가끔 태양광
+          px(ctx, 1, 1, pw - 2, roofH - 3, shade(roof, -0.06));
+          px(ctx, 1, 1, pw - 2, 1, light);
+          if (style.tank) { px(ctx, 4, 4, 7, 6, dark); px(ctx, 5, 5, 5, 2, light); }
+          if (style.solar) {
+            for (let x = pw - 16; x < pw - 4 && x > 2; x += 6) px(ctx, x, 5, 5, 8, '#3f5f8a');
+          }
+          for (let i = 0; i < 3; i++) px(ctx, pw - 10 + i * 3, roofH - 9, 2, 3, '#7a5a3a');
+        } else if (style.roofShape === 'hip') {
+          // 모임지붕 — 네 방향으로 흐른다
+          px(ctx, 0, 0, pw, roofH, shade(roof, 0.06));
+          for (let i = 0; i < Math.min(pw, roofH) / 2; i++) {
+            px(ctx, i, i, pw - i * 2, 1, shade(roof, 0.02 - i * 0.02));
+          }
+          px(ctx, 0, roofH - 2, pw, 2, dark);
+        } else {
+          // 박공지붕 — 가운데 용마루
+          const mid = Math.floor(roofH / 2);
+          px(ctx, 0, 0, pw, mid, shade(roof, 0.1));
+          px(ctx, 0, mid, pw, roofH - mid, dark);
+          px(ctx, 0, mid - 1, pw, 2, shade(roof, -0.35));
+          for (let x = 2; x < pw - 2; x += 5) px(ctx, x, 1, 1, roofH - 2, shade(roof, -0.06));
+        }
         break;
       }
       case KIND.FACTORY: case KIND.WAREHOUSE: {
-        // 톱날 지붕 + 환기구
-        for (let x = 2; x < pw - 4; x += 10) {
-          px(ctx, x, 2, 6, roofH - 5, dark);
-          px(ctx, x, 2, 6, 2, col.accent);
+        // 샌드위치 패널 골. 방향은 건물마다 다르다.
+        if (style.ridge) {
+          for (let x = 2; x < pw - 3; x += 9) {
+            px(ctx, x, 2, 5, roofH - 5, dark);
+            px(ctx, x, 2, 5, 2, shade(roof, 0.18));
+          }
+        } else {
+          for (let y = 2; y < roofH - 3; y += 9) {
+            px(ctx, 2, y, pw - 4, 5, dark);
+            px(ctx, 2, y, pw - 4, 2, shade(roof, 0.18));
+          }
+        }
+        // 지붕 환기구 줄
+        for (let x = 6; x < pw - 8; x += 16) px(ctx, x, Math.floor(roofH / 2) - 2, 6, 4, '#c8ccd0');
+        // 굴뚝
+        if (style.chimney) {
+          const cx2 = pw - 14;
+          px(ctx, cx2, 3, 6, 16, '#b8bec4');
+          px(ctx, cx2, 3, 6, 3, '#e2554a');
+          px(ctx, cx2 + 1, 6, 4, 2, '#8f979e');
         }
         break;
       }
@@ -2857,62 +3308,139 @@ const __M = Object.create(null);
         break;
       }
       default: {
-        // 상가 옥상 — 난간, 실외기 줄, 물탱크, 옥상 출입문
+        // 상가 옥상 — 난간, 실외기 줄, 물탱크, 옥탑방, 광고탑
         px(ctx, 1, 1, pw - 2, roofH - 3, shade(roof, -0.05));
         px(ctx, 1, 1, pw - 2, 1, light);
         px(ctx, 1, roofH - 3, pw - 2, 1, dark);
-        for (let x = 5; x < pw - 8; x += 11) {
-          if (!rng.chance(0.55)) continue;
-          px(ctx, x, 5, 7, 5, shade(roof, -0.2));
-          px(ctx, x + 1, 6, 5, 3, shade(roof, 0.1));
+        // 실외기 — 상가 옥상은 이것들로 빼곡하다
+        const acRows = Math.max(1, Math.floor(roofH / 26));
+        for (let r = 0; r < acRows; r++) {
+          const ay = 5 + r * 14;
+          if (ay + 6 > roofH - 6) break;
+          for (let x = 4; x < pw - 8; x += 10) {
+            if (!rng.chance(style.units ? 0.85 : 0.45)) continue;
+            px(ctx, x, ay, 7, 6, shade(roof, -0.24));
+            px(ctx, x + 1, ay + 1, 5, 3, shade(roof, 0.12));
+            px(ctx, x + 1, ay + 5, 5, 1, shade(roof, -0.34));
+          }
         }
-        if (roofH > 26) {
-          px(ctx, pw - 14, roofH - 14, 9, 8, dark);       // 옥상 출입문
+        // 배관과 난간 그림자
+        const pipeY = Math.floor(roofH * 0.72);
+        px(ctx, 3, pipeY, pw - 6, 1, shade(roof, -0.2));
+        if (rng.chance(0.5)) px(ctx, Math.floor(pw / 3), 3, 1, roofH - 8, shade(roof, -0.16));
+        if (roofH > 24) {
+          px(ctx, pw - 14, roofH - 14, 9, 8, dark);        // 옥상 출입문
           px(ctx, pw - 12, roofH - 12, 5, 5, shade(roof, 0.2));
         }
-        if (roofH > 20 && rng.chance(0.6)) {
+        if (style.tank && roofH > 18) {
           px(ctx, 4, roofH - 13, 8, 7, shade(roof, -0.28)); // 물탱크
           px(ctx, 5, roofH - 12, 6, 2, light);
+        }
+        if (style.penthouse && roofH > 26) {
+          px(ctx, Math.floor(pw / 2) - 7, 5, 15, 11, shade(roof, -0.18));
+          px(ctx, Math.floor(pw / 2) - 5, 7, 11, 4, shade(col.accent, 0.2));
+        }
+        if (style.pillar) {
+          // 옥상 광고탑 — 간판 기둥이 하늘로 솟아 있다
+          const sx = Math.floor(pw * 0.25);
+          px(ctx, sx, 2, 3, roofH - 6, '#8f959c');
+          px(ctx, sx - 5, 1, 13, 7, rng.pick(SIGN_COLORS));
+          px(ctx, sx - 3, 3, 9, 1, '#fffdf2');
         }
       }
     }
   }
 
-  function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng) {
-    if (b.kind === KIND.APARTMENT) return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng);
+  function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng, style) {
+    if (b.kind === KIND.APARTMENT) {
+      return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng, style);
+    }
     if (b.kind === KIND.FARMHOUSE && b.w < 6) return;
     const glass = shade(col.accent, rng.range(-0.05, 0.1));
-    const rows = Math.max(1, Math.min(4, Math.floor((wh - 8) / 9)));
-    const step = b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE ? 14 : 9;
-    for (let r = 0; r < rows; r++) {
-      const y = roofH + 4 + r * 9;
-      if (y + 5 > roofH + wh - 3) break;
-      for (let x = 4; x < pw - 6; x += step) {
-        if (rng.chance(0.12)) continue; // 불 꺼진 창
-        px(ctx, x, y, 5, 5, glass);
-        px(ctx, x, y, 5, 1, shade(glass, 0.25));
-        px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
+
+    // 창고·공장 앞면은 하역 도크 셔터가 늘어선다
+    if (b.kind === KIND.WAREHOUSE || b.kind === KIND.FACTORY) {
+      const y = roofH + Math.max(2, wh - 14);
+      if (style.docks) {
+        for (let x = 4; x < pw - 12; x += 18) {
+          px(ctx, x, y, 13, Math.min(12, wh - 3), shade(wall, -0.22));
+          for (let i = 1; i < 5; i++) px(ctx, x, y + i * 3, 13, 1, shade(wall, -0.32));
+        }
+      } else {
+        for (let x = 4; x < pw - 8; x += 14) px(ctx, x, y + 2, 9, 5, glass);
+      }
+      return;
+    }
+
+    if (style.facade === 'glass') {
+      // 커튼월 — 층마다 통유리 띠
+      for (let r = 0; ; r++) {
+        const y = roofH + 3 + r * 8;
+        if (y + 6 > roofH + wh - 4) break;
+        px(ctx, 2, y, pw - 4, 5, glass);
+        px(ctx, 2, y, pw - 4, 1, shade(glass, 0.28));
+        for (let x = 4; x < pw - 4; x += 7) px(ctx, x, y, 1, 5, shade(wall, -0.1));
+      }
+    } else if (style.facade === 'tile') {
+      // 타일 벽 — 작은 창이 드문드문
+      for (let y = roofH + 2; y < roofH + wh - 4; y += 4) {
+        px(ctx, 1, y, pw - 2, 1, shade(wall, -0.06));
+      }
+      for (let r = 0; ; r++) {
+        const y = roofH + 4 + r * 9;
+        if (y + 5 > roofH + wh - 4) break;
+        for (let x = 5; x < pw - 7; x += 12) {
+          if (rng.chance(0.2)) continue;
+          px(ctx, x, y, 6, 5, glass);
+          px(ctx, x, y + 4, 6, 1, shade(glass, -0.3));
+        }
+      }
+    } else {
+      // 격자 창 — 가장 흔한 모습
+      const step = 9;
+      for (let r = 0; ; r++) {
+        const y = roofH + 4 + r * 9;
+        if (y + 5 > roofH + wh - 4) break;
+        for (let x = 4; x < pw - 6; x += step) {
+          if (rng.chance(0.12)) continue;
+          px(ctx, x, y, 5, 5, glass);
+          px(ctx, x, y, 5, 1, shade(glass, 0.25));
+          px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
+        }
       }
     }
-    // 상가는 1층에 간판띠. 색은 건물마다 다르다 (실제 간판이 그렇듯)
-    if ((b.kind === KIND.SHOP || b.kind === KIND.MART) && wh > 14) {
-      const sign = b.kind === KIND.MART ? col.accent : rng.pick(SIGN_COLORS);
-      const y = roofH + wh - 14;
-      px(ctx, 1, y, pw - 2, 5, sign);
-      px(ctx, 1, y, pw - 2, 1, shade(sign, 0.25));
-      for (let x = 3; x < pw - 5; x += 4) px(ctx, x, y + 2, 2, 1, '#fffdf2');
-      // 위층에도 간판이 하나씩 붙는다
-      if (wh > 26 && rng.chance(0.7)) {
-        const y2 = roofH + wh - 26;
-        const sign2 = rng.pick(SIGN_COLORS);
-        px(ctx, 2, y2, Math.max(6, pw - 8), 4, sign2);
-        for (let x = 4; x < pw - 8; x += 4) px(ctx, x, y2 + 1, 2, 1, '#fffdf2');
+
+    // 상가는 1층 유리 파사드와 간판띠. 간판 수와 색은 건물마다 다르다.
+    if ((b.kind === KIND.SHOP || b.kind === KIND.MART || b.kind === KIND.TOWER) && wh > 14) {
+      // 1층 통유리
+      px(ctx, 1, roofH + wh - 9, pw - 2, 7, shade(col.accent, 0.3));
+      for (let x = 4; x < pw - 3; x += 6) px(ctx, x, roofH + wh - 9, 1, 7, shade(wall, -0.15));
+
+      const signCount = b.kind === KIND.MART ? 1 : style.signs;
+      for (let i = 0; i < signCount; i++) {
+        const y = roofH + wh - 14 - i * 11;
+        if (y < roofH + 2) break;
+        const sign = b.kind === KIND.MART ? col.accent : rng.pick(SIGN_COLORS);
+        const inset = i === 0 ? 1 : 3;
+        px(ctx, inset, y, pw - inset * 2, i === 0 ? 5 : 4, sign);
+        px(ctx, inset, y, pw - inset * 2, 1, shade(sign, 0.25));
+        for (let x = inset + 2; x < pw - inset - 3; x += 4) {
+          px(ctx, x, y + 2, 2, 1, '#fffdf2');
+        }
+      }
+      // 차양(어닝)
+      if (style.awning) {
+        const y = roofH + wh - 10;
+        for (let x = 1; x < pw - 3; x += 6) {
+          px(ctx, x, y, 5, 3, style.awningColor);
+          px(ctx, x, y + 3, 5, 1, shade(style.awningColor, -0.3));
+        }
       }
     }
   }
 
   // 아파트 앞면 — 세대 구획선과 발코니 띠, 그 사이 창문
-  function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng) {
+  function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng, style) {
     const unit = 22;                    // 세대 하나의 폭(픽셀)
     const glass = shade(col.accent, rng.range(-0.04, 0.08));
     const line = shade(wall, -0.16);
@@ -2931,27 +3459,34 @@ const __M = Object.create(null);
     }
     // 세대 사이 벽선
     for (let x = 0; x < pw; x += unit) px(ctx, x, roofH + 1, 1, wh - 3, line);
-    // 1층 출입구 캐노피
+    // 1층 — 필로티(기둥만 있는 층)인 단지가 있고, 아닌 단지가 있다
+    if (style.piloti) {
+      const y = roofH + wh - 9;
+      px(ctx, 1, y, pw - 2, 9, shade(wall, -0.42));
+      for (let x = 3; x < pw - 4; x += unit / 2) px(ctx, x, y, 3, 9, shade(wall, -0.05));
+    }
+    // 출입구 캐노피
     const dx = Math.max(2, Math.min(pw - 16, (b.door.x - b.x) * S));
     px(ctx, dx, roofH + wh - 8, 14, 8, shade(col.trim, -0.1));
     px(ctx, dx + 2, roofH + wh - 7, 10, 4, shade(col.accent, 0.15));
   }
 
-  function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng) {
-    const doorW = Math.min(10, Math.max(5, Math.floor(pw / 5)));
-    const y = roofH + wh - 9;
+  function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng, style) {
+    // 문은 언제나 앞면에 있다 (world/buildings.js 의 placeDoor 참고).
+    // 실제 출입구 타일 x 에 맞춰 그려서, 땅에 깔린 매트와 자리가 어긋나지 않게 한다.
+    const doorW = Math.min(12, Math.max(6, Math.floor(pw / 6)));
+    const y = roofH + wh - 10;
     const dark = shade(col.trim, -0.2);
-    if (b.door.dir === 'S') {
-      // 앞면 정중앙 근처 — 실제 출입구 타일 위치에 맞춘다
-      const dx = Math.max(1, Math.min(pw - doorW - 1, (b.door.x - b.x) * S + (S - doorW) / 2));
-      px(ctx, dx, y, doorW, 9, dark);
-      px(ctx, dx + 1, y + 1, doorW - 2, 6, shade(col.accent, 0.2));
-      px(ctx, dx, y + 8, doorW, 1, shade(dark, -0.3));
-    } else {
-      // 옆·뒷면 출입구는 앞벽에 셔터나 창고문으로 표시만 한다
-      const dx = Math.floor(pw / 2) - doorW / 2;
-      px(ctx, dx, y + 2, doorW, 7, shade(col.trim, -0.05));
-    }
+    const dx = Math.max(1, Math.min(pw - doorW - 1,
+      (b.door.x - b.x) * S + (S - doorW) / 2));
+
+    // 차양
+    px(ctx, dx - 2, y - 3, doorW + 4, 3, shade(col.trim, 0.05));
+    // 문틀과 유리문
+    px(ctx, dx, y, doorW, 10, dark);
+    px(ctx, dx + 1, y + 1, doorW - 2, 7, shade(col.accent, 0.25));
+    px(ctx, dx + doorW / 2 - 0.5, y + 1, 1, 7, dark);   // 가운데 문설주
+    px(ctx, dx, y + 9, doorW, 1, shade(dark, -0.3));
   }
 
   // 출입구 발판 (땅에 깔리는 매트) — 문 찾기 쉬우라고
@@ -3074,6 +3609,71 @@ const __M = Object.create(null);
     return catSprites[variant % catSprites.length];
   }
 
+  // ── 자동차 ──────────────────────────────────────────────────────────────
+  // 방향마다 미리 돌려서 구워 둔다. 매 프레임 회전시키면 도트가 지저분해진다.
+  const CAR_DIRS = 16;
+  const CAR_COLORS = ['#d8d8dc', '#3a3f46', '#8f97a0', '#5f7fa8', '#b8452f',
+    '#2f5a3f', '#e2e2d8', '#7a5a8f'];
+  const carCache = new Map();
+
+  function carSprite(kind, color, dirIndex) {
+    const key = `${kind}|${color}|${dirIndex}`;
+    let hit = carCache.get(key);
+    if (hit) return hit;
+
+    const size = kind === 'bus' ? 46 : kind === 'truck' ? 38 : 26;
+    const body = kind === 'car' ? 11 : 13;
+    const box = Math.ceil(Math.hypot(size, body)) + 2;
+    const { canvas, ctx } = makeCanvas(box, box);
+    const c = CAR_COLORS[color % CAR_COLORS.length];
+
+    ctx.save();
+    ctx.translate(box / 2, box / 2);
+    ctx.rotate((dirIndex / CAR_DIRS) * Math.PI * 2);
+    ctx.translate(-size / 2, -body / 2);
+
+    // 차체
+    px(ctx, 0, 0, size, body, c);
+    px(ctx, 0, 0, size, 1, shade(c, 0.22));
+    px(ctx, 0, body - 1, size, 1, shade(c, -0.28));
+    if (kind === 'bus') {
+      // 버스 — 창문 줄과 노선 색띠
+      for (let x = 4; x < size - 6; x += 6) px(ctx, x, 2, 4, body - 4, '#9fc0dd');
+      px(ctx, 0, Math.floor(body / 2), size, 2, '#3f7fbf');
+      px(ctx, size - 4, 2, 3, body - 4, shade(c, -0.2));
+    } else if (kind === 'truck') {
+      // 트럭 — 앞칸과 적재함
+      px(ctx, 0, 0, 11, body, shade(c, -0.12));
+      px(ctx, 2, 2, 6, body - 4, '#9fc0dd');
+      px(ctx, 12, 1, size - 13, body - 2, shade(c, 0.1));
+      for (let x = 14; x < size - 2; x += 5) px(ctx, x, 1, 1, body - 2, shade(c, -0.15));
+    } else {
+      // 승용차 — 앞유리, 뒷유리, 지붕
+      px(ctx, 5, 1, size - 11, body - 2, shade(c, -0.08));
+      px(ctx, 6, 2, 4, body - 4, '#9fc0dd');
+      px(ctx, size - 10, 2, 4, body - 4, '#8fb0cc');
+    }
+    // 바퀴와 등
+    px(ctx, 3, -1, 4, 1, '#2a2a30');
+    px(ctx, size - 8, -1, 4, 1, '#2a2a30');
+    px(ctx, 3, body, 4, 1, '#2a2a30');
+    px(ctx, size - 8, body, 4, 1, '#2a2a30');
+    px(ctx, size - 2, 1, 2, 2, '#f2e2a8');
+    px(ctx, size - 2, body - 3, 2, 2, '#f2e2a8');
+    px(ctx, 0, 1, 1, 2, '#d8564a');
+    px(ctx, 0, body - 3, 1, 2, '#d8564a');
+    ctx.restore();
+
+    hit = canvas;
+    carCache.set(key, hit);
+    return hit;
+  }
+
+  function carDirIndex(angle) {
+    const step = (Math.PI * 2) / CAR_DIRS;
+    return ((Math.round(angle / step) % CAR_DIRS) + CAR_DIRS) % CAR_DIRS;
+  }
+
   // ── 실내 타일 ───────────────────────────────────────────────────────────
   const interiorCache = new Map();
 
@@ -3167,6 +3767,41 @@ const __M = Object.create(null);
         px(ctx, 6, 6, 4, 4, '#f2f2ee');
         break;
       }
+      case IN.CAR: { // 주차된 차 (위에서 본 모습)
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 2, 1, 12, 14, base);
+        px(ctx, 3, 3, 10, 4, '#9fc0dd');
+        px(ctx, 3, 9, 10, 4, shade(base, -0.15));
+        px(ctx, 2, 0, 12, 1, shade(base, 0.2));
+        break;
+      }
+      case IN.PILLAR: { // 기둥
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 2, 2, 12, 12, base);
+        px(ctx, 2, 2, 12, 2, shade(base, 0.18));
+        px(ctx, 2, 12, 12, 2, shade(base, -0.25));
+        break;
+      }
+      case IN.SEAT: { // 상영관 좌석
+        px(ctx, 0, 0, S, S, '#2a2530');
+        px(ctx, 1, 4, 6, 10, base);
+        px(ctx, 9, 4, 6, 10, base);
+        px(ctx, 1, 4, 6, 2, shade(base, 0.2));
+        px(ctx, 9, 4, 6, 2, shade(base, 0.2));
+        break;
+      }
+      case IN.SCREEN: { // 스크린
+        px(ctx, 0, 0, S, S, '#2a2530');
+        px(ctx, 0, 2, S, 11, base);
+        px(ctx, 0, 2, S, 1, '#ffffff');
+        break;
+      }
+      case IN.CART: { // 카트 보관대
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        for (let i = 0; i < 3; i++) px(ctx, 2 + i * 4, 4, 3, 9, base);
+        px(ctx, 1, 3, 14, 1, shade(base, -0.2));
+        break;
+      }
       case IN.MACHINE: {
         px(ctx, 1, 1, 14, 14, base);
         px(ctx, 3, 3, 10, 5, shade(base, -0.3));
@@ -3236,12 +3871,12 @@ const __M = Object.create(null);
 
   // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
   function clearSpriteCaches() {
-    groundCache.clear(); propCache.clear(); buildingCache.clear();
+    groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
     buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
     npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
   }
 
-  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
+  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.carSprite = carSprite; __M.carDirIndex = carDirIndex; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
 })();
 
 // ── render/camera.js ─────────────────────────────
@@ -3324,7 +3959,7 @@ const __M = Object.create(null);
   const {
     makeCanvas, groundTile, groundVariantAt, propSprite, PROP_H,
     buildingSprite, wallHeight, doorMatSprite, playerSheet_, npcSheet, catSprite,
-    interiorTile, gizmoSprite,
+    interiorTile, gizmoSprite, carSprite, carDirIndex,
   } = __M;
 
   const S = TILE.size;
@@ -3339,6 +3974,8 @@ const __M = Object.create(null);
       this.cache = new Map();   // 구워 둔 청크 캔버스
       this.order = [];
       this.fade = new Map();    // 건물 id → 지금 투명도 (뒤에 서면 서서히 비친다)
+      this.asphalt = null;      // 아스팔트·보도 패턴 (한 번만 만든다)
+      this.pavement = null;
     }
 
     // 플레이어가 이 건물 뒤(북쪽)에 서서 지붕에 가려지는가
@@ -3385,10 +4022,24 @@ const __M = Object.create(null);
       const { canvas, ctx } = makeCanvas(CHUNK_PX, CHUNK_PX + MARGIN);
       const ox = cx * CH, oy = cy * CH;
 
+      // 1) 지면 타일. 차도는 뒤에서 선으로 그리므로 여기서는 건너뛴다.
       for (let y = 0; y < CH; y++) {
         for (let x = 0; x < CH; x++) {
           const g = chunk.ground[y * CH + x];
+          if (g === GROUND.ROAD || g === GROUND.ROAD_LINE || g === GROUND.CROSSWALK) continue;
           ctx.drawImage(groundTile(g, groundVariantAt(ox + x, oy + y)), x * S, y * S + MARGIN);
+        }
+      }
+
+      // 2) 차도 — 타일로 칠하면 계단처럼 각지고 중앙선이 끊긴다. 선으로 그린다.
+      this.strokeRoads(ctx, ox, oy);
+
+      // 3) 횡단보도는 도로 위에 다시 얹는다
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CH; x++) {
+          if (chunk.ground[y * CH + x] !== GROUND.CROSSWALK) continue;
+          ctx.drawImage(groundTile(GROUND.CROSSWALK, groundVariantAt(ox + x, oy + y)),
+            x * S, y * S + MARGIN);
         }
       }
       for (let y = 0; y < CH; y++) {
@@ -3408,6 +4059,73 @@ const __M = Object.create(null);
         if (old !== key) this.cache.delete(old);
       }
       return hit;
+    }
+
+    // 청크 하나에 걸친 도로들을 이어서 그린다.
+    // 아스팔트는 타일 무늬를 패턴으로 깔아 도트 질감을 유지하고, 가장자리는 선으로 매끈하게.
+    strokeRoads(ctx, ox, oy) {
+      const segs = this.buildings.roads.index.query(ox - 12, oy - 12, ox + CH + 12, oy + CH + 12);
+      if (!segs.length) return;
+      const roadIds = new Set();
+      for (const seg of segs) roadIds.add(seg.roadIndex);
+      const paths = this.buildings.roads.paths;
+
+      if (!this.asphalt) {
+        this.asphalt = ctx.createPattern(groundTile(GROUND.ROAD, 0), 'repeat');
+        this.pavement = ctx.createPattern(groundTile(GROUND.SIDEWALK, 0), 'repeat');
+      }
+
+      ctx.save();
+      ctx.translate(-ox * S, -oy * S + MARGIN);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const trace = (tiles) => {
+        ctx.beginPath();
+        ctx.moveTo(tiles[0][0] * S, tiles[0][1] * S);
+        for (let i = 1; i < tiles.length; i++) ctx.lineTo(tiles[i][0] * S, tiles[i][1] * S);
+      };
+
+      // 보도 → 차도 → 차선 순서로 겹쳐 그린다
+      for (const id of roadIds) {
+        const road = paths[id];
+        if (!road.spec.sidewalk) continue;
+        trace(road.tiles);
+        ctx.strokeStyle = this.pavement;
+        ctx.lineWidth = (road.spec.width + road.spec.sidewalk * 2) * S;
+        ctx.stroke();
+      }
+      for (const id of roadIds) {
+        const road = paths[id];
+        if (road.spec.ground !== undefined) continue;   // 산책로는 지면 타일 그대로
+        trace(road.tiles);
+        ctx.strokeStyle = this.asphalt;
+        ctx.lineWidth = road.spec.width * S;
+        ctx.stroke();
+      }
+      for (const id of roadIds) {
+        const road = paths[id];
+        const spec = road.spec;
+        if (spec.ground !== undefined || spec.width < 4) continue;
+        trace(road.tiles);
+        // 중앙선 — 왕복 도로는 노란 실선, 좁은 길은 점선
+        ctx.strokeStyle = RENDER.centerLine;
+        ctx.lineWidth = spec.width >= 6 ? 2 : 1.5;
+        ctx.setLineDash(spec.width >= 6 ? [] : [S * 0.9, S * 0.9]);
+        ctx.stroke();
+        // 차선 — 흰 점선
+        if (spec.width >= 8) {
+          ctx.setLineDash([S * 1.2, S * 1.1]);
+          ctx.strokeStyle = RENDER.laneLine;
+          ctx.lineWidth = 1.5;
+          for (const off of [-spec.width / 4, spec.width / 4]) {
+            traceOffset(ctx, road.tiles, off * S);
+            ctx.stroke();
+          }
+        }
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
     }
 
     // 청크 캐시를 버린다 (지면이 바뀌었을 때)
@@ -3456,6 +4174,13 @@ const __M = Object.create(null);
       for (const a of state.actors.visible(cx0, cy0, cx1, cy1)) {
         items.push({ base: a.y, draw: () => this.drawActor(ctx, a) });
       }
+      if (state.traffic) {
+        const pad = 48;
+        for (const car of state.traffic.visible(cam.left - pad, cam.top - pad,
+            cam.left + cam.viewW + pad, cam.top + cam.viewH + pad)) {
+          items.push({ base: car.y, draw: () => this.drawCar(ctx, car) });
+        }
+      }
       items.push({ base: state.player.y, draw: () => this.drawPlayer(ctx, state.player) });
 
       items.sort((a, b) => a.base - b.base);
@@ -3493,6 +4218,17 @@ const __M = Object.create(null);
         ctx.strokeRect(b.x * S + 1.5, b.y * S - wh + 1.5, b.w * S - 3, b.h * S + wh - 3);
       }
       ctx.globalAlpha = 1;
+    }
+
+    drawCar(ctx, car) {
+      const sprite = carSprite(car.kind, car.color, carDirIndex(car.angle));
+      const half = sprite.width / 2;
+      ctx.globalAlpha = RENDER.shadowAlpha;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(Math.round(car.x - half + 2), Math.round(car.y - half + 4),
+        sprite.width - 4, sprite.height - 6);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(sprite, Math.round(car.x - half), Math.round(car.y - half));
     }
 
     drawActor(ctx, a) {
@@ -3548,6 +4284,20 @@ const __M = Object.create(null);
     }
   }
 
+  // 도로 중심선에서 옆으로 비켜 난 선 (차선용)
+  function traceOffset(ctx, tiles, offset) {
+    ctx.beginPath();
+    for (let i = 0; i < tiles.length; i++) {
+      const a = tiles[Math.max(0, i - 1)], b = tiles[Math.min(tiles.length - 1, i + 1)];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const x = tiles[i][0] * S + nx * offset;
+      const y = tiles[i][1] * S + ny * offset;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+  }
+
   // 스프라이트 시트에서 한 칸 꺼내 그리기
   function drawFromSheet(ctx, sheet, x, y, dir, animTime) {
     const d = Math.max(0, sheet.dirs.indexOf(dir));
@@ -3587,6 +4337,13 @@ const __M = Object.create(null);
     }
     ctx.fillStyle = opts.color || UI_COLOR.text;
     ctx.fillText(text, x, y);
+  }
+
+  // 캔버스는 DPR 배율로 그려지므로, UI 위치는 CSS 픽셀 기준으로 계산해야 한다.
+  // (고해상도 폰에서 HUD 가 화면 밖으로 나가던 문제)
+  function viewSize(ctx) {
+    const m = ctx.getTransform();
+    return { w: ctx.canvas.width / (m.a || 1), h: ctx.canvas.height / (m.d || 1) };
   }
 
   function textWidth(ctx, text, size) {
@@ -3638,14 +4395,15 @@ const __M = Object.create(null);
     for (const room of interior.rooms) {
       const wx = (room.x + room.w / 2) * S, wy = (room.y + 1) * S;
       const [sx, sy] = cam.worldToScreen(wx, wy);
-      if (sx < -60 || sy < -20 || sx > ctx.canvas.width + 60 || sy > ctx.canvas.height + 20) continue;
+      const view = viewSize(ctx);
+      if (sx < -60 || sy < -20 || sx > view.w + 60 || sy > view.h + 20) continue;
       drawText(ctx, room.name, sx, sy, {
         size: UI.labelSize, align: 'center', color: UI_COLOR.label,
       });
     }
   }
 
-  __M.drawText = drawText; __M.textWidth = textWidth; __M.drawBuildingLabels = drawBuildingLabels; __M.drawRoomLabels = drawRoomLabels;
+  __M.drawText = drawText; __M.viewSize = viewSize; __M.textWidth = textWidth; __M.drawBuildingLabels = drawBuildingLabels; __M.drawRoomLabels = drawRoomLabels;
 })();
 
 // ── ui/hud.js ─────────────────────────────
@@ -3653,9 +4411,9 @@ const __M = Object.create(null);
   // 화면 위에 얹히는 것들 — 시계, 안내문, 미니맵, 알림.
 
   const { TILE, UI, GAME, GEO } = __M;
-  const { UI_COLOR, GROUND_COLOR } = __M;
+  const { UI_COLOR, MAP_COLOR } = __M;
   const { makeCanvas } = __M;
-  const { drawText, textWidth } = __M;
+  const { drawText, textWidth, viewSize } = __M;
   const { WORLD_W, WORLD_H } = __M;
 
   const S = TILE.size;
@@ -3665,7 +4423,7 @@ const __M = Object.create(null);
     const { canvas, ctx } = makeCanvas(overview.w, overview.h);
     const img = ctx.createImageData(overview.w, overview.h);
     for (let i = 0; i < overview.data.length; i++) {
-      const hex = GROUND_COLOR[overview.data[i]] || '#000000';
+      const hex = MAP_COLOR[overview.data[i]] || '#000000';
       const v = parseInt(hex.slice(1), 16);
       img.data[i * 4] = (v >> 16) & 255;
       img.data[i * 4 + 1] = (v >> 8) & 255;
@@ -3677,7 +4435,7 @@ const __M = Object.create(null);
   }
 
   function drawHud(ctx, state) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const { w: W, h: H } = viewSize(ctx);
     const g = state.game;
 
     // ── 왼쪽 위: 시계와 목적지 ──────────────────────────────────
@@ -3705,15 +4463,18 @@ const __M = Object.create(null);
 
     // ── 왼쪽 아래: 미니맵 ─────────────────────────────────────
     // 미니맵은 바깥에서만 (실내 좌표로는 의미가 없다)
-    if (state.showMinimap && state.minimap && state.mode === 'outdoor') drawMinimap(ctx, state, H);
+    if (state.showMinimap && state.minimap && state.mode === 'outdoor') drawMinimap(ctx, state, H, W);
 
     // ── 아래 가운데: 상호작용 안내 ────────────────────────────
     if (state.prompt) {
-      const text = state.prompt;
+      const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
       const w = textWidth(ctx, text, 14) + 36;
       panel(ctx, (W - w) / 2, H - 76, w, 34);
       drawText(ctx, text, W / 2, H - 54, { size: 14, align: 'center' });
     }
+
+    // ── 목적지 표시 ───────────────────────────────────────────
+    drawWaypointMarker(ctx, state, W, H);
 
     // ── 알림 ─────────────────────────────────────────────────
     let y = H - 110;
@@ -3729,16 +4490,18 @@ const __M = Object.create(null);
 
     // ── 오른쪽 아래: 조작 힌트 ────────────────────────────────
     if (W >= 640) {
-      drawText(ctx, 'H 도움말 · M 지도 · F 전체화면 · L 엔딩 목록', W - 58, H - 16,
+      drawText(ctx, 'H 도움말 · Tab 전체지도 · M 미니맵 · F 전체화면 · L 엔딩', W - 58, H - 16,
         { size: 11, align: 'right', color: 'rgba(255,255,255,0.5)', shadow: false });
     }
 
-    if (state.showHelp) drawHelp(ctx, W, H);
+    if (state.showHelp) drawHelp(ctx, W, H, state.isTouch);
   }
 
-  function drawMinimap(ctx, state, H) {
-    const size = UI.minimapSize;
-    const x = 12, y = H - size - 12;
+  function drawMinimap(ctx, state, H, W) {
+    const size = state.isTouch ? Math.round(UI.minimapSize * 0.8) : UI.minimapSize;
+    // 터치 화면에서는 조이스틱 자리를 비켜 오른쪽 위에 붙인다
+    const x = state.isTouch ? W - size - 12 : 12;
+    const y = state.isTouch ? 56 : H - size - 12;
     panel(ctx, x - 4, y - 4, size + 8, size + 8);
 
     const mm = state.minimap;
@@ -3777,18 +4540,28 @@ const __M = Object.create(null);
       { size: 10, align: 'center', color: UI_COLOR.textDim });
   }
 
-  function drawHelp(ctx, W, H) {
+  function drawHelp(ctx, W, H, touch) {
     ctx.fillStyle = 'rgba(12, 11, 16, 0.86)';
     ctx.fillRect(0, 0, W, H);
 
-    const lines = [
+    const lines = touch ? [
+      ['이동', '왼쪽 화면을 끌기'],
+      ['달리기', '많이 밀거나 달리기 버튼'],
+      ['들어가기 · 만지기', '만지기 버튼'],
+      ['층 이동', '계단·엘리베이터 위에서 만지기'],
+      ['지도', '지도 버튼 (지도를 눌러 목적지 표시)'],
+      ['전체화면', '오른쪽 아래 ⛶'],
+      ['닫기 · 다시 시작', '화면 아무 곳이나 누르기'],
+    ] : [
       ['이동', '방향키 · WASD'],
       ['달리기', 'Shift'],
       ['들어가기 · 만지기', 'Space · Enter · E'],
       ['층 이동', '계단이나 엘리베이터 위에서 Space'],
       ['전체화면', 'F'],
       ['미니맵', 'M'],
+      ['전체지도', 'Tab'],
       ['엔딩 목록', 'L'],
+      ['목적지 되돌리기', 'G'],
       ['확대 · 축소', '+ · -'],
       ['다시 시작', 'R (결말 화면에서)'],
     ];
@@ -3810,8 +4583,78 @@ const __M = Object.create(null);
       drawText(ctx, v, x + boxW - 26, ly, { size: 13, align: 'right' });
       ly += 26;
     }
-    drawText(ctx, '아무 키나 눌러 시작 · H 도움말', x + boxW / 2, ly + 16,
+    drawText(ctx, touch ? '화면을 눌러 시작' : '아무 키나 눌러 시작 · H 도움말', x + boxW / 2, ly + 16,
       { size: 12, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  // 목적지가 화면 밖에 있으면 가장자리에, 안에 있으면 그 자리에 표시한다.
+  // 위치는 부드럽게 따라간다.
+  function drawWaypointMarker(ctx, state, W, H) {
+    const wp = state.waypoint;
+    if (!wp || state.mode !== 'outdoor') return;
+
+    const [sx, sy] = state.cameraRef.worldToScreen(wp.tx * S, wp.ty * S);
+    const margin = 54;
+    const inside = sx > margin && sx < W - margin && sy > margin && sy < H - margin;
+
+    let tx = sx, ty = sy;
+    if (!inside) {
+      // 화면 중앙에서 목적지 방향으로 선을 그어 테두리와 만나는 점을 찾는다
+      const cx = W / 2, cy = H / 2;
+      const dx = sx - cx, dy = sy - cy;
+      const scale = Math.min(
+        Math.abs(dx) > 0.001 ? (W / 2 - margin) / Math.abs(dx) : Infinity,
+        Math.abs(dy) > 0.001 ? (H / 2 - margin) / Math.abs(dy) : Infinity);
+      tx = cx + dx * scale;
+      ty = cy + dy * scale;
+    }
+
+    // 부드럽게 따라가기
+    if (!state.markerPos) state.markerPos = { x: tx, y: ty };
+    const t = Math.min(1, (state.dt || 0.016) * 12);
+    state.markerPos.x += (tx - state.markerPos.x) * t;
+    state.markerPos.y += (ty - state.markerPos.y) * t;
+    const mx = state.markerPos.x, my = state.markerPos.y;
+
+    const dist = Math.hypot(wp.tx * S - state.player.x, wp.ty * S - state.player.y);
+    const km = (dist / S) * GEO.metersPerTile / 1000;
+    const distText = km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    if (inside) {
+      // 목표 위에 핀
+      ctx.strokeStyle = UI_COLOR.accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mx, my, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = UI_COLOR.accent;
+      ctx.fillRect(mx - 1.5, my - 22, 3, 12);
+    } else {
+      // 가장자리 화살표
+      const ang = Math.atan2(my - H / 2, mx - W / 2);
+      ctx.translate(mx, my);
+      ctx.rotate(ang);
+      ctx.fillStyle = UI_COLOR.accent;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(-7, -8);
+      ctx.lineTo(-7, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.rotate(-ang);
+      ctx.translate(-mx, -my);
+    }
+    ctx.restore();
+
+    const text = `${wp.label} ${distText}`;
+    const tw = textWidth(ctx, text, 11) + 14;
+    const bx = Math.max(6, Math.min(W - tw - 6, mx - tw / 2));
+    const by = Math.max(20, Math.min(H - 26, my + (inside ? 26 : 22)));
+    ctx.fillStyle = 'rgba(16, 15, 20, 0.72)';
+    ctx.fillRect(bx, by - 13, tw, 18);
+    drawText(ctx, text, bx + tw / 2, by, { size: 11, align: 'center', color: UI_COLOR.accent });
   }
 
   // 반투명 판
@@ -4383,12 +5226,12 @@ const __M = Object.create(null);
   const { UI } = __M;
   const { UI_COLOR } = __M;
   const { ENDINGS, ENDING_COUNT, TAG_COLOR, TAG_LABEL } = __M;
-  const { drawText, textWidth } = __M;
+  const { drawText, textWidth, viewSize } = __M;
   const { panel } = __M;
 
   // 결말 한 판
   function drawEnding(ctx, state) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const { w: W, h: H } = viewSize(ctx);
     const e = state.game.ending;
     const g = state.game;
 
@@ -4436,7 +5279,7 @@ const __M = Object.create(null);
 
   // 지금까지 본 결말 목록
   function drawGallery(ctx, state) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const { w: W, h: H } = viewSize(ctx);
     const found = state.game.found;
 
     ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';
@@ -4480,6 +5323,200 @@ const __M = Object.create(null);
   __M.drawEnding = drawEnding; __M.drawGallery = drawGallery;
 })();
 
+// ── ui/worldmap.js ─────────────────────────────
+(function () {
+  // 전체지도. 미니맵과 같은 저해상도 그림을 화면 가득 펼치고,
+  // 주요 랜드마크와 구역 이름, 내 위치와 목적지를 얹는다.
+
+  const { TILE, UI, GAME, GEO, KIND } = __M;
+  const { UI_COLOR, GROUND_COLOR } = __M;
+  const { WORLD_W, WORLD_H, pathBounds } = __M;
+  const { drawText, textWidth, viewSize } = __M;
+  const { panel } = __M;
+
+  const S = TILE.size;
+
+  // 지도에 이름까지 찍을 종류 (나머지는 점만)
+  const NAMED_KINDS = new Set([KIND.STATION, KIND.MART, KIND.TOWER, KIND.PUBLIC, KIND.SCHOOL]);
+
+  // 종류별 표시 색
+  const MARK_COLOR = {
+    [KIND.STATION]: '#f2c14e',
+    [KIND.MART]: '#e2705f',
+    [KIND.TOWER]: '#7fb0d8',
+    [KIND.PUBLIC]: '#8fb8f0',
+    [KIND.SCHOOL]: '#8fc48a',
+    [KIND.FACTORY]: '#b8c4cc',
+    [KIND.WAREHOUSE]: '#b8c4cc',
+    [KIND.PARK_FACILITY]: '#a8d8a0',
+  };
+
+  function drawWorldMap(ctx, state) {
+    const { w: W, h: H } = viewSize(ctx);
+    ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';
+    ctx.fillRect(0, 0, W, H);
+
+    // 지도 그림을 화면에 맞춰 정수 배율로 키운다 (도트가 뭉개지지 않게)
+    const mm = state.minimap;
+    const marginTop = 64, marginBottom = 54, marginX = 28;
+    const scale = Math.min((W - marginX * 2) / mm.width,
+      (H - marginTop - marginBottom) / mm.height);
+    const mw = mm.width * scale, mh = mm.height * scale;
+    const ox = Math.round((W - mw) / 2);
+    const oy = Math.round(marginTop + (H - marginTop - marginBottom - mh) / 2);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mm, ox, oy, mw, mh);
+    ctx.strokeStyle = UI_COLOR.minimapEdge;
+    ctx.strokeRect(ox + 0.5, oy + 0.5, mw - 1, mh - 1);
+
+    // 타일 좌표 → 화면 좌표. 클릭을 되돌리기 위해 변환값을 남겨 둔다.
+    const px = (tx) => ox + (tx / UI.minimapScale) * scale;
+    const py = (ty) => oy + (ty / UI.minimapScale) * scale;
+    state.mapView = { ox, oy, scale, w: mw, h: mh };
+
+    // 이름표는 겹치지 않게 놓는다. 중요한 것부터 자리를 잡는다.
+    const placed = [];
+    const tryLabel = (text, x, y, opts) => {
+      const size = opts.size || 11;
+      const w = textWidth(ctx, text, size);
+      const box = { x: x - w / 2 - 3, y: y - size - 2, w: w + 6, h: size + 6 };
+      if (placed.some((p) => !(box.x + box.w < p.x || p.x + p.w < box.x ||
+          box.y + box.h < p.y || p.y + p.h < box.y))) return false;
+      placed.push(box);
+      if (opts.chip !== false) {
+        ctx.fillStyle = 'rgba(16, 15, 20, 0.66)';
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+      }
+      drawText(ctx, text, x, y, { size, align: 'center', color: opts.color });
+      return true;
+    };
+
+    // 목적지 구역을 테두리로 강조
+    for (const r of state.mapRegions) {
+      if (!GAME.goalRegions.includes(r.id)) continue;
+      ctx.strokeStyle = UI_COLOR.accent;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px(r.minX), py(r.minY), px(r.maxX) - px(r.minX), py(r.maxY) - py(r.minY));
+      ctx.lineWidth = 1;
+      drawText(ctx, `${GAME.goalName} · 도착지`, px(r.cx), py(r.minY) - 6,
+        { size: 12, align: 'center', color: UI_COLOR.accent });
+    }
+
+    // 랜드마크 점 — 이름표보다 먼저 전부 찍는다
+    for (const m of state.landmarks) {
+      const x = px(m.tx), y = py(m.ty);
+      ctx.fillStyle = MARK_COLOR[m.kind] || '#d8d4c8';
+      ctx.fillRect(x - 3, y - 3, 6, 6);
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
+    }
+    // 이름표: 역 · 대형시설 → 관공서 · 학교 → 구역 이름 순으로 자리를 잡는다
+    const rank = (kind) => (kind === KIND.STATION ? 0 : kind === KIND.MART || kind === KIND.TOWER
+      ? 1 : kind === KIND.PUBLIC ? 2 : 3);
+    const named = state.landmarks
+      .filter((m) => NAMED_KINDS.has(m.kind))
+      .sort((a, b) => rank(a.kind) - rank(b.kind));
+    for (const m of named) {
+      tryLabel(m.name, px(m.tx), py(m.ty) - 6,
+        { size: 11, color: MARK_COLOR[m.kind] || UI_COLOR.label });
+    }
+    for (const r of state.mapRegions) {
+      if (!r.label) continue;
+      tryLabel(r.name, px(r.cx), py(r.cy),
+        { size: 11, color: 'rgba(255,255,255,0.78)', chip: false });
+    }
+
+    // 찍어 둔 목적지
+    if (state.waypoint) {
+      const wx = px(state.waypoint.tx), wy = py(state.waypoint.ty);
+      ctx.strokeStyle = UI_COLOR.accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(wx, wy, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = UI_COLOR.accent;
+      ctx.fillRect(wx - 1, wy - 12, 2, 8);
+      ctx.lineWidth = 1;
+      tryLabel(state.waypoint.label, wx, wy + 20, { size: 11, color: UI_COLOR.accent });
+    }
+
+    // 내 위치
+    const mx = px(state.player.x / S), my = py(state.player.y / S);
+    ctx.fillStyle = UI_COLOR.player;
+    ctx.fillRect(mx - 3, my - 3, 6, 6);
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeRect(mx - 4.5, my - 4.5, 9, 9);
+    drawText(ctx, '나', mx, my - 10, { size: 11, align: 'center', color: '#ffffff' });
+
+    // 머리말과 축척
+    drawText(ctx, '김포시 구래동 ~ 양촌읍', W / 2, 34,
+      { size: 18, align: 'center', bold: true });
+    const km = Math.hypot(state.goalPoint.x - state.player.x, state.goalPoint.y - state.player.y)
+      / S * GEO.metersPerTile / 1000;
+    drawText(ctx, `${GAME.goalName}까지 직선 ${km.toFixed(1)}km`, W / 2, 52,
+      { size: 12, align: 'center', color: UI_COLOR.accent });
+
+    // 축척 막대 (1km)
+    const barTiles = 1000 / GEO.metersPerTile;
+    const barPx = (barTiles / UI.minimapScale) * scale;
+    const bx = ox + 10, by = oy + mh - 16;
+    panel(ctx, bx - 6, by - 12, barPx + 12, 24);
+    ctx.fillStyle = UI_COLOR.text;
+    ctx.fillRect(bx, by, barPx, 2);
+    ctx.fillRect(bx, by - 3, 1, 8);
+    ctx.fillRect(bx + barPx - 1, by - 3, 1, 8);
+    drawText(ctx, '1km', bx + barPx / 2, by - 5,
+      { size: 10, align: 'center', color: UI_COLOR.textDim });
+
+    drawText(ctx, '지도를 눌러 목적지 표시 · Tab 또는 M 으로 닫기', W / 2, H - 22,
+      { size: 12, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  // 지도에서 찍은 화면 좌표를 타일 좌표로 되돌리고, 그 자리의 이름을 찾는다
+  function pickOnMap(state, sx, sy) {
+    const v = state.mapView;
+    if (!v) return null;
+    if (sx < v.ox || sy < v.oy || sx > v.ox + v.w || sy > v.oy + v.h) return null;
+    const tx = ((sx - v.ox) / v.scale) * UI.minimapScale;
+    const ty = ((sy - v.oy) / v.scale) * UI.minimapScale;
+
+    // 가까운 랜드마크가 있으면 그 이름을 쓴다
+    let best = null, bestD = 60 * UI.minimapScale / v.scale;
+    for (const m of state.landmarks) {
+      const d = Math.hypot(m.tx - tx, m.ty - ty);
+      if (d < bestD) { bestD = d; best = m; }
+    }
+    if (best) return { tx: best.tx, ty: best.ty, label: best.name };
+
+    // 아니면 구역 이름
+    for (const r of state.mapRegions) {
+      if (!r.label) continue;
+      if (tx >= r.minX && tx <= r.maxX && ty >= r.minY && ty <= r.maxY) {
+        return { tx, ty, label: r.name };
+      }
+    }
+    return { tx, ty, label: '표시한 곳' };
+  }
+
+  // 지도에 쓸 구역·랜드마크 목록을 한 번만 만들어 둔다
+  function buildMapMarks(map, buildings) {
+    const regions = map.regions.map((r) => {
+      const b = pathBounds(r.path);
+      return { id: r.id, name: r.name, label: r.label, kind: r.kind,
+        cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2,
+        minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
+    });
+    const landmarks = buildings.list
+      .filter((b) => b.landmark)
+      .map((b) => ({ name: b.name, kind: b.kind,
+        tx: b.x + b.w / 2, ty: b.y + b.h / 2 }));
+    return { regions, landmarks };
+  }
+
+  __M.drawWorldMap = drawWorldMap; __M.pickOnMap = pickOnMap; __M.buildMapMarks = buildMapMarks;
+})();
+
 // ── ui/fullscreen.js ─────────────────────────────
 (function () {
   // 전체화면. 브라우저마다 이름이 조금씩 달라서 한 겹 감싼다.
@@ -4509,6 +5546,164 @@ const __M = Object.create(null);
   __M.isFullscreen = isFullscreen; __M.toggleFullscreen = toggleFullscreen; __M.onFullscreenChange = onFullscreenChange;
 })();
 
+// ── ui/touch.js ─────────────────────────────
+(function () {
+  // 모바일 조작. 터치 기기에서만 뜬다 (PC 는 지금 그대로 키보드로 논다).
+  //
+  // 왼쪽 절반: 손가락을 대면 그 자리에 조이스틱이 생기고, 끌면 그 방향으로 걷는다.
+  //            많이 밀면 달린다.
+  // 오른쪽: 상호작용 · 달리기 고정 · 지도 · 도움말 버튼.
+
+  const { UI_COLOR } = __M;
+  const { drawText } = __M;
+
+  function isTouchDevice() {
+    if (typeof window === 'undefined') return false;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    return coarse || navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  }
+
+  const STICK_RADIUS = 62;   // 조이스틱 반경(px)
+  const KNOB_RADIUS = 26;
+  const RUN_THRESHOLD = 0.72; // 이만큼 밀면 달린다
+  const BUTTON = 58;
+
+  class TouchControls {
+    constructor(hooks) {
+      this.hooks = hooks;            // { interact, worldmap, help, minimap }
+      this.stick = null;             // { id, ox, oy, x, y }
+      this.axis = { x: 0, y: 0 };
+      this.pushed = 0;               // 0~1, 얼마나 밀었나
+      this.runLock = false;          // 달리기 고정
+      this.buttons = [];             // 그릴 때 자리 계산해 둔다
+      this.pressed = new Map();      // 버튼 id → 눌린 포인터
+    }
+
+    get running() { return this.runLock || this.pushed > RUN_THRESHOLD; }
+
+    // 화면 크기에 맞춰 버튼 자리를 잡는다
+    layout(W, H) {
+      const m = 22, gap = 12;
+      const bx = W - m - BUTTON;
+      const by = H - m - BUTTON;
+      this.buttons = [
+        { id: 'interact', label: '만지기', x: bx - BUTTON - gap, y: by - 20, r: BUTTON * 0.78 },
+        { id: 'run', label: '달리기', x: bx, y: by - BUTTON - gap - 20, r: BUTTON * 0.55 },
+        { id: 'worldmap', label: '지도', x: bx, y: by - 20, r: BUTTON * 0.55 },
+        { id: 'help', label: '?', x: m + 34, y: m + 34, r: 26 },
+      ];
+    }
+
+    // 화면 좌표로 눌린 버튼 찾기
+    buttonAt(x, y) {
+      for (const b of this.buttons) {
+        if (Math.hypot(x - b.x, y - b.y) <= b.r + 8) return b;
+      }
+      return null;
+    }
+
+    onDown(id, x, y, W) {
+      const button = this.buttonAt(x, y);
+      if (button) {
+        this.pressed.set(id, button.id);
+        if (button.id === 'interact') this.hooks.interact();
+        else if (button.id === 'run') this.runLock = !this.runLock;
+        else if (button.id === 'worldmap') this.hooks.worldmap();
+        else if (button.id === 'help') this.hooks.help();
+        return true;
+      }
+      if (x < W * 0.55 && !this.stick) {
+        this.stick = { id, ox: x, oy: y, x, y };
+        return true;
+      }
+      return false;
+    }
+
+    onMove(id, x, y) {
+      if (!this.stick || this.stick.id !== id) return false;
+      this.stick.x = x; this.stick.y = y;
+      const dx = x - this.stick.ox, dy = y - this.stick.oy;
+      const len = Math.hypot(dx, dy);
+      const clamped = Math.min(len, STICK_RADIUS);
+      this.pushed = clamped / STICK_RADIUS;
+      if (len < 8) { this.axis.x = 0; this.axis.y = 0; return true; }
+      this.axis.x = dx / len;
+      this.axis.y = dy / len;
+      return true;
+    }
+
+    onUp(id) {
+      this.pressed.delete(id);
+      if (this.stick && this.stick.id === id) {
+        this.stick = null;
+        this.axis.x = 0; this.axis.y = 0;
+        this.pushed = 0;
+      }
+    }
+
+    draw(ctx, W, H) {
+      this.layout(W, H);
+      ctx.save();
+
+      // 조이스틱
+      if (this.stick) {
+        const dx = this.stick.x - this.stick.ox, dy = this.stick.y - this.stick.oy;
+        const len = Math.min(Math.hypot(dx, dy), STICK_RADIUS) || 0;
+        const ang = Math.atan2(dy, dx);
+        const kx = this.stick.ox + Math.cos(ang) * len;
+        const ky = this.stick.oy + Math.sin(ang) * len;
+
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = '#000000';
+        circle(ctx, this.stick.ox, this.stick.oy, STICK_RADIUS, true);
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = UI_COLOR.text;
+        ctx.lineWidth = 2;
+        circle(ctx, this.stick.ox, this.stick.oy, STICK_RADIUS, false);
+        ctx.globalAlpha = 0.62;
+        ctx.fillStyle = this.running ? UI_COLOR.accent : UI_COLOR.text;
+        circle(ctx, kx, ky, KNOB_RADIUS, true);
+      } else {
+        // 안내 — 처음 들어온 사람이 어디를 눌러야 하는지 알 수 있게
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = UI_COLOR.text;
+        circle(ctx, 96, H - 96, STICK_RADIUS * 0.66, false, true);
+        ctx.globalAlpha = 0.5;
+        drawText(ctx, '왼쪽을 끌어 이동', 96, H - 22,
+          { size: 11, align: 'center', color: UI_COLOR.textDim, shadow: false });
+      }
+
+      // 버튼
+      for (const b of this.buttons) {
+        const isRun = b.id === 'run';
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#000000';
+        circle(ctx, b.x, b.y, b.r, true);
+        ctx.globalAlpha = 0.75;
+        ctx.strokeStyle = isRun && this.runLock ? UI_COLOR.accent : UI_COLOR.text;
+        ctx.lineWidth = 2;
+        circle(ctx, b.x, b.y, b.r, false);
+        ctx.globalAlpha = 1;
+        drawText(ctx, b.label, b.x, b.y + 4, {
+          size: b.r > 30 ? 14 : 12, align: 'center',
+          color: isRun && this.runLock ? UI_COLOR.accent : UI_COLOR.text,
+        });
+      }
+      ctx.restore();
+    }
+  }
+
+  function circle(ctx, x, y, r, fill, dashed) {
+    ctx.beginPath();
+    if (dashed) ctx.setLineDash([6, 6]);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    if (fill) ctx.fill(); else ctx.stroke();
+    if (dashed) ctx.setLineDash([]);
+  }
+
+  __M.isTouchDevice = isTouchDevice; __M.TouchControls = TouchControls;
+})();
+
 // ── main.js ─────────────────────────────
 (function () {
   // 진입점 — 초기화, 입력, 게임 루프, 상태 전환.
@@ -4518,17 +5713,20 @@ const __M = Object.create(null);
     TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
   } = __M;
   const { WORLD_PX_W, WORLD_PX_H, project, pathBounds } = __M;
-  const { buildBuildings, doorOutside, floorLabel } = __M;
+  const { buildBuildings, doorOutside, floorLabel, floorUse } = __M;
   const { WorldMap, buildOverview } = __M;
   const { makeInterior, floorList } = __M;
   const { Actors } = __M;
+  const { Traffic } = __M;
   const { Camera } = __M;
   const { Scene } = __M;
   const { UI_COLOR } = __M;
   const { drawBuildingLabels, drawRoomLabels, drawText } = __M;
   const { drawHud, bakeOverview, panel } = __M;
   const { drawEnding, drawGallery } = __M;
+  const { drawWorldMap, buildMapMarks, pickOnMap } = __M;
   const { toggleFullscreen, onFullscreenChange } = __M;
+  const { TouchControls, isTouchDevice } = __M;
   const { GameState } = __M;
   const { GIZMOS, indexIndoorGizmos, outdoorGizmos } = __M;
   const { evaluateEnding } = __M;
@@ -4538,13 +5736,13 @@ const __M = Object.create(null);
     mode: 'outdoor',
     player: { x: 0, y: 0, dir: 'down', moving: false, anim: 0 },
     prompt: '', toasts: [],
-    showHelp: true, showMinimap: true, showGallery: false,
+    showHelp: true, showMinimap: true, showGallery: false, showWorldMap: false,
     interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
     picker: null, placeName: '', startPos: { x: 0, y: 0 },
   };
 
   const keys = new Set();
-  let canvas, ctx, cam, map, buildings, scene, actors, minimap, indoorIndex;
+  let canvas, ctx, cam, map, buildings, scene, actors, traffic, minimap, indoorIndex, touch;
   let lastTime = 0;
 
   // ── 초기화 ──────────────────────────────────────────────────────────────
@@ -4558,6 +5756,8 @@ const __M = Object.create(null);
     scene = new Scene(map, buildings);
     actors = new Actors(map);
     state.actors = actors;   // 그리는 쪽에서도 쓴다
+    traffic = new Traffic();
+    state.traffic = traffic;
     cam = new Camera();
     state.game = new GameState();
     indoorIndex = indexIndoorGizmos();
@@ -4576,6 +5776,11 @@ const __M = Object.create(null);
       x: ((gb.minX + gb.maxX) / 2) * S,
       y: ((gb.minY + gb.maxY) / 2) * S,
     };
+    // 기본 목적지 표시는 오늘의 목표 — 지도에서 다른 곳을 찍으면 그쪽으로 바뀐다
+    state.waypoint = {
+      tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName,
+    };
+    state.cameraRef = cam;
 
     // 출발점 — 구래역 앞. 역을 못 찾으면 좌표로 떨어진다.
     const startBuilding = buildings.list.find((b) => b.name === PLAYER.startPlace);
@@ -4589,13 +5794,40 @@ const __M = Object.create(null);
 
     minimap = bakeOverview(buildOverview(map, UI.minimapScale));
     state.minimap = minimap;
+    const marks = buildMapMarks(map, buildings);
+    state.mapRegions = marks.regions;
+    state.landmarks = marks.landmarks;
 
     window.addEventListener('resize', resize);
     onFullscreenChange(resize);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', (e) => keys.delete(e.code));
     window.addEventListener('blur', () => keys.clear());
-    canvas.addEventListener('pointerdown', () => { if (state.showHelp) state.showHelp = false; });
+    canvas.addEventListener('pointerdown', (e) => {
+      if (state.showHelp) { state.showHelp = false; return; }
+      if (state.showWorldMap) {
+        const rect = canvas.getBoundingClientRect();
+        const hit = pickOnMap(state, e.clientX - rect.left, e.clientY - rect.top);
+        if (hit) {
+          state.waypoint = hit;
+          toast(`목적지: ${hit.label}`);
+        }
+        return;
+      }
+    });
+
+    // 모바일이면 터치 조작을 붙인다 (PC 는 키보드 그대로)
+    if (isTouchDevice()) {
+      state.isTouch = true;
+      touch = new TouchControls({
+        interact: () => interact(),
+        worldmap: () => { state.showWorldMap = !state.showWorldMap; },
+        help: () => { state.showHelp = !state.showHelp; },
+      });
+      state.touch = touch;
+      cam.setZoom(3, window.innerWidth, window.innerHeight);   // 작은 화면에서는 더 크게
+      bindTouchEvents();
+    }
 
     // 전체화면 버튼 (키보드 없는 환경용)
     const fsButton = document.getElementById('fs');
@@ -4625,6 +5857,50 @@ const __M = Object.create(null);
     return { x: tx, y: ty };
   }
 
+  // 터치 입력 — 화면을 반으로 나눠 왼쪽은 이동, 오른쪽은 버튼
+  function bindTouchEvents() {
+    const pos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      return [e.clientX - rect.left, e.clientY - rect.top];
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      const [x, y] = pos(e);
+      // 대화창이 열려 있으면 그쪽이 먼저
+      if (handleTouchUi(x, y)) { e.preventDefault(); return; }
+      touch.onDown(e.pointerId, x, y, window.innerWidth);
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse') return;
+      const [x, y] = pos(e);
+      touch.onMove(e.pointerId, x, y);
+    });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+      canvas.addEventListener(type, (e) => touch.onUp(e.pointerId));
+    }
+  }
+
+  // 열려 있는 화면(도움말·지도·층 선택·결말)에서의 터치 처리
+  function handleTouchUi(x, y) {
+    if (state.showHelp) { state.showHelp = false; return true; }
+    if (state.game.ending) { restart(); return true; }
+    if (state.showGallery) { state.showGallery = false; return true; }
+    if (state.showWorldMap) {
+      const hit = pickOnMap(state, x, y);
+      if (hit) { state.waypoint = hit; toast(`목적지: ${hit.label}`); }
+      else state.showWorldMap = false;
+      return true;
+    }
+    if (state.picker) {
+      const hit = pickerRowAt(x, y);
+      if (hit === null) state.picker = null;
+      else { changeFloor(state.picker.floors[hit]); state.picker = null; }
+      return true;
+    }
+    return false;
+  }
+
   function resize() {
     const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1);
     const w = window.innerWidth, h = window.innerHeight;
@@ -4643,12 +5919,32 @@ const __M = Object.create(null);
     keys.add(e.code);
 
     if (KEYS.fullscreen.includes(e.code)) { toggleFullscreen(document.documentElement); e.preventDefault(); return; }
-    if (KEYS.map.includes(e.code)) { state.showMinimap = !state.showMinimap; return; }
+    if (KEYS.worldmap.includes(e.code)) {
+      state.showWorldMap = !state.showWorldMap;
+      e.preventDefault();
+      return;
+    }
+    if (KEYS.map.includes(e.code)) {
+      // 전체지도가 열려 있으면 M 은 그걸 닫는다
+      if (state.showWorldMap) state.showWorldMap = false;
+      else state.showMinimap = !state.showMinimap;
+      return;
+    }
     if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
     if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+    if (e.code === 'KeyG') {
+      // 목적지를 오늘의 목표로 되돌린다
+      state.waypoint = { tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName };
+      toast(`목적지: ${GAME.goalName}`);
+      return;
+    }
     if (KEYS.zoomIn.includes(e.code)) { cam.setZoom(cam.zoom + 1, window.innerWidth, window.innerHeight); return; }
     if (KEYS.zoomOut.includes(e.code)) { cam.setZoom(cam.zoom - 1, window.innerWidth, window.innerHeight); return; }
-    if (e.code === 'Escape') { state.picker = null; state.showGallery = false; state.showHelp = false; return; }
+    if (e.code === 'Escape') {
+      state.picker = null; state.showGallery = false;
+      state.showHelp = false; state.showWorldMap = false;
+      return;
+    }
 
     if (state.game.ending) {
       if (e.code === 'KeyR') restart();
@@ -4690,7 +5986,7 @@ const __M = Object.create(null);
     state.dt = dt;              // 그리는 쪽에서 부드러운 전환에 쓴다
     const g = state.game;
     if (g.ending) return;
-    if (state.showHelp || state.showGallery || state.picker) return;
+    if (state.showHelp || state.showGallery || state.picker || state.showWorldMap) return;
 
     g.tick(dt);
     if (state.exitCooldown > 0) state.exitCooldown -= dt;
@@ -4703,6 +5999,7 @@ const __M = Object.create(null);
       const c0y = Math.floor(view.y0 / TILE.chunk), c1y = Math.floor(view.y1 / TILE.chunk);
       actors.ensure(c0x, c0y, c1x, c1y);
       actors.update(dt, c0x, c0y, c1x, c1y);
+      traffic.update(dt, state.player);
       cam.follow(state.player.x, state.player.y, dt);
       updatePlaceName();
       checkGoal();
@@ -4720,12 +6017,16 @@ const __M = Object.create(null);
 
   function movePlayer(dt) {
     const p = state.player;
-    const dx = axis(KEYS.left, KEYS.right);
-    const dy = axis(KEYS.up, KEYS.down);
+    let dx = axis(KEYS.left, KEYS.right);
+    let dy = axis(KEYS.up, KEYS.down);
+    if (touch && (touch.axis.x || touch.axis.y)) {   // 터치 조이스틱
+      dx = touch.axis.x;
+      dy = touch.axis.y;
+    }
     p.moving = dx !== 0 || dy !== 0;
     if (!p.moving) return;
 
-    const running = KEYS.run.some((k) => keys.has(k));
+    const running = KEYS.run.some((k) => keys.has(k)) || (touch && touch.running);
     const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
     const len = Math.hypot(dx, dy) || 1;
     const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
@@ -5006,26 +6307,71 @@ const __M = Object.create(null);
 
     drawHud(ctx, state);
     if (state.picker) drawPicker();
+    if (touch && !state.showWorldMap && !state.showGallery && !state.game.ending) {
+      touch.draw(ctx, window.innerWidth, window.innerHeight);
+    }
+    if (state.showWorldMap) drawWorldMap(ctx, state);
     // 목록을 열면 결말 화면 대신 목록만 보여 준다
-    if (state.showGallery) drawGallery(ctx, state);
+    else if (state.showGallery) drawGallery(ctx, state);
     else if (state.game.ending) drawEnding(ctx, state);
   }
 
-  function drawPicker() {
-    const W = ctx.canvas.width / (window.devicePixelRatio > 1 ? 1 : 1);
+  // 층 선택 대화창의 자리 (터치로 고를 때도 쓴다)
+  function pickerLayout() {
     const floors = state.picker.floors;
-    const h = Math.min(280, floors.length * 24 + 40);
-    const x = 40, y = 120;
-    panel(ctx, x, y, 150, h);
-    drawText(ctx, '층 선택', x + 16, y + 26, { size: 14, color: UI_COLOR.accent });
-    const visible = Math.floor((h - 40) / 24);
-    const from = Math.max(0, Math.min(floors.length - visible, state.picker.index - 2));
-    for (let i = from; i < Math.min(floors.length, from + visible); i++) {
-      const sel = i === state.picker.index;
-      drawText(ctx, `${sel ? '▶ ' : '   '}${floorLabel(floors[i])}`,
-        x + 16, y + 52 + (i - from) * 24,
-        { size: 13, color: sel ? UI_COLOR.text : UI_COLOR.textDim });
+    const rowH = 22;
+    const visible = Math.min(floors.length, 12);
+    const from = Math.max(0, Math.min(floors.length - visible,
+      state.picker.index - Math.floor(visible / 2)));
+    const w = 260;
+    const h = visible * rowH + 78;
+    const x = 40;
+    const y = Math.max(20, (window.innerHeight - h) / 2);
+    return { floors, rowH, visible, from, w, h, x, y };
+  }
+
+  function pickerRowAt(px, py) {
+    const L = pickerLayout();
+    if (px < L.x || px > L.x + L.w || py < L.y || py > L.y + L.h) return null;
+    const idx = L.from + Math.floor((py - (L.y + 50)) / L.rowH);
+    if (idx < 0 || idx >= L.floors.length) return null;
+    return idx;
+  }
+
+  function drawPicker() {
+    const b = state.interiorBuilding;
+    const floors = state.picker.floors;
+    const rowH = 22;
+    const visible = Math.min(floors.length, 12);
+    const from = Math.max(0, Math.min(floors.length - visible,
+      state.picker.index - Math.floor(visible / 2)));
+
+    const w = 260;
+    const h = visible * rowH + 78;
+    const x = 40;
+    const y = Math.max(20, (window.innerHeight - h) / 2);
+
+    panel(ctx, x, y, w, h);
+    drawText(ctx, b.name, x + 16, y + 26, { size: 14 });
+    drawText(ctx, '엘리베이터', x + 16, y + 44, { size: 11, color: UI_COLOR.accent });
+
+    for (let i = from; i < from + visible; i++) {
+      const f = floors[i];
+      const row = y + 62 + (i - from) * rowH;
+      const selected = i === state.picker.index;
+      if (selected) {
+        ctx.fillStyle = 'rgba(242, 193, 78, 0.16)';
+        ctx.fillRect(x + 8, row - 14, w - 16, rowH);
+      }
+      const here = f === state.floor;
+      drawText(ctx, `${here ? '●' : selected ? '▶' : ' '} ${floorLabel(f)}`,
+        x + 16, row, { size: 13, color: selected ? UI_COLOR.text : UI_COLOR.textDim });
+      drawText(ctx, floorUse(b, f), x + w - 16, row,
+        { size: 12, align: 'right', color: selected ? UI_COLOR.accent : UI_COLOR.textDim });
     }
+
+    drawText(ctx, '↑↓ 고르기 · Space 이동 · Esc 닫기', x + w / 2, y + h - 14,
+      { size: 11, align: 'center', color: UI_COLOR.textDim });
   }
 
   // 개발·점검용 손잡이. 콘솔에서 __gurae 로 세계를 들여다볼 수 있다.
@@ -5033,6 +6379,7 @@ const __M = Object.create(null);
     if (typeof window === 'undefined') return;
     window.__gurae = {
       state, cam,
+      get scene() { return scene; },
       get map() { return map; },
       get buildings() { return buildings; },
       // 타일 좌표로 순간이동 (실외)

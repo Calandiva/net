@@ -5,17 +5,20 @@ import {
   TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
 } from './config.js';
 import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
-import { buildBuildings, doorOutside, floorLabel } from './world/buildings.js';
+import { buildBuildings, doorOutside, floorLabel, floorUse } from './world/buildings.js';
 import { WorldMap, buildOverview } from './world/map.js';
 import { makeInterior, floorList } from './world/interior.js';
 import { Actors } from './world/actors.js';
+import { Traffic } from './world/traffic.js';
 import { Camera } from './render/camera.js';
 import { Scene } from './render/scene.js';
 import { UI_COLOR } from './render/palette.js';
 import { drawBuildingLabels, drawRoomLabels, drawText } from './ui/labels.js';
 import { drawHud, bakeOverview, panel } from './ui/hud.js';
 import { drawEnding, drawGallery } from './ui/ending.js';
+import { drawWorldMap, buildMapMarks, pickOnMap } from './ui/worldmap.js';
 import { toggleFullscreen, onFullscreenChange } from './ui/fullscreen.js';
+import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { GameState } from './game/state.js';
 import { GIZMOS, indexIndoorGizmos, outdoorGizmos } from './game/gizmos.js';
 import { evaluateEnding } from './game/endings.js';
@@ -25,13 +28,13 @@ const state = {
   mode: 'outdoor',
   player: { x: 0, y: 0, dir: 'down', moving: false, anim: 0 },
   prompt: '', toasts: [],
-  showHelp: true, showMinimap: true, showGallery: false,
+  showHelp: true, showMinimap: true, showGallery: false, showWorldMap: false,
   interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
   picker: null, placeName: '', startPos: { x: 0, y: 0 },
 };
 
 const keys = new Set();
-let canvas, ctx, cam, map, buildings, scene, actors, minimap, indoorIndex;
+let canvas, ctx, cam, map, buildings, scene, actors, traffic, minimap, indoorIndex, touch;
 let lastTime = 0;
 
 // ── 초기화 ──────────────────────────────────────────────────────────────
@@ -45,6 +48,8 @@ function init() {
   scene = new Scene(map, buildings);
   actors = new Actors(map);
   state.actors = actors;   // 그리는 쪽에서도 쓴다
+  traffic = new Traffic();
+  state.traffic = traffic;
   cam = new Camera();
   state.game = new GameState();
   indoorIndex = indexIndoorGizmos();
@@ -63,6 +68,11 @@ function init() {
     x: ((gb.minX + gb.maxX) / 2) * S,
     y: ((gb.minY + gb.maxY) / 2) * S,
   };
+  // 기본 목적지 표시는 오늘의 목표 — 지도에서 다른 곳을 찍으면 그쪽으로 바뀐다
+  state.waypoint = {
+    tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName,
+  };
+  state.cameraRef = cam;
 
   // 출발점 — 구래역 앞. 역을 못 찾으면 좌표로 떨어진다.
   const startBuilding = buildings.list.find((b) => b.name === PLAYER.startPlace);
@@ -76,13 +86,40 @@ function init() {
 
   minimap = bakeOverview(buildOverview(map, UI.minimapScale));
   state.minimap = minimap;
+  const marks = buildMapMarks(map, buildings);
+  state.mapRegions = marks.regions;
+  state.landmarks = marks.landmarks;
 
   window.addEventListener('resize', resize);
   onFullscreenChange(resize);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
-  canvas.addEventListener('pointerdown', () => { if (state.showHelp) state.showHelp = false; });
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state.showHelp) { state.showHelp = false; return; }
+    if (state.showWorldMap) {
+      const rect = canvas.getBoundingClientRect();
+      const hit = pickOnMap(state, e.clientX - rect.left, e.clientY - rect.top);
+      if (hit) {
+        state.waypoint = hit;
+        toast(`목적지: ${hit.label}`);
+      }
+      return;
+    }
+  });
+
+  // 모바일이면 터치 조작을 붙인다 (PC 는 키보드 그대로)
+  if (isTouchDevice()) {
+    state.isTouch = true;
+    touch = new TouchControls({
+      interact: () => interact(),
+      worldmap: () => { state.showWorldMap = !state.showWorldMap; },
+      help: () => { state.showHelp = !state.showHelp; },
+    });
+    state.touch = touch;
+    cam.setZoom(3, window.innerWidth, window.innerHeight);   // 작은 화면에서는 더 크게
+    bindTouchEvents();
+  }
 
   // 전체화면 버튼 (키보드 없는 환경용)
   const fsButton = document.getElementById('fs');
@@ -112,6 +149,50 @@ function nearestWalkable(tx, ty) {
   return { x: tx, y: ty };
 }
 
+// 터치 입력 — 화면을 반으로 나눠 왼쪽은 이동, 오른쪽은 버튼
+function bindTouchEvents() {
+  const pos = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    const [x, y] = pos(e);
+    // 대화창이 열려 있으면 그쪽이 먼저
+    if (handleTouchUi(x, y)) { e.preventDefault(); return; }
+    touch.onDown(e.pointerId, x, y, window.innerWidth);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') return;
+    const [x, y] = pos(e);
+    touch.onMove(e.pointerId, x, y);
+  });
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(type, (e) => touch.onUp(e.pointerId));
+  }
+}
+
+// 열려 있는 화면(도움말·지도·층 선택·결말)에서의 터치 처리
+function handleTouchUi(x, y) {
+  if (state.showHelp) { state.showHelp = false; return true; }
+  if (state.game.ending) { restart(); return true; }
+  if (state.showGallery) { state.showGallery = false; return true; }
+  if (state.showWorldMap) {
+    const hit = pickOnMap(state, x, y);
+    if (hit) { state.waypoint = hit; toast(`목적지: ${hit.label}`); }
+    else state.showWorldMap = false;
+    return true;
+  }
+  if (state.picker) {
+    const hit = pickerRowAt(x, y);
+    if (hit === null) state.picker = null;
+    else { changeFloor(state.picker.floors[hit]); state.picker = null; }
+    return true;
+  }
+  return false;
+}
+
 function resize() {
   const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1);
   const w = window.innerWidth, h = window.innerHeight;
@@ -130,12 +211,32 @@ function onKeyDown(e) {
   keys.add(e.code);
 
   if (KEYS.fullscreen.includes(e.code)) { toggleFullscreen(document.documentElement); e.preventDefault(); return; }
-  if (KEYS.map.includes(e.code)) { state.showMinimap = !state.showMinimap; return; }
+  if (KEYS.worldmap.includes(e.code)) {
+    state.showWorldMap = !state.showWorldMap;
+    e.preventDefault();
+    return;
+  }
+  if (KEYS.map.includes(e.code)) {
+    // 전체지도가 열려 있으면 M 은 그걸 닫는다
+    if (state.showWorldMap) state.showWorldMap = false;
+    else state.showMinimap = !state.showMinimap;
+    return;
+  }
   if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
   if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+  if (e.code === 'KeyG') {
+    // 목적지를 오늘의 목표로 되돌린다
+    state.waypoint = { tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName };
+    toast(`목적지: ${GAME.goalName}`);
+    return;
+  }
   if (KEYS.zoomIn.includes(e.code)) { cam.setZoom(cam.zoom + 1, window.innerWidth, window.innerHeight); return; }
   if (KEYS.zoomOut.includes(e.code)) { cam.setZoom(cam.zoom - 1, window.innerWidth, window.innerHeight); return; }
-  if (e.code === 'Escape') { state.picker = null; state.showGallery = false; state.showHelp = false; return; }
+  if (e.code === 'Escape') {
+    state.picker = null; state.showGallery = false;
+    state.showHelp = false; state.showWorldMap = false;
+    return;
+  }
 
   if (state.game.ending) {
     if (e.code === 'KeyR') restart();
@@ -177,7 +278,7 @@ function update(dt) {
   state.dt = dt;              // 그리는 쪽에서 부드러운 전환에 쓴다
   const g = state.game;
   if (g.ending) return;
-  if (state.showHelp || state.showGallery || state.picker) return;
+  if (state.showHelp || state.showGallery || state.picker || state.showWorldMap) return;
 
   g.tick(dt);
   if (state.exitCooldown > 0) state.exitCooldown -= dt;
@@ -190,6 +291,7 @@ function update(dt) {
     const c0y = Math.floor(view.y0 / TILE.chunk), c1y = Math.floor(view.y1 / TILE.chunk);
     actors.ensure(c0x, c0y, c1x, c1y);
     actors.update(dt, c0x, c0y, c1x, c1y);
+    traffic.update(dt, state.player);
     cam.follow(state.player.x, state.player.y, dt);
     updatePlaceName();
     checkGoal();
@@ -207,12 +309,16 @@ function update(dt) {
 
 function movePlayer(dt) {
   const p = state.player;
-  const dx = axis(KEYS.left, KEYS.right);
-  const dy = axis(KEYS.up, KEYS.down);
+  let dx = axis(KEYS.left, KEYS.right);
+  let dy = axis(KEYS.up, KEYS.down);
+  if (touch && (touch.axis.x || touch.axis.y)) {   // 터치 조이스틱
+    dx = touch.axis.x;
+    dy = touch.axis.y;
+  }
   p.moving = dx !== 0 || dy !== 0;
   if (!p.moving) return;
 
-  const running = KEYS.run.some((k) => keys.has(k));
+  const running = KEYS.run.some((k) => keys.has(k)) || (touch && touch.running);
   const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
   const len = Math.hypot(dx, dy) || 1;
   const vx = (dx / len) * speed * dt, vy = (dy / len) * speed * dt;
@@ -493,26 +599,71 @@ function draw() {
 
   drawHud(ctx, state);
   if (state.picker) drawPicker();
+  if (touch && !state.showWorldMap && !state.showGallery && !state.game.ending) {
+    touch.draw(ctx, window.innerWidth, window.innerHeight);
+  }
+  if (state.showWorldMap) drawWorldMap(ctx, state);
   // 목록을 열면 결말 화면 대신 목록만 보여 준다
-  if (state.showGallery) drawGallery(ctx, state);
+  else if (state.showGallery) drawGallery(ctx, state);
   else if (state.game.ending) drawEnding(ctx, state);
 }
 
-function drawPicker() {
-  const W = ctx.canvas.width / (window.devicePixelRatio > 1 ? 1 : 1);
+// 층 선택 대화창의 자리 (터치로 고를 때도 쓴다)
+function pickerLayout() {
   const floors = state.picker.floors;
-  const h = Math.min(280, floors.length * 24 + 40);
-  const x = 40, y = 120;
-  panel(ctx, x, y, 150, h);
-  drawText(ctx, '층 선택', x + 16, y + 26, { size: 14, color: UI_COLOR.accent });
-  const visible = Math.floor((h - 40) / 24);
-  const from = Math.max(0, Math.min(floors.length - visible, state.picker.index - 2));
-  for (let i = from; i < Math.min(floors.length, from + visible); i++) {
-    const sel = i === state.picker.index;
-    drawText(ctx, `${sel ? '▶ ' : '   '}${floorLabel(floors[i])}`,
-      x + 16, y + 52 + (i - from) * 24,
-      { size: 13, color: sel ? UI_COLOR.text : UI_COLOR.textDim });
+  const rowH = 22;
+  const visible = Math.min(floors.length, 12);
+  const from = Math.max(0, Math.min(floors.length - visible,
+    state.picker.index - Math.floor(visible / 2)));
+  const w = 260;
+  const h = visible * rowH + 78;
+  const x = 40;
+  const y = Math.max(20, (window.innerHeight - h) / 2);
+  return { floors, rowH, visible, from, w, h, x, y };
+}
+
+function pickerRowAt(px, py) {
+  const L = pickerLayout();
+  if (px < L.x || px > L.x + L.w || py < L.y || py > L.y + L.h) return null;
+  const idx = L.from + Math.floor((py - (L.y + 50)) / L.rowH);
+  if (idx < 0 || idx >= L.floors.length) return null;
+  return idx;
+}
+
+function drawPicker() {
+  const b = state.interiorBuilding;
+  const floors = state.picker.floors;
+  const rowH = 22;
+  const visible = Math.min(floors.length, 12);
+  const from = Math.max(0, Math.min(floors.length - visible,
+    state.picker.index - Math.floor(visible / 2)));
+
+  const w = 260;
+  const h = visible * rowH + 78;
+  const x = 40;
+  const y = Math.max(20, (window.innerHeight - h) / 2);
+
+  panel(ctx, x, y, w, h);
+  drawText(ctx, b.name, x + 16, y + 26, { size: 14 });
+  drawText(ctx, '엘리베이터', x + 16, y + 44, { size: 11, color: UI_COLOR.accent });
+
+  for (let i = from; i < from + visible; i++) {
+    const f = floors[i];
+    const row = y + 62 + (i - from) * rowH;
+    const selected = i === state.picker.index;
+    if (selected) {
+      ctx.fillStyle = 'rgba(242, 193, 78, 0.16)';
+      ctx.fillRect(x + 8, row - 14, w - 16, rowH);
+    }
+    const here = f === state.floor;
+    drawText(ctx, `${here ? '●' : selected ? '▶' : ' '} ${floorLabel(f)}`,
+      x + 16, row, { size: 13, color: selected ? UI_COLOR.text : UI_COLOR.textDim });
+    drawText(ctx, floorUse(b, f), x + w - 16, row,
+      { size: 12, align: 'right', color: selected ? UI_COLOR.accent : UI_COLOR.textDim });
   }
+
+  drawText(ctx, '↑↓ 고르기 · Space 이동 · Esc 닫기', x + w / 2, y + h - 14,
+    { size: 11, align: 'center', color: UI_COLOR.textDim });
 }
 
 // 개발·점검용 손잡이. 콘솔에서 __gurae 로 세계를 들여다볼 수 있다.
@@ -520,6 +671,7 @@ function exposeDebugHandle() {
   if (typeof window === 'undefined') return;
   window.__gurae = {
     state, cam,
+    get scene() { return scene; },
     get map() { return map; },
     get buildings() { return buildings; },
     // 타일 좌표로 순간이동 (실외)

@@ -5,7 +5,7 @@ import { UI_COLOR, INTERIOR_COLOR, shade } from './palette.js';
 import {
   makeCanvas, groundTile, groundVariantAt, propSprite, PROP_H,
   buildingSprite, wallHeight, doorMatSprite, playerSheet_, npcSheet, catSprite,
-  interiorTile, gizmoSprite,
+  interiorTile, gizmoSprite, carSprite, carDirIndex,
 } from './sprites.js';
 
 const S = TILE.size;
@@ -20,6 +20,8 @@ export class Scene {
     this.cache = new Map();   // 구워 둔 청크 캔버스
     this.order = [];
     this.fade = new Map();    // 건물 id → 지금 투명도 (뒤에 서면 서서히 비친다)
+    this.asphalt = null;      // 아스팔트·보도 패턴 (한 번만 만든다)
+    this.pavement = null;
   }
 
   // 플레이어가 이 건물 뒤(북쪽)에 서서 지붕에 가려지는가
@@ -66,10 +68,24 @@ export class Scene {
     const { canvas, ctx } = makeCanvas(CHUNK_PX, CHUNK_PX + MARGIN);
     const ox = cx * CH, oy = cy * CH;
 
+    // 1) 지면 타일. 차도는 뒤에서 선으로 그리므로 여기서는 건너뛴다.
     for (let y = 0; y < CH; y++) {
       for (let x = 0; x < CH; x++) {
         const g = chunk.ground[y * CH + x];
+        if (g === GROUND.ROAD || g === GROUND.ROAD_LINE || g === GROUND.CROSSWALK) continue;
         ctx.drawImage(groundTile(g, groundVariantAt(ox + x, oy + y)), x * S, y * S + MARGIN);
+      }
+    }
+
+    // 2) 차도 — 타일로 칠하면 계단처럼 각지고 중앙선이 끊긴다. 선으로 그린다.
+    this.strokeRoads(ctx, ox, oy);
+
+    // 3) 횡단보도는 도로 위에 다시 얹는다
+    for (let y = 0; y < CH; y++) {
+      for (let x = 0; x < CH; x++) {
+        if (chunk.ground[y * CH + x] !== GROUND.CROSSWALK) continue;
+        ctx.drawImage(groundTile(GROUND.CROSSWALK, groundVariantAt(ox + x, oy + y)),
+          x * S, y * S + MARGIN);
       }
     }
     for (let y = 0; y < CH; y++) {
@@ -89,6 +105,73 @@ export class Scene {
       if (old !== key) this.cache.delete(old);
     }
     return hit;
+  }
+
+  // 청크 하나에 걸친 도로들을 이어서 그린다.
+  // 아스팔트는 타일 무늬를 패턴으로 깔아 도트 질감을 유지하고, 가장자리는 선으로 매끈하게.
+  strokeRoads(ctx, ox, oy) {
+    const segs = this.buildings.roads.index.query(ox - 12, oy - 12, ox + CH + 12, oy + CH + 12);
+    if (!segs.length) return;
+    const roadIds = new Set();
+    for (const seg of segs) roadIds.add(seg.roadIndex);
+    const paths = this.buildings.roads.paths;
+
+    if (!this.asphalt) {
+      this.asphalt = ctx.createPattern(groundTile(GROUND.ROAD, 0), 'repeat');
+      this.pavement = ctx.createPattern(groundTile(GROUND.SIDEWALK, 0), 'repeat');
+    }
+
+    ctx.save();
+    ctx.translate(-ox * S, -oy * S + MARGIN);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const trace = (tiles) => {
+      ctx.beginPath();
+      ctx.moveTo(tiles[0][0] * S, tiles[0][1] * S);
+      for (let i = 1; i < tiles.length; i++) ctx.lineTo(tiles[i][0] * S, tiles[i][1] * S);
+    };
+
+    // 보도 → 차도 → 차선 순서로 겹쳐 그린다
+    for (const id of roadIds) {
+      const road = paths[id];
+      if (!road.spec.sidewalk) continue;
+      trace(road.tiles);
+      ctx.strokeStyle = this.pavement;
+      ctx.lineWidth = (road.spec.width + road.spec.sidewalk * 2) * S;
+      ctx.stroke();
+    }
+    for (const id of roadIds) {
+      const road = paths[id];
+      if (road.spec.ground !== undefined) continue;   // 산책로는 지면 타일 그대로
+      trace(road.tiles);
+      ctx.strokeStyle = this.asphalt;
+      ctx.lineWidth = road.spec.width * S;
+      ctx.stroke();
+    }
+    for (const id of roadIds) {
+      const road = paths[id];
+      const spec = road.spec;
+      if (spec.ground !== undefined || spec.width < 4) continue;
+      trace(road.tiles);
+      // 중앙선 — 왕복 도로는 노란 실선, 좁은 길은 점선
+      ctx.strokeStyle = RENDER.centerLine;
+      ctx.lineWidth = spec.width >= 6 ? 2 : 1.5;
+      ctx.setLineDash(spec.width >= 6 ? [] : [S * 0.9, S * 0.9]);
+      ctx.stroke();
+      // 차선 — 흰 점선
+      if (spec.width >= 8) {
+        ctx.setLineDash([S * 1.2, S * 1.1]);
+        ctx.strokeStyle = RENDER.laneLine;
+        ctx.lineWidth = 1.5;
+        for (const off of [-spec.width / 4, spec.width / 4]) {
+          traceOffset(ctx, road.tiles, off * S);
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
   }
 
   // 청크 캐시를 버린다 (지면이 바뀌었을 때)
@@ -137,6 +220,13 @@ export class Scene {
     for (const a of state.actors.visible(cx0, cy0, cx1, cy1)) {
       items.push({ base: a.y, draw: () => this.drawActor(ctx, a) });
     }
+    if (state.traffic) {
+      const pad = 48;
+      for (const car of state.traffic.visible(cam.left - pad, cam.top - pad,
+          cam.left + cam.viewW + pad, cam.top + cam.viewH + pad)) {
+        items.push({ base: car.y, draw: () => this.drawCar(ctx, car) });
+      }
+    }
     items.push({ base: state.player.y, draw: () => this.drawPlayer(ctx, state.player) });
 
     items.sort((a, b) => a.base - b.base);
@@ -174,6 +264,17 @@ export class Scene {
       ctx.strokeRect(b.x * S + 1.5, b.y * S - wh + 1.5, b.w * S - 3, b.h * S + wh - 3);
     }
     ctx.globalAlpha = 1;
+  }
+
+  drawCar(ctx, car) {
+    const sprite = carSprite(car.kind, car.color, carDirIndex(car.angle));
+    const half = sprite.width / 2;
+    ctx.globalAlpha = RENDER.shadowAlpha;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(Math.round(car.x - half + 2), Math.round(car.y - half + 4),
+      sprite.width - 4, sprite.height - 6);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(sprite, Math.round(car.x - half), Math.round(car.y - half));
   }
 
   drawActor(ctx, a) {
@@ -226,6 +327,20 @@ export class Scene {
     // 방 이름 — 방 한가운데 옅게
     ctx.font = `${8}px ${'monospace'}`;
     ctx.restore();
+  }
+}
+
+// 도로 중심선에서 옆으로 비켜 난 선 (차선용)
+function traceOffset(ctx, tiles, offset) {
+  ctx.beginPath();
+  for (let i = 0; i < tiles.length; i++) {
+    const a = tiles[Math.max(0, i - 1)], b = tiles[Math.min(tiles.length - 1, i + 1)];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const x = tiles[i][0] * S + nx * offset;
+    const y = tiles[i][1] * S + ny * offset;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
 }
 

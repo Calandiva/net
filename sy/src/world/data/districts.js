@@ -11,6 +11,8 @@
 //           이름 있는 도로만 실제 방위각대로 비스듬히 지나간다.
 //   street  블록 사이 도로 등급 (config.js ROAD_CLASS 키)
 //   fill    종류별 세부 규칙. 크기는 전부 미터.
+//           아파트는 units(동 수)와 households(세대수)를 지킨다. 세대수는 확인값이고,
+//           동 수는 한가람마을 우미린(14개 동)만 확인, 나머지는 세대수에서 추정한 값이다.
 
 export const DISTRICTS = [
   // ── 구래동 아파트 ───────────────────────────────────────────────
@@ -18,55 +20,55 @@ export const DISTRICTS = [
     // 2011년 입주 · 26층 · 1,058세대 · 김포한강5로 417
     id: 'hangaram-umiline', name: '한가람마을 우미린', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [24, 26], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [24, 26], start: 101, units: 14, households: 1058 },
     path: [[126.6313, 37.6452], [126.6349, 37.6448], [126.6347, 37.6428], [126.6311, 37.6432]],
   },
   {
     // 2018년 입주 · 1,230세대
     id: 'hangang-ipark', name: '김포한강아이파크', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101, units: 13, households: 1230 },
     path: [[126.6231, 37.6474], [126.6267, 37.6470], [126.6265, 37.6450], [126.6229, 37.6454]],
   },
   {
     // 2017년 입주 · 1,510세대 · 김포한강8로 409
     id: 'prugio3', name: '한강신도시 3차 푸르지오', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 301 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 301, units: 15, households: 1510 },
     path: [[126.6343, 37.6428], [126.6379, 37.6424], [126.6377, 37.6404], [126.6341, 37.6408]],
   },
   {
     // 2018년 입주
     id: 'yuborah4', name: '한강신도시 4차 반도유보라', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 401 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 401, units: 11, households: 1000 },
     path: [[126.6188, 37.6444], [126.6224, 37.6440], [126.6222, 37.6420], [126.6186, 37.6424]],
   },
   {
     // 2013년 입주
     id: 'epyeonhansesang-hosu', name: 'e편한세상 호수마을', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [12, 22], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [12, 22], start: 101, units: 8, households: 700 },
     path: [[126.6251, 37.6394], [126.6287, 37.6390], [126.6285, 37.6370], [126.6249, 37.6374]],
   },
   {
     // 1,770세대 · 김포한강9로
     id: 'yemiji', name: '김포한강예미지', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 29], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 29], start: 101, units: 18, households: 1770 },
     path: [[126.6270, 37.6512], [126.6308, 37.6508], [126.6306, 37.6486], [126.6268, 37.6490]],
   },
   {
     // 2014년 입주 · LH
     id: 'nabi-lh3', name: '나비마을 김포한강3단지', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [12, 20], start: 301 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [12, 20], start: 301, units: 9, households: 800 },
     path: [[126.6182, 37.6508], [126.6218, 37.6504], [126.6216, 37.6484], [126.6180, 37.6488]],
   },
   {
     id: 'moaelga2', name: '김포한강신도시 모아엘가 2차', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 201 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 201, units: 7, households: 600 },
     path: [[126.6331, 37.6390], [126.6367, 37.6386], [126.6365, 37.6366], [126.6329, 37.6370]],
   },
 
@@ -75,25 +77,25 @@ export const DISTRICTS = [
     // 2020년 입주 · 1,021세대
     id: 'dongil1', name: '김포한강동일스위트 더파크뷰 1단지', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101, units: 11, households: 1021 },
     path: [[126.6418, 37.6422], [126.6454, 37.6418], [126.6452, 37.6398], [126.6416, 37.6402]],
   },
   {
     id: 'dongil2', name: '김포한강동일스위트 더파크뷰 2단지', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 201 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 201, units: 11, households: 1000 },
     path: [[126.6418, 37.6377], [126.6454, 37.6373], [126.6452, 37.6353], [126.6416, 37.6357]],
   },
   {
     id: 'hangang-hillstate', name: '한강힐스테이트', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101, units: 9, households: 800 },
     path: [[126.6338, 37.6354], [126.6374, 37.6350], [126.6372, 37.6330], [126.6336, 37.6334]],
   },
   {
     id: 'jayeonand-desiang', name: '김포양촌자연앤데시앙', kind: 'apartment',
     block: { w: 150, h: 112 }, street: 'local',
-    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+    fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101, units: 8, households: 700 },
     path: [[126.6055, 37.6478], [126.6091, 37.6474], [126.6089, 37.6454], [126.6053, 37.6458]],
   },
 
@@ -101,16 +103,18 @@ export const DISTRICTS = [
   {
     // 한강신도시에서 가장 큰 상권. 구래역 남쪽 C지구.
     id: 'gurae-center', name: '구래동 중심상가', kind: 'commercial',
-    block: { w: 82, h: 64 }, street: 'alley',
-    fill: { depth: 13, minW: 8, maxW: 16, floors: [3, 8] },
-    path: [[126.6262, 37.6444], [126.6314, 37.6438], [126.6310, 37.6410], [126.6258, 37.6416]],
+    block: { w: 62, h: 48 }, street: 'alley',
+    fill: { depth: 12, minW: 7, maxW: 15, floors: [3, 9] },
+    path: [[126.6244, 37.6448], [126.6330, 37.6438], [126.6322, 37.6396],
+      [126.6236, 37.6406]]
   },
   {
     // 호수공원에서 구래역을 지나 중심상가까지 이어지는 1.4km 축
     id: 'gurae-culture', name: '구래동 문화의 거리', kind: 'commercial',
-    block: { w: 78, h: 60 }, street: 'alley',
-    fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
-    path: [[126.6270, 37.6472], [126.6304, 37.6468], [126.6302, 37.6454], [126.6268, 37.6458]],
+    block: { w: 60, h: 46 }, street: 'alley',
+    fill: { depth: 11, minW: 7, maxW: 14, floors: [2, 7] },
+    path: [[126.6262, 37.6478], [126.6322, 37.6470], [126.6318, 37.6446],
+      [126.6258, 37.6454]]
   },
   {
     id: 'masan-sanggwon', name: '마산역 상가', kind: 'commercial',
@@ -216,10 +220,10 @@ export const DISTRICTS = [
   },
   {
     id: 'gurae-neighborhood', name: '구래동 근린생활시설', kind: 'commercial',
-    block: { w: 80, h: 62 }, street: 'alley',
-    fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 5] },
-    path: [[126.6206, 37.6412], [126.6262, 37.6406], [126.6258, 37.6380],
-      [126.6202, 37.6386]],
+    block: { w: 62, h: 48 }, street: 'alley',
+    fill: { depth: 12, minW: 7, maxW: 15, floors: [2, 6] },
+    path: [[126.6196, 37.6414], [126.6262, 37.6406], [126.6256, 37.6376],
+      [126.6190, 37.6384]]
   },
   {
     id: 'masan-neighborhood', name: '마산동 근린생활시설', kind: 'commercial',
@@ -230,9 +234,33 @@ export const DISTRICTS = [
   },
   {
     id: 'gurae-office', name: '구래동 오피스텔', kind: 'commercial',
-    block: { w: 78, h: 60 }, street: 'alley',
-    fill: { depth: 14, minW: 10, maxW: 18, floors: [8, 15] },
-    path: [[126.6238, 37.6444], [126.6262, 37.6441], [126.6260, 37.6424],
-      [126.6236, 37.6427]],
+    block: { w: 60, h: 46 }, street: 'alley',
+    fill: { depth: 13, minW: 9, maxW: 17, floors: [8, 16] },
+    path: [[126.6224, 37.6446], [126.6262, 37.6442], [126.6258, 37.6414],
+      [126.6220, 37.6418]]
+  },
+  {
+    // 구래역 동측 상가 (김포한강8로 변)
+    id: 'gurae-east-shops', name: '구래동 상가', kind: 'commercial',
+    block: { w: 60, h: 46 }, street: 'alley',
+    fill: { depth: 12, minW: 7, maxW: 15, floors: [3, 8] },
+    path: [[126.6330, 37.6462], [126.6382, 37.6454], [126.6376, 37.6424],
+      [126.6324, 37.6432]],
+  },
+  {
+    // 구래역 남측 상가
+    id: 'gurae-south-shops', name: '구래동 상가', kind: 'commercial',
+    block: { w: 60, h: 46 }, street: 'alley',
+    fill: { depth: 12, minW: 7, maxW: 15, floors: [2, 7] },
+    path: [[126.6250, 37.6396], [126.6322, 37.6388], [126.6316, 37.6362],
+      [126.6244, 37.6370]],
+  },
+  {
+    // 마산역 남측 상가
+    id: 'masan-south-shops', name: '마산동 상가', kind: 'commercial',
+    block: { w: 60, h: 46 }, street: 'alley',
+    fill: { depth: 12, minW: 7, maxW: 14, floors: [2, 6] },
+    path: [[126.6366, 37.6382], [126.6416, 37.6376], [126.6412, 37.6352],
+      [126.6362, 37.6358]],
   },
 ];

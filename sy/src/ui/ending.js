@@ -3,12 +3,12 @@
 import { UI } from '../config.js';
 import { UI_COLOR } from '../render/palette.js';
 import { ENDINGS, ENDING_COUNT, TAG_COLOR, TAG_LABEL } from '../game/endings.js';
-import { drawText, textWidth } from './labels.js';
+import { drawText, textWidth, viewSize } from './labels.js';
 import { panel } from './hud.js';
 
 // 결말 한 판
 export function drawEnding(ctx, state) {
-  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const { w: W, h: H } = viewSize(ctx);
   const e = state.game.ending;
   const g = state.game;
 
@@ -56,7 +56,7 @@ export function drawEnding(ctx, state) {
 
 // 지금까지 본 결말 목록
 export function drawGallery(ctx, state) {
-  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const { w: W, h: H } = viewSize(ctx);
   const found = state.game.found;
 
   ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';

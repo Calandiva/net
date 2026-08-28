@@ -21,6 +21,7 @@ export const GROUND_COLOR = {
   [GROUND.FLOOR]: '#b0aaa0',
   [GROUND.TRACK]: '#c49a72',      // 산책로 · 등산로
   [GROUND.ROAD_LINE]: '#5a5c62',
+  [GROUND.ASPHALT]: '#5f6167',   // 상가 마당 — 차도보다 아주 살짝 밝다
 };
 
 // 타일마다 살짝 흔들 밝기 폭 (0 이면 단색)
@@ -39,6 +40,7 @@ export const GROUND_JITTER = {
   [GROUND.FLOOR]: 0.03,
   [GROUND.TRACK]: 0.06,
   [GROUND.ROAD_LINE]: 0.03,
+  [GROUND.ASPHALT]: 0.05,
 };
 
 // ── 소품 ────────────────────────────────────────────────────────────────
@@ -96,6 +98,11 @@ export const INTERIOR_COLOR = {
   [IN.BED]: '#dcd2e2',
   [IN.TABLE]: '#cba97e',
   [IN.MACHINE]: '#93a2ac',
+  [IN.CAR]: '#7f8790',
+  [IN.PILLAR]: '#9a938a',
+  [IN.SEAT]: '#8f4a4a',
+  [IN.SCREEN]: '#d8d8d0',
+  [IN.CART]: '#b8bcc2',
 };
 
 // ── 인물 ────────────────────────────────────────────────────────────────
@@ -109,6 +116,22 @@ export const NPC_COLORS = {
   hair: ['#3c2f2a', '#5a4030', '#20202a', '#7a5a3a', '#a06a4a'],
   top: ['#8fb8d8', '#e2a0b8', '#8fc48a', '#f2c14e', '#c8a8ee', '#e88a6a', '#dfe6ec'],
   bottom: ['#4a5a78', '#5a5a62', '#7a6a52', '#3c4a5a'],
+};
+
+// ── 지도 ────────────────────────────────────────────────────────────────
+// 미니맵·전체지도는 실제 지형색 대신 지도 기호색을 쓴다. 그래야 시가지와 논이 구분된다.
+export const MAP_KIND = {
+  FIELD: 0, CITY: 1, INDUSTRIAL: 2, PARK: 3, FOREST: 4, WATER: 5, ROAD: 6, MAIN_ROAD: 7,
+};
+export const MAP_COLOR = {
+  [MAP_KIND.FIELD]: '#cfd8a8',       // 논밭
+  [MAP_KIND.CITY]: '#e6dfd2',        // 시가지
+  [MAP_KIND.INDUSTRIAL]: '#c9cdd2',  // 산업단지
+  [MAP_KIND.PARK]: '#a8d49a',        // 공원
+  [MAP_KIND.FOREST]: '#7fae74',      // 산
+  [MAP_KIND.WATER]: '#8fc0d8',       // 물
+  [MAP_KIND.ROAD]: '#a8a49c',        // 이면도로
+  [MAP_KIND.MAIN_ROAD]: '#f2c14e',   // 간선도로
 };
 
 // ── UI ─────────────────────────────────────────────────────────────────
