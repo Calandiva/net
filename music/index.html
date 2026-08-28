@@ -1,0 +1,2732 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="보컬·기타·베이스·건반·드럼 튜토리얼과 코드 사전, 튜너, 메트로놈. 학원 없이 혼자 보는 악기 교실.">
+<title>악기 교실 — 보컬 · 기타 · 베이스 · 건반 · 드럼</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #12141a; --panel: #191c24; --panel2: #20242e; --line: #2e3440;
+    --ink: #e8e6e1; --dim: #9aa0ac; --accent: #e4572e; --ok: #5aa469; --warn: #d9a441;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.65; -webkit-text-size-adjust: 100%;
+  }
+  #app { display: flex; flex-direction: column; min-height: 100%; }
+
+  /* ── 머리와 탭 ── */
+  .top { position: sticky; top: 0; z-index: 9; background: rgba(18,20,26,.94);
+         backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px 6px; }
+  .brand b { font-size: 17px; letter-spacing: .02em; }
+  .brand span { font-size: 12px; color: var(--dim); }
+  .tabs { display: flex; gap: 4px; padding: 0 10px 8px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; cursor: pointer;
+         padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+         background: transparent; color: var(--dim); font: inherit; font-size: 13px; }
+  .tab:hover { color: var(--ink); border-color: #3d4658; }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab-icon { font-size: 14px; }
+
+  .body { flex: 1; }
+  .page { max-width: 940px; margin: 0 auto; padding: 20px 16px 60px; }
+  .foot { text-align: center; color: #5d6470; font-size: 12px; padding: 18px; border-top: 1px solid var(--line); }
+
+  /* ── 공통 조각 ── */
+  .page-head { margin-bottom: 18px; }
+  .page-head h2 { font-size: 24px; letter-spacing: -.01em; }
+  .tagline { color: var(--dim); font-size: 13.5px; margin-top: 4px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+          padding: 16px; margin-bottom: 14px; }
+  .card.warn { border-color: var(--warn); color: var(--warn); }
+  h3.section { font-size: 15px; margin: 22px 0 10px; color: var(--dim); font-weight: 600; }
+  .card h3 { font-size: 15.5px; margin-bottom: 6px; }
+  ul { padding-left: 18px; }
+  li { margin: 3px 0; font-size: 14px; }
+  .tip { font-size: 12.5px; color: var(--dim); margin-top: 8px;
+         border-left: 2px solid var(--line); padding-left: 10px; }
+  .tip b { color: var(--warn); }
+  .muted { color: var(--dim); }
+  .badge { font-size: 11px; color: var(--warn); border: 1px solid var(--warn);
+           border-radius: 999px; padding: 1px 8px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips.static { margin-top: 8px; }
+  .chip { cursor: pointer; font: inherit; font-size: 12.5px; padding: 4px 11px;
+          border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--dim); }
+  .chip:hover { color: var(--ink); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip.ghost { background: transparent; }
+  .field-label { font-size: 12px; color: var(--dim); flex: 0 0 auto; }
+  .count-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+
+  button.big { display: block; width: 100%; margin: 12px 0 4px; padding: 12px;
+               font: inherit; font-size: 15px; cursor: pointer; border-radius: 10px;
+               border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  button.big:hover { filter: brightness(1.08); }
+  button.mini { cursor: pointer; font: inherit; font-size: 12px; padding: 5px 12px; margin-top: 8px;
+                border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); }
+  button.mini:hover { border-color: var(--accent); }
+
+  /* ── 튜토리얼 ── */
+  .steps { display: grid; gap: 10px; }
+  .card.step { display: flex; gap: 14px; margin-bottom: 0; }
+  .step-no { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--panel2);
+             color: var(--accent); display: flex; align-items: center; justify-content: center;
+             font-weight: 700; font-size: 14px; }
+  .step-body { flex: 1; min-width: 0; }
+  .score-card .score-title { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
+  .score-scroll { overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
+  .score-scroll svg { display: block; }
+
+  /* ── 코드 사전 ── */
+  .chord-input { width: 100%; padding: 12px 14px; font: inherit; font-size: 18px;
+                 border-radius: 10px; border: 1px solid var(--line);
+                 background: var(--panel2); color: var(--ink); }
+  .chord-input:focus { outline: none; border-color: var(--accent); }
+  .chord-name { display: flex; align-items: baseline; gap: 10px; }
+  .chord-name b { font-size: 26px; }
+  .chord-kor { color: var(--dim); font-size: 13px; }
+  .tone-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tone-table th { text-align: left; color: var(--dim); font-weight: 600; font-size: 11.5px;
+                   border-bottom: 1px solid var(--line); padding: 4px 6px; }
+  .tone-table td { padding: 6px; border-bottom: 1px solid #232833; vertical-align: top; }
+  .tone-table tr.off td { opacity: .5; text-decoration-color: var(--dim); }
+  .deg-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+             border: 1.5px solid; margin-right: 6px; vertical-align: -1px; }
+  .panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
+  .panel-head h3 { margin: 0; flex: 1; }
+  .shape-row { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
+  .shape { flex: 0 0 auto; text-align: center; }
+  .shape-meta { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .hands { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; }
+  .hand { display: flex; gap: 8px; }
+  .hand-label { color: var(--warn); font-size: 12px; flex: 0 0 auto; }
+
+  /* ── 튜너 ── */
+  .tuner-card { text-align: center; }
+  .gauge { display: flex; justify-content: center; }
+  .tuner-read { font-size: 40px; font-weight: 700; margin-top: 6px; letter-spacing: .02em; }
+  .tuner-read.good { color: var(--ok); }
+  .tuner-detail { font-size: 13px; color: var(--dim); min-height: 20px; }
+  .string-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+  .string-btn { cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 1px;
+                padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+                background: var(--panel2); color: var(--ink); font-size: 11px; }
+  .string-btn b { font-size: 13px; }
+  .string-btn.near { border-color: var(--ok); color: var(--ok); }
+
+  /* ── 메트로놈 ── */
+  .metro-card { text-align: center; }
+  .bpm { font-size: 54px; font-weight: 700; line-height: 1.1; }
+  .lamps { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; }
+  .lamp { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); }
+  .lamp.first { border-color: var(--accent); }
+  .lamp.on { background: var(--accent); box-shadow: 0 0 10px rgba(228,87,46,.7); }
+  .metro-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 8px; }
+  .slider { flex: 1; max-width: 340px; accent-color: var(--accent); }
+  .metro-card .count-row { justify-content: center; }
+
+  @media (max-width: 560px) {
+    .page { padding: 16px 12px 48px; }
+    .page-head h2 { font-size: 21px; }
+    .bpm { font-size: 44px; }
+  }
+
+  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+          background: var(--bg); color: var(--dim); font-size: 13px; z-index: 20; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="boot">불러오는 중…</div>
+<script>
+'use strict';
+
+const __M = Object.create(null);
+
+// ── config.js ─────────────────────────────
+(function () {
+  // 조정 가능한 값은 전부 여기에 둔다. 다른 파일에 숫자를 흩뿌리지 않는다.
+
+  const APP = {
+    title: '악기 교실',
+    subtitle: '보컬 · 기타 · 베이스 · 건반 · 드럼',
+    storageKey: 'music-lab-v1',
+  };
+
+  // 화면 위쪽 탭 순서. id 는 lesson/*.js 와 ui/* 가 함께 쓴다.
+  const TABS = [
+    { id: 'vocal',  label: '보컬',   icon: '🎤' },
+    { id: 'guitar', label: '기타',   icon: '🎸' },
+    { id: 'bass',   label: '베이스', icon: '🎻' },
+    { id: 'keys',   label: '건반',   icon: '🎹' },
+    { id: 'drums',  label: '드럼',   icon: '🥁' },
+    { id: 'chord',  label: '코드사전', icon: '🔎' },
+    { id: 'tuner',  label: '튜너',   icon: '📡' },
+    { id: 'metro',  label: '메트로놈', icon: '⏱' },
+  ];
+
+  // 도수별 색. 악보 · 지판 · 건반이 전부 이 색을 쓴다(같은 도수는 어디서나 같은 색).
+  const DEG_COLOR = {
+    R:  '#e4572e',   // 1도 뿌리
+    3:  '#3d7dca',   // 3음 — 밝고 어두움
+    5:  '#5aa469',   // 5음 — 뼈대
+    7:  '#a45ec4',   // 7음 — 성격
+    T:  '#d9a441',   // 텐션 9 11 13
+    X:  '#8b8b8b',   // 생략된 음
+  };
+
+  const COLOR = {
+    bg:      '#12141a',
+    panel:   '#191c24',
+    panel2:  '#20242e',
+    line:    '#2e3440',
+    ink:     '#e8e6e1',
+    dim:     '#9aa0ac',
+    accent:  '#e4572e',
+    ok:      '#5aa469',
+    warn:    '#d9a441',
+    paper:   '#f7f5f0',   // 악보 바탕
+    paperInk:'#1a1a1a',   // 악보 잉크
+  };
+
+  // 악보 그리기 기준값(px). s = 줄 간격 하나.
+  const STAFF_METRIC = {
+    s: 10,             // 오선 줄 간격
+    noteR: 5.6,        // 음표 머리 반지름(가로)
+    stem: 30,          // 기둥 길이
+    leftPad: 46,       // 클레프 자리
+    measurePad: 18,
+    noteGap: 34,       // 음표 하나가 차지하는 가로폭 기준
+  };
+
+  // 현악기 조율(개방현 MIDI 번호, 낮은 줄부터). 튜너와 지판이 함께 쓴다.
+  const TUNINGS = {
+    guitar:      { short: '기타 표준', label: '기타 표준 EADGBE', strings: [40, 45, 50, 55, 59, 64], names: ['6E','5A','4D','3G','2B','1E'] },
+    guitarDrop:  { short: '드롭 D',   label: '기타 드롭 D',      strings: [38, 45, 50, 55, 59, 64], names: ['6D','5A','4D','3G','2B','1E'] },
+    guitarHalf:  { short: '반음 내림', label: '기타 반음 내림',   strings: [39, 44, 49, 54, 58, 63], names: ['6E♭','5A♭','4D♭','3G♭','2B♭','1E♭'] },
+    bass:        { short: '베이스 4현', label: '베이스 4현 EADG',  strings: [28, 33, 38, 43],        names: ['4E','3A','2D','1G'] },
+    bass5:       { short: '베이스 5현', label: '베이스 5현 BEADG', strings: [23, 28, 33, 38, 43],    names: ['5B','4E','3A','2D','1G'] },
+    ukulele:     { short: '우쿨렐레',  label: '우쿨렐레 GCEA',    strings: [67, 60, 64, 69],        names: ['4G','3C','2E','1A'] },
+  };
+
+  // 지판 그림 크기
+  const FRET_METRIC = {
+    stringGap: 20,
+    fretGap: 30,
+    dotR: 7,
+    pad: 26,
+    windowFrets: 5,     // 코드 다이어그램에 보여 줄 프렛 수
+    mapFrets: 12,       // 지판 전체 지도에 보여 줄 프렛 수
+  };
+
+  // 건반 그림 크기
+  const KEY_METRIC = {
+    whiteW: 22,
+    whiteH: 104,
+    blackW: 13,
+    blackH: 66,
+    lowMidi: 36,        // C2 부터
+    octaves: 4,
+  };
+
+  const AUDIO = {
+    a4: 440,
+    master: 0.22,
+    noteDur: 1.1,
+    strumGap: 0.045,    // 기타 스트로크 간격(초)
+  };
+
+  const METRO = {
+    bpmMin: 30,
+    bpmMax: 260,
+    bpmDefault: 90,
+    lookahead: 0.1,     // 스케줄러가 미리 잡아 두는 시간(초)
+    tick: 25,           // 스케줄러 주기(ms)
+    accentHz: 1560,
+    beatHz: 900,
+    subHz: 640,
+  };
+
+  const TUNER = {
+    fftSize: 8192,     // 낮은 음(베이스 E1 41Hz)까지 잡으려면 이만큼 필요하다
+    minHz: 28,         // 5현 베이스 B0(30.9Hz) 까지 잡는다
+    maxHz: 1300,       // 그 위는 이 앱에서 쓸 일이 없다
+    clarityMin: 0.72,  // 이보다 흐린 신호는 무시. 배음이 센 악기는 1.0 이 안 나온다
+    inTuneCents: 5,     // 이 안이면 맞은 것으로 본다
+    smooth: 0.25,      // 표시값 부드럽게
+    periodMs: 45,      // 음정 재는 주기(ms). 매 프레임 재면 무겁다
+  };
+
+  __M.APP = APP; __M.TABS = TABS; __M.DEG_COLOR = DEG_COLOR; __M.COLOR = COLOR; __M.STAFF_METRIC = STAFF_METRIC; __M.TUNINGS = TUNINGS; __M.FRET_METRIC = FRET_METRIC; __M.KEY_METRIC = KEY_METRIC; __M.AUDIO = AUDIO; __M.METRO = METRO; __M.TUNER = TUNER;
+})();
+
+// ── util/dom.js ─────────────────────────────
+(function () {
+  // DOM 을 만드는 최소한의 도구. 프레임워크는 쓰지 않는다.
+
+  // el('div.card', {id:'x'}, ['글', el('b', '굵게')])
+  function el(spec, attrs, kids) {
+    const m = String(spec).split(/([.#])/);
+    const node = document.createElement(m[0] || 'div');
+    for (let i = 1; i < m.length; i += 2) {
+      if (m[i] === '.') node.classList.add(m[i + 1]);
+      else node.id = m[i + 1];
+    }
+    if (attrs && (typeof attrs === 'string' || attrs instanceof Node || Array.isArray(attrs))) {
+      kids = attrs; attrs = null;
+    }
+    if (attrs) {
+      for (const k in attrs) {
+        const v = attrs[k];
+        if (v == null || v === false) continue;
+        if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+        else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2), v);
+        else if (k === 'html') node.innerHTML = v;
+        else node.setAttribute(k, v === true ? '' : v);
+      }
+    }
+    add(node, kids);
+    return node;
+  }
+
+  function add(node, kids) {
+    if (kids == null) return node;
+    if (Array.isArray(kids)) { kids.forEach((k) => add(node, k)); return node; }
+    node.appendChild(kids instanceof Node ? kids : document.createTextNode(String(kids)));
+    return node;
+  }
+
+  function clear(node) {
+    while (node && node.firstChild) node.removeChild(node.firstChild);
+    return node;
+  }
+
+  function qs(sel, root) {
+    return (root || document).querySelector(sel);
+  }
+
+  // 라벨 붙은 한 줄짜리 조작부
+  function field(label, control) {
+    return el('label.field', [el('span.field-label', label), control]);
+  }
+
+  // 값이 바뀌면 알려 주는 버튼 묶음(라디오 대용)
+  function chipGroup(items, value, onPick) {
+    const box = el('div.chips');
+    items.forEach((it) => {
+      const b = el('button.chip', { type: 'button', 'data-v': it.value }, it.label);
+      if (it.value === value) b.classList.add('on');
+      if (it.title) b.title = it.title;
+      b.addEventListener('click', () => {
+        box.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
+        b.classList.add('on');
+        onPick(it.value);
+      });
+      box.appendChild(b);
+    });
+    return box;
+  }
+
+  __M.el = el; __M.add = add; __M.clear = clear; __M.qs = qs; __M.field = field; __M.chipGroup = chipGroup;
+})();
+
+// ── util/svg.js ─────────────────────────────
+(function () {
+  // SVG 를 만드는 최소한의 도구. 악보 · 지판 · 건반이 전부 이걸로 그려진다.
+
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function sv(tag, attrs, kids) {
+    const node = document.createElementNS(NS, tag);
+    if (attrs) {
+      for (const k in attrs) {
+        const v = attrs[k];
+        if (v == null || v === false) continue;
+        node.setAttribute(k, v === true ? '' : String(v));
+      }
+    }
+    if (kids != null) {
+      (Array.isArray(kids) ? kids : [kids]).forEach((k) => {
+        if (k == null) return;
+        node.appendChild(k instanceof Node ? k : document.createTextNode(String(k)));
+      });
+    }
+    return node;
+  }
+
+  function svgRoot(w, h, cls) {
+    return sv('svg', {
+      viewBox: '0 0 ' + w + ' ' + h,
+      width: w, height: h, class: cls || '',
+      xmlns: NS, 'shape-rendering': 'geometricPrecision',
+    });
+  }
+
+  function line(x1, y1, x2, y2, stroke, w) {
+    return sv('line', { x1, y1, x2, y2, stroke, 'stroke-width': w == null ? 1 : w, 'stroke-linecap': 'round' });
+  }
+
+  function rect(x, y, w, h, fill, more) {
+    return sv('rect', Object.assign({ x, y, width: w, height: h, fill }, more || {}));
+  }
+
+  function circle(cx, cy, r, fill, more) {
+    return sv('circle', Object.assign({ cx, cy, r, fill }, more || {}));
+  }
+
+  function path(d, more) {
+    return sv('path', Object.assign({ d, fill: 'none' }, more || {}));
+  }
+
+  function text(x, y, s, more) {
+    return sv('text', Object.assign({
+      x, y, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-family': 'ui-sans-serif, system-ui, sans-serif', 'font-size': 11,
+    }, more || {}), String(s));
+  }
+
+  // 타원 음표 머리(살짝 기울어져 있어야 악보처럼 보인다)
+  function ellipse(cx, cy, rx, ry, fill, rot, more) {
+    return sv('ellipse', Object.assign({
+      cx, cy, rx, ry, fill,
+      transform: 'rotate(' + (rot || -18) + ' ' + cx + ' ' + cy + ')',
+    }, more || {}));
+  }
+
+  __M.sv = sv; __M.svgRoot = svgRoot; __M.line = line; __M.rect = rect; __M.circle = circle; __M.path = path; __M.text = text; __M.ellipse = ellipse;
+})();
+
+// ── theory/notes.js ─────────────────────────────
+(function () {
+  // 음 하나를 다루는 곳. 이 프로젝트의 음은 언제나 {letter, alter, oct} 로 적는다.
+  //   letter : C=0 D=1 E=2 F=3 G=4 A=5 B=6   (오선 위 세로 위치를 정한다)
+  //   alter  : -2 ~ +2                        (♭♭ ♭ ♮ ♯ ♯♯)
+  //   oct    : 국제 표기(가온다 = C4)
+  // 이렇게 두는 이유: C♯ 과 D♭ 은 소리는 같아도 악보에서 자리가 다르다.
+  // 피치클래스(0~11) 하나만 들고 다니면 그 구별이 사라진다.
+
+  const { AUDIO } = __M;
+
+  const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+  const LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
+  const ALTER_SIGN = { '-2': '♭♭', '-1': '♭', 0: '', 1: '♯', 2: '♯♯' };
+
+  function makeNote(letter, alter, oct) {
+    return { letter: ((letter % 7) + 7) % 7, alter: alter || 0, oct: oct == null ? 4 : oct };
+  }
+
+  // 오선 위 세로 자리. C0 을 0 으로 두고 한 칸(줄↔칸)마다 1씩 는다.
+  function noteStep(n) {
+    return n.oct * 7 + n.letter;
+  }
+
+  function noteMidi(n) {
+    return (n.oct + 1) * 12 + LETTER_PC[n.letter] + n.alter;
+  }
+
+  function notePc(n) {
+    return ((LETTER_PC[n.letter] + n.alter) % 12 + 12) % 12;
+  }
+
+  function noteName(n, withOct) {
+    return LETTERS[n.letter] + ALTER_SIGN[String(n.alter)] + (withOct ? n.oct : '');
+  }
+
+  // step 을 되돌려 음으로. 조표가 없으므로 alter 는 따로 준다.
+  function noteFromStep(step, alter) {
+    return makeNote(((step % 7) + 7) % 7, alter || 0, Math.floor(step / 7));
+  }
+
+  // "C#4" "Bb2" "F##3" "Eb" 같은 글자를 음으로. 실패하면 null.
+  function parseNote(s, defOct) {
+    const m = /^\s*([A-Ga-g])([#b♯♭x]*)(-?\d+)?\s*$/.exec(String(s || ''));
+    if (!m) return null;
+    const letter = LETTERS.indexOf(m[1].toUpperCase());
+    let alter = 0;
+    for (const c of m[2]) {
+      if (c === '#' || c === '♯') alter += 1;
+      else if (c === 'x') alter += 2;
+      else alter -= 1;
+    }
+    const oct = m[3] != null ? parseInt(m[3], 10) : (defOct == null ? 4 : defOct);
+    return makeNote(letter, alter, oct);
+  }
+
+  function midiToFreq(midi) {
+    return AUDIO.a4 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  function freqToMidi(hz) {
+    return 69 + 12 * Math.log2(hz / AUDIO.a4);
+  }
+
+  // 아무 MIDI 번호나 보기 좋은 이름으로(튜너 · 지판 지도용). 조성 정보가 없으면 ♯ 로 적는다.
+  const SHARP_SPELL = [[0,0],[0,1],[1,0],[1,-1],[2,0],[3,0],[3,1],[4,0],[4,1],[5,0],[5,-1],[6,0]];
+  const FLAT_SPELL  = [[0,0],[1,-1],[1,0],[2,-1],[2,0],[3,0],[4,-1],[4,0],[5,-1],[5,0],[6,-1],[6,0]];
+
+  function midiToNote(midi, preferFlat) {
+    const pc = ((midi % 12) + 12) % 12;
+    const oct = Math.floor(midi / 12) - 1;
+    const sp = (preferFlat ? FLAT_SPELL : SHARP_SPELL)[pc];
+    // B♯ / C♭ 처럼 옥타브가 넘어가는 표기는 쓰지 않으므로 oct 보정이 필요 없다.
+    return makeNote(sp[0], sp[1], oct);
+  }
+
+  // 같은 소리인가(이명동음 포함)
+  function samePc(a, b) {
+    return notePc(a) === notePc(b);
+  }
+
+  // 옥타브만 옮긴 사본
+  function transposeOct(n, by) {
+    return makeNote(n.letter, n.alter, n.oct + by);
+  }
+
+  // 두 음 사이 반음 수
+  function semisBetween(a, b) {
+    return noteMidi(b) - noteMidi(a);
+  }
+
+  __M.LETTERS = LETTERS; __M.LETTER_PC = LETTER_PC; __M.ALTER_SIGN = ALTER_SIGN; __M.makeNote = makeNote; __M.noteStep = noteStep; __M.noteMidi = noteMidi; __M.notePc = notePc; __M.noteName = noteName; __M.noteFromStep = noteFromStep; __M.parseNote = parseNote; __M.midiToFreq = midiToFreq; __M.freqToMidi = freqToMidi; __M.midiToNote = midiToNote; __M.samePc = samePc; __M.transposeOct = transposeOct; __M.semisBetween = semisBetween;
+})();
+
+// ── theory/intervals.js ─────────────────────────────
+(function () {
+  // 도수(度). 코드는 "루트에서 몇 도 위인 음들" 의 모음이므로, 여기가 코드 이론의 뿌리다.
+  // 도수는 {num, alter} 로 적는다. num 은 1~13, alter 는 ♭(-1) ♮(0) ♯(+1) ♭♭(-2).
+
+  const { LETTER_PC, makeNote } = __M;
+
+  // 장음계 기준 반음 수. 9·11·13 은 옥타브 위(2·4·6도)다.
+  const DEGREE_SEMI = { 1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11, 9: 14, 11: 17, 13: 21 };
+
+  const SIGN = { '-2': '♭♭', '-1': '♭', 0: '', 1: '♯', 2: '♯♯' };
+
+  // 화면에 찍는 짧은 이름: R ♭3 5 ♭7 ♯11
+  function degShort(d) {
+    return d.num === 1 && !d.alter ? 'R' : SIGN[String(d.alter)] + d.num;
+  }
+
+  // 말로 풀어 쓴 이름: 1도(루트) · ♭3도 · 완전5도
+  function degLabel(d) {
+    if (d.num === 1 && !d.alter) return '1도 (루트)';
+    if (d.num === 5 && !d.alter) return '완전5도';
+    if (d.num === 3 && d.alter === 0) return '3도 (장3도)';
+    if (d.num === 3 && d.alter === -1) return '♭3도 (단3도)';
+    if (d.num === 7 && d.alter === 0) return '7도 (장7도)';
+    if (d.num === 7 && d.alter === -1) return '♭7도 (단7도)';
+    if (d.num === 7 && d.alter === -2) return '♭♭7도 (감7도)';
+    return SIGN[String(d.alter)] + d.num + '도';
+  }
+
+  // 그 도수가 코드에서 맡는 일. 한 줄 설명은 화면에 그대로 뜬다.
+  function degRole(d) {
+    if (d.num === 1) return { key: 'R', text: '코드의 이름이 되는 음. 베이스가 맡는다.' };
+    if (d.num === 3) return { key: '3', text: '밝은가 어두운가를 혼자 정한다. 메이저와 마이너를 가르는 음.' };
+    if (d.num === 4 || d.num === 2) return { key: '3', text: '3음 대신 들어가 붕 뜬 소리를 만든다 (sus).' };
+    if (d.num === 5) {
+      if (d.alter) return { key: '5', text: '변형된 5도. 이 코드의 성격 자체라 뺄 수 없다.' };
+      return { key: '5', text: '뼈대는 되지만 색은 없다. 자리가 모자라면 제일 먼저 뺀다.' };
+    }
+    if (d.num === 7 || d.num === 6) return { key: '7', text: '7 코드인지 아닌지를 정한다. 어지간하면 남긴다.' };
+    return { key: 'T', text: '텐션. 코드의 색깔이다. 이름에 붙어 있으면 남기고, 아니면 뺀다.' };
+  }
+
+  // 자리가 모자랄 때 무엇부터 남길지. 숫자가 작을수록 먼저 남는다.
+  // 루트 → 3음 → 7음 → 텐션(낮은 것부터) → 완전5도 순서.
+  function keepRank(d) {
+    if (d.num === 1) return 0;
+    if (d.num === 3 || d.num === 4 || d.num === 2) return 1;
+    if (d.num === 5 && d.alter) return 2;          // ♭5 ♯5 는 성격이라 일찍 남긴다
+    if (d.num === 7 || d.num === 6) return 3;
+    if (d.num === 9) return 4;
+    if (d.num === 11) return 5;
+    if (d.num === 13) return 6;
+    if (d.num === 5) return 9;                     // 완전5도가 마지막
+    return 7;
+  }
+
+  // 루트 음에서 도수만큼 올라간 음을 정확한 철자로 만든다.
+  // (C 의 ♭3 은 E♭ 이지 D♯ 이 아니다 — 3도는 항상 세 번째 글자여야 한다)
+  function degToNote(root, d) {
+    const semi = DEGREE_SEMI[d.num] + (d.alter || 0);
+    const abs = root.letter + (d.num - 1);
+    const letter = ((abs % 7) + 7) % 7;
+    const carry = Math.floor(abs / 7);
+    const alter = LETTER_PC[root.letter] + root.alter + semi - carry * 12 - LETTER_PC[letter];
+    return makeNote(letter, alter, root.oct + carry);
+  }
+
+  // 도수를 반음 수(0~23)로
+  function degSemi(d) {
+    return DEGREE_SEMI[d.num] + (d.alter || 0);
+  }
+
+  // 반음 수(0~11)를 도수로 되짚는다 — 지판 지도에서 "이 자리는 몇 도인가" 를 찍을 때 쓴다.
+  function semiToDeg(semi, tones) {
+    const s = ((semi % 12) + 12) % 12;
+    for (const t of tones) if (((degSemi(t) % 12) + 12) % 12 === s) return t;
+    return null;
+  }
+
+  __M.DEGREE_SEMI = DEGREE_SEMI; __M.degShort = degShort; __M.degLabel = degLabel; __M.degRole = degRole; __M.keepRank = keepRank; __M.degToNote = degToNote; __M.degSemi = degSemi; __M.semiToDeg = semiToDeg;
+})();
+
+// ── theory/chords.js ─────────────────────────────
+(function () {
+  // 코드 사전과 코드 이름 해석기.
+  // 새 코드를 넣고 싶으면 CHORD_TYPES 에 한 줄, 부르는 이름은 ALIAS 에 적으면 된다.
+
+  const { parseNote, noteName } = __M;
+
+  const d = (num, alter) => ({ num, alter: alter || 0 });
+
+  // id: 코드 종류. sym: 화면에 찍을 기호. degs: 들어가는 도수. hint: 한 줄 설명.
+  const CHORD_TYPES = {
+    maj:     { sym: '',       name: '메이저',        degs: [d(1), d(3), d(5)],                       hint: '가장 기본. 밝다.' },
+    m:       { sym: 'm',      name: '마이너',        degs: [d(1), d(3, -1), d(5)],                   hint: '3음만 반음 내리면 어두워진다.' },
+    five:    { sym: '5',      name: '파워코드',      degs: [d(1), d(5)],                             hint: '3음이 없어 밝지도 어둡지도 않다. 락 기타의 기본.' },
+    dim:     { sym: 'dim',    name: '디미니시',      degs: [d(1), d(3, -1), d(5, -1)],               hint: '3음과 5음을 다 내렸다. 불안하다.' },
+    aug:     { sym: 'aug',    name: '어그멘트',      degs: [d(1), d(3), d(5, 1)],                    hint: '5음을 올렸다. 붕 떠서 다음 코드로 밀린다.' },
+    sus4:    { sym: 'sus4',   name: '서스포',        degs: [d(1), d(4), d(5)],                       hint: '3음 자리에 4음. 해결되기를 기다리는 소리.' },
+    sus2:    { sym: 'sus2',   name: '서스투',        degs: [d(1), d(2), d(5)],                       hint: '3음 자리에 2음. 맑고 넓다.' },
+    six:     { sym: '6',      name: '식스',          degs: [d(1), d(3), d(5), d(6)],                 hint: '7음 대신 6음. 편안하게 끝난다.' },
+    m6:      { sym: 'm6',     name: '마이너 식스',   degs: [d(1), d(3, -1), d(5), d(6)],             hint: '어둡지만 축축하지 않다.' },
+    sixnine: { sym: '6/9',    name: '식스나인',      degs: [d(1), d(3), d(5), d(6), d(9)],           hint: '마지막 마디에 자주 쓰는 넉넉한 소리.' },
+    dom7:    { sym: '7',      name: '세븐스',        degs: [d(1), d(3), d(5), d(7, -1)],             hint: '어딘가로 가고 싶어 한다. 블루스의 기본.' },
+    maj7:    { sym: 'maj7',   name: '메이저 세븐',   degs: [d(1), d(3), d(5), d(7)],                 hint: '몽글몽글하다. 발라드와 재즈.' },
+    m7:      { sym: 'm7',     name: '마이너 세븐',   degs: [d(1), d(3, -1), d(5), d(7, -1)],         hint: '가장 무난한 어두운 코드.' },
+    mmaj7:   { sym: 'mMaj7',  name: '마이너 메이저 세븐', degs: [d(1), d(3, -1), d(5), d(7)],        hint: '어두운데 위가 삐죽하다. 영화 음악.' },
+    m7b5:    { sym: 'm7♭5',   name: '하프 디미니시', degs: [d(1), d(3, -1), d(5, -1), d(7, -1)],     hint: '마이너 2-5-1 의 첫 코드.' },
+    dim7:    { sym: 'dim7',   name: '디미니시 세븐', degs: [d(1), d(3, -1), d(5, -1), d(7, -2)],     hint: '단3도 간격 네 개. 어디로든 이어진다.' },
+    sus7:    { sym: '7sus4',  name: '세븐 서스포',   degs: [d(1), d(4), d(5), d(7, -1)],             hint: '7 코드인데 아직 3음을 안 낸다.' },
+    add9:    { sym: 'add9',   name: '애드나인',      degs: [d(1), d(3), d(5), d(9)],                 hint: '7음 없이 9음만 얹는다. 기타 팝의 단골.' },
+    madd9:   { sym: 'madd9',  name: '마이너 애드나인', degs: [d(1), d(3, -1), d(5), d(9)],           hint: '어두운데 맑다.' },
+    dom9:    { sym: '9',      name: '나인',          degs: [d(1), d(3), d(5), d(7, -1), d(9)],       hint: '펑크와 소울의 그 소리.' },
+    maj9:    { sym: 'maj9',   name: '메이저 나인',   degs: [d(1), d(3), d(5), d(7), d(9)],           hint: 'maj7 보다 한 겹 넓다.' },
+    m9:      { sym: 'm9',     name: '마이너 나인',   degs: [d(1), d(3, -1), d(5), d(7, -1), d(9)],   hint: '시티팝의 그 코드.' },
+    dom11:   { sym: '11',     name: '일레븐',        degs: [d(1), d(5), d(7, -1), d(9), d(11)],      hint: '3음은 11도와 반음으로 부딪혀서 아예 뺀다.' },
+    m11:     { sym: 'm11',    name: '마이너 일레븐', degs: [d(1), d(3, -1), d(5), d(7, -1), d(9), d(11)], hint: '♭3 과 11 은 부딪히지 않는다.' },
+    dom13:   { sym: '13',     name: '서틴',          degs: [d(1), d(3), d(5), d(7, -1), d(9), d(13)], hint: '실제로는 5음과 9음을 빼고 네 개만 잡는다.' },
+    maj13:   { sym: 'maj13',  name: '메이저 서틴',   degs: [d(1), d(3), d(5), d(7), d(9), d(13)],    hint: '' },
+    m13:     { sym: 'm13',    name: '마이너 서틴',   degs: [d(1), d(3, -1), d(5), d(7, -1), d(9), d(13)], hint: '' },
+    dom7b9:  { sym: '7♭9',    name: '세븐 플랫나인', degs: [d(1), d(3), d(5), d(7, -1), d(9, -1)],   hint: '마이너로 가는 길목.' },
+    dom7s9:  { sym: '7♯9',    name: '세븐 샵나인',   degs: [d(1), d(3), d(5), d(7, -1), d(9, 1)],    hint: '헨드릭스 코드.' },
+    dom7s5:  { sym: '7♯5',    name: '세븐 샵파이브', degs: [d(1), d(3), d(5, 1), d(7, -1)],          hint: '' },
+    dom7b5:  { sym: '7♭5',    name: '세븐 플랫파이브', degs: [d(1), d(3), d(5, -1), d(7, -1)],       hint: '' },
+    dom7s11: { sym: '7♯11',   name: '세븐 샵일레븐', degs: [d(1), d(3), d(5), d(7, -1), d(11, 1)],   hint: '' },
+    maj7s11: { sym: 'maj7♯11', name: '메이저 세븐 샵일레븐', degs: [d(1), d(3), d(5), d(7), d(11, 1)], hint: '리디안의 소리.' },
+    alt:     { sym: '7alt',   name: '얼터드',        degs: [d(1), d(3), d(7, -1), d(9, 1), d(13, -1)], hint: '5음을 아예 안 잡는다. 가장 긴장된 도미넌트.' },
+  };
+
+  // 사람이 치는 온갖 표기 → 위의 id
+  const ALIAS = {
+    '': 'maj', 'maj': 'maj', 'major': 'maj',
+    'm': 'm', 'min': 'm', 'minor': 'm', '-': 'm',
+    '5': 'five', 'no3': 'five',
+    'dim': 'dim', 'o': 'dim',
+    'aug': 'aug', '+': 'aug', 'maj#5': 'aug',
+    'sus4': 'sus4', 'sus': 'sus4', 'sus2': 'sus2',
+    '6': 'six', 'm6': 'm6', 'min6': 'm6', '6/9': 'sixnine', '69': 'sixnine', '6add9': 'sixnine',
+    '7': 'dom7', 'dom7': 'dom7',
+    'maj7': 'maj7', 'ma7': 'maj7', 'major7': 'maj7',
+    'm7': 'm7', 'min7': 'm7', '-7': 'm7',
+    'mmaj7': 'mmaj7', 'minmaj7': 'mmaj7', '-maj7': 'mmaj7',
+    'm7b5': 'm7b5', 'min7b5': 'm7b5', 'halfdim': 'm7b5', 'o7b5': 'm7b5',
+    'dim7': 'dim7', 'o7': 'dim7',
+    '7sus4': 'sus7', '7sus': 'sus7', 'sus47': 'sus7',
+    'add9': 'add9', 'add2': 'add9', 'madd9': 'madd9', 'madd2': 'madd9', 'minadd9': 'madd9',
+    '9': 'dom9', 'maj9': 'maj9', 'ma9': 'maj9', 'm9': 'm9', 'min9': 'm9', '-9': 'm9',
+    '11': 'dom11', 'm11': 'm11', 'min11': 'm11',
+    '13': 'dom13', 'maj13': 'maj13', 'm13': 'm13', 'min13': 'm13',
+    '7b9': 'dom7b9', '7#9': 'dom7s9', '7+9': 'dom7s9',
+    '7#5': 'dom7s5', '7+5': 'dom7s5', '7aug5': 'dom7s5',
+    '7b5': 'dom7b5', '7#11': 'dom7s11', 'maj7#11': 'maj7s11',
+    'alt': 'alt', '7alt': 'alt',
+  };
+
+  // 표기를 사전 열쇠 꼴로 다듬는다. 대문자 M 과 소문자 m 이 다른 뜻이라 순서가 중요하다.
+  function normSuffix(raw) {
+    let s = String(raw || '').trim();
+    s = s.replace(/[♯]/g, '#').replace(/[♭]/g, 'b').replace(/[△Δ]/g, 'maj7');
+    s = s.replace(/[øØ]/g, 'm7b5').replace(/[°º]/g, 'dim').replace(/\s+/g, '');
+    s = s.replace(/^(m|min|-)(M|Maj|MAJ|maj)7/, 'mmaj7');   // mM7 = 마이너 메이저 세븐
+    s = s.replace(/^(Maj|MAJ|Ma|M)(?=7|9|11|13|#|$)/, 'maj'); // 대문자 M 은 메이저
+    return s.toLowerCase();
+  }
+
+  // "Cmaj7/E" → { root, type, degs, bass, sym, text } · 못 읽으면 null
+  function parseChord(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return null;
+    const slash = raw.split('/');
+    // 6/9 처럼 기호 안에 빗금이 있는 경우를 먼저 걸러 낸다
+    let head = raw, bassStr = null;
+    if (slash.length === 2 && !/^\d/.test(slash[1])) { head = slash[0]; bassStr = slash[1]; }
+
+    const m = /^([A-Ga-g])([#b♯♭]*)(.*)$/.exec(head.trim());
+    if (!m) return null;
+    const root = parseNote(m[1] + m[2].replace(/♯/g, '#').replace(/♭/g, 'b'), 4);
+    if (!root) return null;
+
+    const id = ALIAS[normSuffix(m[3])];
+    if (!id) return null;
+    const type = CHORD_TYPES[id];
+
+    let bass = null;
+    if (bassStr) {
+      bass = parseNote(bassStr.replace(/♯/g, '#').replace(/♭/g, 'b'), 3);
+      if (!bass) return null;
+    }
+
+    const sym = noteName(root) + type.sym + (bass ? '/' + noteName(bass) : '');
+    return { id, root, type, degs: type.degs.slice(), bass, sym, name: type.name, hint: type.hint };
+  }
+
+  // 자동완성 · 예시용 코드 목록
+  function chordExamples(rootName) {
+    const r = rootName || 'C';
+    return ['', 'm', '7', 'maj7', 'm7', 'sus4', 'm7♭5', 'dim7', 'add9', '9', 'm9', '13']
+      .map((s) => r + s);
+  }
+
+  __M.CHORD_TYPES = CHORD_TYPES; __M.parseChord = parseChord; __M.chordExamples = chordExamples;
+})();
+
+// ── theory/voicing.js ─────────────────────────────
+(function () {
+  // "몇 개만 잡을 것인가" 를 정하는 곳.
+  // 코드에 든 음을 중요한 순서로 줄 세우고, 앞에서 n 개만 남긴다. 나머지는 생략된 음으로 표시한다.
+
+  const { keepRank, degRole, degToNote, degShort } = __M;
+  const { notePc, midiToNote, noteName, noteMidi } = __M;
+
+  // 텐션끼리는 코드 이름에 적힌 것(가장 높은 것 · 변형된 것)이 먼저 남는다.
+  // 13 코드는 9 를 빼고 13 을 남기는 쪽이 실제로 치는 방식이다.
+  function rankAll(degs) {
+    const tension = degs.filter((t) => t.num >= 9);
+    tension.sort((a, b) => (b.alter !== 0) - (a.alter !== 0) || b.num - a.num);
+    const tensionRank = new Map();
+    tension.forEach((t, i) => tensionRank.set(t, 4 + i));
+    return degs.map((t) => ({ deg: t, rank: tensionRank.has(t) ? tensionRank.get(t) : keepRank(t) }));
+  }
+
+  // 왜 뺄 수 있는지 / 왜 못 빼는지 한 줄.
+  function omitNote(deg) {
+    if (deg.num === 5 && !deg.alter) return '소리에 거의 영향이 없다. 제일 먼저 뺀다.';
+    if (deg.num === 1) return '밴드에서는 베이스가 루트를 치므로 빼도 된다.';
+    if (deg.num === 3 || deg.num === 4 || deg.num === 2) return '빼면 코드가 밝은지 어두운지 알 수 없어진다.';
+    if (deg.num === 7 || deg.num === 6) return '빼면 그냥 3화음이 된다.';
+    if (deg.num === 5 && deg.alter) return '이 코드의 성격이라 뺄 수 없다.';
+    return '색깔만 담당한다. 손이 모자라면 뺀다.';
+  }
+
+  // 밴드 안에서(베이스가 따로 있을 때) 빼도 되는 음인가
+  function isBandOmittable(deg) {
+    return deg.num === 1 || (deg.num === 5 && !deg.alter);
+  }
+
+  const MIN_TONES = 1;
+
+  // F♯♯ 처럼 겹올림·겹내림이 나오면 같은 소리의 쉬운 이름을 알려 준다(이론상 철자는 그대로 둔다)
+  function aliasOf(note) {
+    if (Math.abs(note.alter) < 2) return null;
+    return noteName(midiToNote(noteMidi(note), note.alter < 0));
+  }
+
+  // 코드 + 잡을 음 개수 → 무엇을 남기고 무엇을 뺄지의 계획.
+  function tonePlan(chord, count) {
+    const ranked = rankAll(chord.degs);
+    const order = ranked.slice().sort((a, b) => a.rank - b.rank);
+    const max = chord.degs.length;
+    const n = Math.max(MIN_TONES, Math.min(count == null ? max : count, max));
+    const keepSet = new Set(order.slice(0, n).map((r) => r.deg));
+
+    const tones = ranked.map((r) => {
+      const role = degRole(r.deg);
+      return {
+        deg: r.deg,
+        rank: r.rank,
+        keep: keepSet.has(r.deg),
+        role: role.key,
+        roleText: role.text,
+        short: degShort(r.deg),
+        note: degToNote(chord.root, r.deg),      // 옥타브 없이 철자만 보는 용도
+        alias: aliasOf(degToNote(chord.root, r.deg)),  // ♯♯ ♭♭ 은 쉬운 이름을 함께 적는다
+        omitWhy: omitNote(r.deg),
+        bandOmit: isBandOmittable(r.deg),
+      };
+    });
+
+    // 잡는 순서(낮은 도수부터)로 정렬해서 돌려준다
+    tones.sort((a, b) => a.deg.num - b.deg.num || a.deg.alter - b.deg.alter);
+    return { chord, count: n, max, tones, kept: tones.filter((t) => t.keep) };
+  }
+
+  // 남긴 음들의 피치클래스 집합(지판 검색이 쓴다)
+  function keptPcs(plan) {
+    return plan.kept.map((t) => ({ pc: notePc(t.note), tone: t }));
+  }
+
+  // 개수 고르개에 쓸 설명
+  function countHint(plan) {
+    const n = plan.count;
+    if (n === 1) return '루트 한 음. 코드의 이름을 알려 줄 뿐 성격은 아직 없다.';
+    if (n === 2) return '두 음. 여기까지가 "이 코드는 무엇인가" 의 최소한이다.';
+    if (n === plan.max) return '적힌 음을 다 잡았다. 손이 닿는지가 문제.';
+    return n + '개. 뺀 음은 아래에 회색으로 남겨 두었다.';
+  }
+
+  __M.MIN_TONES = MIN_TONES; __M.tonePlan = tonePlan; __M.keptPcs = keptPcs; __M.countHint = countHint;
+})();
+
+// ── theory/fretboard.js ─────────────────────────────
+(function () {
+  // 지판 위에서 운지를 찾는다. 그림은 render/fret.js 가 그리고, 여기는 "어디를 짚는가" 만 계산한다.
+
+  const { TUNINGS, FRET_METRIC } = __M;
+  const { degShort } = __M;
+  const { notePc } = __M;
+
+  const SEARCH = {
+    maxFret: 14,        // 이 위로는 찾지 않는다(초보가 쓸 자리가 아니다)
+    span: 4,            // 한 손이 덮는 프렛 수
+    maxFingers: 4,
+    maxCombos: 40000,   // 한 자리에서 살펴볼 조합 수 상한
+    keep: 3,            // 돌려줄 운지 개수
+  };
+
+  const pcOf = (midi) => ((midi % 12) + 12) % 12;
+
+  // 줄마다 이 자리에서 짚을 수 있는 후보(뮤트 포함)
+  function candidates(open, pcSet, from, to) {
+    const out = [{ fret: -1 }];                       // 뮤트
+    if (pcSet.has(pcOf(open))) out.push({ fret: 0 }); // 개방현
+    for (let f = Math.max(1, from); f <= to; f++) {
+      if (pcSet.has(pcOf(open + f))) out.push({ fret: f });
+    }
+    return out;
+  }
+
+  // 짚는 데 손가락이 몇 개 드는가.
+  // 한 프렛에 연달아 붙은 줄들은 한 손가락으로 눌러(바레) 하나로 친다.
+  // 바레가 되려면 그 구간의 모든 줄이 그 프렛 이상이어야 한다 — 사이에 개방현이나 뮤트가
+  // 있으면 바레가 그 줄까지 눌러 버리므로 바레가 아니다.
+  function fingering(frets) {
+    const fretted = [];
+    frets.forEach((f, i) => { if (f > 0) fretted.push(i); });
+    if (!fretted.length) return { fingers: 0, barre: null };
+
+    let best = { fingers: fretted.length, barre: null };
+    const levels = Array.from(new Set(fretted.map((i) => frets[i])));
+    levels.forEach((lv) => {
+      for (let lo = 0; lo < frets.length; lo++) {
+        if (frets[lo] !== lv) continue;
+        for (let hi = lo + 1; hi < frets.length; hi++) {
+          if (frets[hi] !== lv) continue;
+          let ok = true;
+          for (let s = lo; s <= hi; s++) if (frets[s] < lv) ok = false;
+          if (!ok) continue;
+          let cost = 1;                                  // 바레 손가락 하나
+          fretted.forEach((i) => {
+            if (i >= lo && i <= hi && frets[i] === lv) return;   // 바레가 덮는다
+            cost += 1;
+          });
+          if (cost < best.fingers) best = { fingers: cost, barre: { fret: lv, from: lo, to: hi } };
+        }
+      }
+    });
+    return best;
+  }
+
+  // 코드 계획(남긴 음들)을 그 악기 지판 위 운지로.
+  function findShapes(tuningKey, plan, bassPc) {
+    const tuning = TUNINGS[tuningKey];
+    if (!tuning) return [];
+    const open = tuning.strings;
+    const N = open.length;
+    const want = plan.kept.map((t) => notePc(t.note));
+    const pcSet = new Set(want);
+    const need = pcSet.size;
+    const rootPc = bassPc == null ? notePc(plan.chord.root) : bassPc;
+    const minStrings = need;
+    const maxStrings = Math.min(N, need + 2);
+
+    const found = [];
+    const seen = new Set();
+
+    for (let w = 0; w <= SEARCH.maxFret - SEARCH.span + 1; w++) {
+      const cands = open.map((o) => candidates(o, pcSet, w, w + SEARCH.span - 1));
+      let budget = SEARCH.maxCombos;
+      const frets = new Array(N).fill(-1);
+
+      const check = (f) => {
+        const sounding = [];
+        for (let i = 0; i < N; i++) if (f[i] >= 0) sounding.push(i);
+        if (sounding.length < minStrings || sounding.length > maxStrings) return;
+        // 필요한 음이 하나도 빠지면 안 된다
+        const got = new Set(sounding.map((i) => pcOf(open[i] + f[i])));
+        if (got.size !== need) return;
+        // 제일 낮게 울리는 음은 루트(분수코드면 지정된 베이스)
+        if (pcOf(open[sounding[0]] + f[sounding[0]]) !== rootPc) return;
+        const fg = fingering(f);
+        if (fg.fingers > SEARCH.maxFingers) return;
+
+        const key = f.join(',');
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        // 사이에 낀 뮤트 — 줄을 건너뛰어야 해서 어렵다
+        let gaps = 0, innerOpen = 0;
+        for (let i = sounding[0]; i <= sounding[sounding.length - 1]; i++) {
+          if (f[i] < 0) gaps++;
+          else if (f[i] === 0) innerOpen++;
+        }
+        const used = f.filter((x) => x > 0);
+        const lowF = used.length ? Math.min.apply(null, used) : 0;
+        const highF = used.length ? Math.max.apply(null, used) : 0;
+        const opens = f.filter((x) => x === 0).length;
+
+        // 낮은 자리 · 적은 손가락 · 안 건너뛰는 것을 좋아한다.
+        // 개방현 덤은 낮은 자리에서만 준다 — 12프렛에서 개방현을 섞는 건 초보용이 아니다.
+        const score =
+          sounding.length * 3 +
+          (lowF <= 4 ? opens * 1.5 : 0) -
+          fg.fingers * 1.2 -
+          gaps * 4 -
+          (lowF >= 5 ? innerOpen * 1.6 : 0) -
+          lowF * 0.9 -
+          (highF - lowF) * 1.1 +
+          (fg.barre ? -0.6 : 0);
+
+        found.push({
+          frets: f,
+          fingers: fg.fingers,
+          barre: fg.barre,
+          lowFret: lowF,
+          span: used.length ? highF - lowF + 1 : 1,
+          score: score,
+          tuningKey: tuningKey,
+          tones: sounding.map((i) => {
+            const midi = open[i] + f[i];
+            return { string: i, fret: f[i], midi: midi, tone: toneOf(plan, midi) };
+          }),
+        });
+      };
+
+      const walk = (i) => {
+        if (budget-- <= 0) return;
+        if (i === N) { check(frets.slice()); return; }
+        for (const c of cands[i]) { frets[i] = c.fret; walk(i + 1); }
+        frets[i] = -1;
+      };
+      walk(0);
+    }
+
+    found.sort((a, b) => b.score - a.score);
+    // 같은 자리의 사소한 변형은 하나만 남긴다
+    const out = [];
+    for (const s2 of found) {
+      const dup = out.some((o) => {
+        if (Math.abs(o.lowFret - s2.lowFret) > 1) return false;
+        let same = 0;
+        for (let i = 0; i < s2.frets.length; i++) if (o.frets[i] === s2.frets[i]) same++;
+        return same >= s2.frets.length - 1;
+      });
+      if (dup) continue;
+      out.push(s2);
+      if (out.length >= SEARCH.keep) break;
+    }
+    return out;
+  }
+
+  // midi 가 계획 안의 어느 도수인지
+  function toneOf(plan, midi) {
+    const rootPc = notePc(plan.chord.root);
+    const semi = ((midi - rootPc) % 12 + 12) % 12;
+    const found = plan.tones.find((t) => ((notePc(t.note) - rootPc) % 12 + 12) % 12 === semi);
+    return found || null;
+  }
+
+  // 지판 전체에서 코드톤이 어디 있는지. 베이스와 "루트 찾기" 화면이 쓴다.
+  function fretMap(tuningKey, plan, frets) {
+    const tuning = TUNINGS[tuningKey];
+    const max = frets == null ? FRET_METRIC.mapFrets : frets;
+    const rootPc = notePc(plan.chord.root);
+    const rows = [];
+    for (let i = 0; i < tuning.strings.length; i++) {
+      const row = [];
+      for (let f = 0; f <= max; f++) {
+        const midi = tuning.strings[i] + f;
+        const semi = ((midi - rootPc) % 12 + 12) % 12;
+        const tone = plan.tones.find((t) => ((notePc(t.note) - rootPc) % 12 + 12) % 12 === semi) || null;
+        row.push(tone ? { fret: f, midi, tone, label: degShort(tone.deg) } : null);
+      }
+      rows.push(row);
+    }
+    return { tuning, rows, max };
+  }
+
+  // 한 음만 짚을 자리들(베이스). 낮은 자리부터.
+  function notePositions(tuningKey, pc, maxFret) {
+    const tuning = TUNINGS[tuningKey];
+    const out = [];
+    const max = maxFret == null ? 12 : maxFret;
+    tuning.strings.forEach((open, i) => {
+      for (let f = 0; f <= max; f++) if (pcOf(open + f) === pc) out.push({ string: i, fret: f, midi: open + f });
+    });
+    out.sort((a, b) => a.midi - b.midi);
+    return out;
+  }
+
+  __M.findShapes = findShapes; __M.fretMap = fretMap; __M.notePositions = notePositions;
+})();
+
+// ── theory/keyboard.js ─────────────────────────────
+(function () {
+  // 건반은 양손이다. 왼손은 뿌리를 잡고, 오른손이 나머지를 쌓는다.
+  // 여기서 정한 음 높이를 건반 그림과 오선보가 그대로 쓴다.
+
+  const { makeNote, noteMidi, notePc } = __M;
+
+  const LEFT_LOW = 36, LEFT_HIGH = 52;   // 왼손이 놓일 자리(C2~E3)
+  const RIGHT_LOW = 59;                  // 오른손은 가온다 언저리부터 쌓는다
+
+  // 철자는 그대로 두고 옥타브만 옮겨 원하는 높이에 앉힌다
+  function placeAt(note, lowMidi) {
+    const n = makeNote(note.letter, note.alter, note.oct);
+    while (noteMidi(n) < lowMidi) n.oct += 1;
+    while (noteMidi(n) - 12 >= lowMidi) n.oct -= 1;
+    return n;
+  }
+
+  // 코드 계획 → 왼손 · 오른손 음 목록
+  function handVoicing(plan) {
+    const chord = plan.chord;
+    const kept = plan.kept;
+    const bassNote = chord.bass || chord.root;
+    const bassPc = notePc(bassNote);
+
+    // 왼손: 베이스 한 음. 잡을 음이 다섯 개를 넘으면 5도를 얹어 받쳐 준다.
+    const left = [];
+    const lowRoot = placeAt(bassNote, LEFT_LOW);
+    const rootTone = kept.find((t) => notePc(t.note) === bassPc) || kept[0];
+    left.push({ note: lowRoot, tone: rootTone, hand: 'L' });
+
+    const fifth = kept.find((t) => t.deg.num === 5 && !t.deg.alter);
+    if (plan.count >= 5 && fifth) {
+      const f = placeAt(fifth.note, noteMidi(lowRoot) + 1);
+      if (noteMidi(f) <= LEFT_HIGH + 7) left.push({ note: f, tone: fifth, hand: 'L' });
+    }
+
+    // 오른손: 왼손이 가져간 음을 빼고 낮은 도수부터 쌓는다
+    const leftPcs = new Set(left.map((x) => notePc(x.note)));
+    const rest = kept.filter((t) => !leftPcs.has(notePc(t.note)));
+    const right = [];
+    let floor = RIGHT_LOW;
+    rest.forEach((t) => {
+      const n = placeAt(t.note, floor);
+      right.push({ note: n, tone: t, hand: 'R' });
+      floor = noteMidi(n) + 1;
+    });
+
+    // 한 손이 한 옥타브 반을 넘게 벌어지면 제일 위를 한 옥타브 내려 접는다
+    if (right.length >= 2) {
+      const span = noteMidi(right[right.length - 1].note) - noteMidi(right[0].note);
+      if (span > 16) right[right.length - 1].note.oct -= 1;
+      right.sort((a, b) => noteMidi(a.note) - noteMidi(b.note));
+    }
+
+    return { left, right, all: left.concat(right) };
+  }
+
+  // 소리 낼 때 쓸 MIDI 번호들
+  function voicingMidis(v) {
+    return v.all.map((x) => noteMidi(x.note));
+  }
+
+  // 건반 그림이 강조할 것들: midi → {tone, hand}
+  function voicingIndex(v) {
+    const map = new Map();
+    v.all.forEach((x) => map.set(noteMidi(x.note), x));
+    return map;
+  }
+
+  __M.handVoicing = handVoicing; __M.voicingMidis = voicingMidis; __M.voicingIndex = voicingIndex;
+})();
+
+// ── audio/engine.js ─────────────────────────────
+(function () {
+  // 소리 내기. 라이브러리 없이 WebAudio 오실레이터만 쓴다.
+
+  const { AUDIO } = __M;
+  const { midiToFreq } = __M;
+
+  let ctx = null;
+  let master = null;
+
+  function getCtx() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = AUDIO.master;
+      master.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // 음 하나. 배음을 두 개만 얹어도 오르간 비슷한 소리가 난다.
+  function playFreq(hz, when, dur, gain) {
+    const c = getCtx();
+    if (!c) return;
+    const t0 = when == null ? c.currentTime : when;
+    const d = dur == null ? AUDIO.noteDur : dur;
+    const g = c.createGain();
+    g.connect(master);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime((gain == null ? 1 : gain) * 0.9, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+
+    [[1, 1], [2, 0.32], [3, 0.14]].forEach((h) => {
+      const o = c.createOscillator();
+      o.type = h[0] === 1 ? 'triangle' : 'sine';
+      o.frequency.value = hz * h[0];
+      const hg = c.createGain();
+      hg.gain.value = h[1];
+      o.connect(hg); hg.connect(g);
+      o.start(t0); o.stop(t0 + d + 0.05);
+    });
+  }
+
+  // MIDI 번호 여러 개. strum 을 주면 기타처럼 아래에서 위로 훑는다.
+  function playMidis(midis, strum) {
+    const c = getCtx();
+    if (!c) return;
+    const gap = strum ? AUDIO.strumGap : 0;
+    midis.slice().sort((a, b) => a - b).forEach((m, i) => {
+      playFreq(midiToFreq(m), c.currentTime + i * gap, AUDIO.noteDur, 0.85);
+    });
+  }
+
+  // 메트로놈 클릭(짧은 사인 + 급한 감쇠)
+  function click(hz, when, gain) {
+    const c = getCtx();
+    if (!c) return;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'square';
+    o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(gain == null ? 0.6 : gain, when + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.055);
+    o.connect(g); g.connect(master);
+    o.start(when); o.stop(when + 0.08);
+  }
+
+  __M.getCtx = getCtx; __M.playFreq = playFreq; __M.playMidis = playMidis; __M.click = click;
+})();
+
+// ── audio/metronome.js ─────────────────────────────
+(function () {
+  // 메트로놈. setInterval 로 소리를 내면 흔들리므로, 미리 잡아 두고(lookahead) WebAudio 시계에 맡긴다.
+
+  const { METRO } = __M;
+  const { getCtx, click } = __M;
+
+  function createMetronome() {
+    const st = {
+      bpm: METRO.bpmDefault,
+      beats: 4,          // 한 마디 박 수
+      sub: 1,            // 한 박을 몇 등분할지 (1 · 2 · 3 · 4)
+      accent: true,
+      running: false,
+      beat: 0,           // 마디 안의 박
+      tickIdx: 0,        // 잘게 쪼갠 것까지 센 번호
+      next: 0,
+      timer: null,
+    };
+
+    function stepDur() { return 60 / st.bpm / st.sub; }
+
+    function schedule() {
+      const c = getCtx();
+      if (!c) return;
+      while (st.next < c.currentTime + METRO.lookahead) {
+        const isBeat = st.tickIdx % st.sub === 0;
+        const beatNo = Math.floor(st.tickIdx / st.sub) % st.beats;
+        const isBar = isBeat && beatNo === 0;
+        const hz = isBar && st.accent ? METRO.accentHz : isBeat ? METRO.beatHz : METRO.subHz;
+        click(hz, st.next, isBar && st.accent ? 0.75 : isBeat ? 0.5 : 0.22);
+        // 램프는 소리보다 눈에 늦게 보여도 되므로 타이머로 따라 붙인다
+        const at = st.next, b = beatNo, sub = st.tickIdx % st.sub;
+        const delay = Math.max(0, (at - c.currentTime) * 1000);
+        setTimeout(() => { if (st.running && api.onBeat) api.onBeat(b, sub, isBar); }, delay);
+        st.next += stepDur();
+        st.tickIdx += 1;
+      }
+    }
+
+    const api = {
+      onBeat: null,        // 화면이 갈아 끼운다
+      state: st,
+      start() {
+        const c = getCtx();
+        if (!c || st.running) return;
+        st.running = true;
+        st.tickIdx = 0;
+        st.next = c.currentTime + 0.08;
+        schedule();
+        st.timer = setInterval(schedule, METRO.tick);
+      },
+      stop() {
+        st.running = false;
+        if (st.timer) clearInterval(st.timer);
+        st.timer = null;
+      },
+      toggle() { st.running ? this.stop() : this.start(); },
+      set(k, v) {
+        st[k] = v;
+        if (st.running) { const c = getCtx(); st.next = Math.max(st.next, c.currentTime + 0.05); }
+      },
+    };
+    return api;
+  }
+
+  // 탭 템포 — 최근 네 번의 간격 평균
+  function createTapTempo() {
+    let taps = [];
+    return function tap() {
+      const now = performance.now();
+      if (taps.length && now - taps[taps.length - 1] > 2200) taps = [];
+      taps.push(now);
+      if (taps.length > 5) taps.shift();
+      if (taps.length < 2) return null;
+      let sum = 0;
+      for (let i = 1; i < taps.length; i++) sum += taps[i] - taps[i - 1];
+      return Math.round(60000 / (sum / (taps.length - 1)));
+    };
+  }
+
+  __M.createMetronome = createMetronome; __M.createTapTempo = createTapTempo;
+})();
+
+// ── audio/tuner.js ─────────────────────────────
+(function () {
+  // 튜너. 마이크에서 들어온 파형의 자기상관(autocorrelation)으로 기본 주파수를 찾는다.
+  // FFT 대신 자기상관을 쓰는 이유: 배음이 기음보다 센 악기(기타 저음현)에서도 잘 버틴다.
+
+  const { TUNER } = __M;
+  const { getCtx } = __M;
+  const { freqToMidi, midiToNote, midiToFreq } = __M;
+
+  // 파형 한 토막 → 주파수(Hz) 와 또렷함(0~1). 못 찾으면 null.
+  //
+  // 그냥 자기상관의 최댓값을 고르면 한 옥타브 아래를 집는 일이 잦다(주기 T 의 배수에도
+  // 봉우리가 서기 때문). 그래서 McLeod 방식을 쓴다 — 정규화한 뒤(NSDF) 가장 높은 봉우리를
+  // 찾고, 그 높이의 일정 비율을 넘는 "첫" 봉우리를 고른다. 그 첫 봉우리가 진짜 주기다.
+  //
+  // 계산량을 줄이려고 절반으로 솎아 낸 뒤(24kHz 쯤) 잰다. 사람이 튜닝하는 음역에는 충분하다.
+  function detectPitch(buf, sampleRate) {
+    const n = buf.length >> 1;
+    if (n < 512) return null;
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = (buf[2 * i] + buf[2 * i + 1]) * 0.5;
+    const sr = sampleRate / 2;
+
+    let rms = 0;
+    for (let i = 0; i < n; i++) rms += x[i] * x[i];
+    rms = Math.sqrt(rms / n);
+    if (rms < 0.006) return null;                        // 너무 조용하면 포기
+
+    const loLag = Math.max(2, Math.floor(sr / TUNER.maxHz));
+    const hiLag = Math.min(n - 32, Math.ceil(sr / TUNER.minHz));
+    if (hiLag <= loLag + 2) return null;
+
+    // NSDF: 2·Σx[i]x[i+τ] / Σ(x[i]²+x[i+τ]²) — -1~1 사이로 정규화된다
+    const nsdf = new Float32Array(hiLag + 1);
+    for (let lag = loLag; lag <= hiLag; lag++) {
+      let ac = 0, sq = 0;
+      const m = n - lag;
+      for (let i = 0; i < m; i++) {
+        const a = x[i], b = x[i + lag];
+        ac += a * b;
+        sq += a * a + b * b;
+      }
+      nsdf[lag] = sq > 0 ? (2 * ac) / sq : 0;
+    }
+
+    // 봉우리들을 모으고, 가장 높은 봉우리의 일정 비율을 넘는 첫 봉우리를 고른다
+    let best = 0;
+    const peaks = [];
+    for (let lag = loLag + 1; lag < hiLag; lag++) {
+      if (nsdf[lag] > nsdf[lag - 1] && nsdf[lag] >= nsdf[lag + 1] && nsdf[lag] > 0) {
+        peaks.push(lag);
+        if (nsdf[lag] > best) best = nsdf[lag];
+      }
+    }
+    if (!peaks.length || best <= 0) return null;
+    const cut = best * 0.88;
+    let pick = -1;
+    for (const lag of peaks) if (nsdf[lag] >= cut) { pick = lag; break; }
+    if (pick < 0) return null;
+
+    // 포물선 보간으로 소수점 아래까지
+    const y1 = nsdf[pick - 1], y2 = nsdf[pick], y3 = nsdf[pick + 1];
+    const a2 = (y1 + y3 - 2 * y2) / 2;
+    const b2 = (y3 - y1) / 2;
+    const period = pick + (a2 ? -b2 / (2 * a2) : 0);
+    const hz = sr / period;
+    if (!isFinite(hz) || hz < TUNER.minHz || hz > TUNER.maxHz) return null;
+    return { hz: hz, clarity: Math.max(0, Math.min(1, y2)) };
+  }
+
+  // 주파수 → 가장 가까운 음과 센트 어긋남
+  function nearestNote(hz) {
+    const exact = freqToMidi(hz);
+    const midi = Math.round(exact);
+    const cents = Math.round((exact - midi) * 100);
+    return { midi, cents, note: midiToNote(midi), target: midiToFreq(midi) };
+  }
+
+  // 마이크를 열고 계속 재는 물건. cb(reading|null) 이 화면 갱신 주기마다 불린다.
+  function createTuner(cb) {
+    let stream = null, analyser = null, buf = null, raf = 0, running = false;
+    let smoothHz = 0, lastAt = 0;
+
+    async function start() {
+      const c = getCtx();
+      if (!c) throw new Error('이 브라우저는 오디오를 지원하지 않는다');
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      const src = c.createMediaStreamSource(stream);
+      analyser = c.createAnalyser();
+      analyser.fftSize = TUNER.fftSize;
+      buf = new Float32Array(analyser.fftSize);
+      src.connect(analyser);
+      running = true;
+      loop();
+    }
+
+    function loop() {
+      if (!running) return;
+      raf = requestAnimationFrame(loop);
+      // 자기상관은 무겁다. 매 프레임이 아니라 TUNER.periodMs 마다만 잰다.
+      const now = performance.now();
+      if (now - lastAt < TUNER.periodMs) return;
+      lastAt = now;
+      analyser.getFloatTimeDomainData(buf);
+      const c = getCtx();
+      const got = detectPitch(buf, c.sampleRate);
+      if (got && got.clarity >= TUNER.clarityMin) {
+        smoothHz = smoothHz ? smoothHz + (got.hz - smoothHz) * TUNER.smooth : got.hz;
+        const near = nearestNote(smoothHz);
+        cb({ hz: smoothHz, raw: got.hz, clarity: got.clarity, midi: near.midi, cents: near.cents, note: near.note });
+      } else {
+        cb(null);
+      }
+    }
+
+    function stop() {
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null; smoothHz = 0;
+    }
+
+    return { start, stop, isRunning: () => running };
+  }
+
+  __M.detectPitch = detectPitch; __M.nearestNote = nearestNote; __M.createTuner = createTuner;
+})();
+
+// ── render/staff.js ─────────────────────────────
+(function () {
+  // 오선보를 SVG 로 그린다. 이미지 파일은 한 장도 쓰지 않는다 — 클레프까지 코드가 그린다.
+  //
+  // 악보 자료 꼴:
+  //   { clef:'treble'|'bass'|'perc', time:[4,4], measures:[ [ev, ev...], ... ] }
+  //   ev = { p:'C4' | ['C4','E4'] | null(쉼표), d:4, dot:true, label:'R', head:'x', text:'가' }
+
+  const { STAFF_METRIC, COLOR, DEG_COLOR } = __M;
+  const { sv, svgRoot, line, rect, circle, path, text, ellipse } = __M;
+  const { parseNote, noteStep, ALTER_SIGN } = __M;
+
+  const S = STAFF_METRIC;
+
+  // 클레프마다 "제일 아래 줄이 무슨 음인가"
+  const BOTTOM_STEP = { treble: 4 * 7 + 2, bass: 2 * 7 + 4 };   // E4 · G2
+
+  function stepToY(clef, step, top) {
+    const base = BOTTOM_STEP[clef] != null ? BOTTOM_STEP[clef] : BOTTOM_STEP.treble;
+    return top + 4 * S.s - (step - base) * (S.s / 2);
+  }
+
+  // 오선 다섯 줄
+  function staffLines(x, top, w, g) {
+    for (let i = 0; i < 5; i++) g.appendChild(line(x, top + i * S.s, x + w, top + i * S.s, COLOR.paperInk, 0.9));
+  }
+
+  // ── 클레프 ─────────────────────────────
+  // 높은음자리표. 이름 그대로 나선의 중심이 "솔(G)" 줄에 앉는다.
+  // 나선은 손으로 찍은 곡선이 아니라 계산해서 그린다 — 그래야 크기를 바꿔도 안 망가진다.
+  function trebleClef(x, top) {
+    const s = S.s, gy = top + 3 * s;                    // 둘째 줄 = 솔
+    const turns = 1.75, r0 = 1.2 * s, r1 = 0.12 * s;
+    const a0 = Math.PI * 1.25;                          // 나선의 바깥 끝은 왼쪽 위
+    const pts = [];
+    const steps = 46;
+    for (let i = steps; i >= 0; i--) {                  // 안쪽에서 바깥쪽으로 그린다
+      const t = i / steps;
+      const a = a0 + t * turns * 2 * Math.PI;
+      const r = r1 + (r0 - r1) * t;
+      pts.push([x + Math.cos(a) * r, gy + Math.sin(a) * r]);
+    }
+    const d = ['M', pts[0][0], pts[0][1]]
+      .concat(pts.slice(1).reduce((acc, p) => acc.concat(['L', p[0], p[1]]), []))
+      .concat([
+        // 나선 바깥 끝에서 이어서: 위로 크게 돌아 꼭대기 → 오른쪽으로 내려와 오선을 가로지르고 → 아래 꼬리
+        'C', x - 1.02 * s, gy - 2.0 * s, x - 0.2 * s, gy - 3.45 * s, x + 0.35 * s, gy - 2.9 * s,
+        'C', x + 0.9 * s, gy - 2.35 * s, x + 0.78 * s, gy - 1.15 * s, x + 0.25 * s, gy - 0.15 * s,
+        'C', x - 0.4 * s, gy + 1.15 * s, x + 0.7 * s, gy + 1.65 * s, x + 0.2 * s, gy + 3.15 * s,
+        'C', x + 0.05 * s, gy + 3.7 * s, x - 0.62 * s, gy + 3.4 * s, x - 0.55 * s, gy + 2.8 * s,
+      ]).join(' ');
+    return sv('g', null, [
+      path(d, { stroke: COLOR.paperInk, 'stroke-width': s * 0.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    ]);
+  }
+
+  function bassClef(x, top) {
+    const s = S.s, fy = top + s;                        // 넷째 줄 = 파
+    const d = [
+      'M', x + 0.05 * s, fy - 0.75 * s,
+      'C', x + 0.75 * s, fy - 1.1 * s, x + 1.25 * s, fy - 0.3 * s, x + 1.0 * s, fy + 0.7 * s,
+      'C', x + 0.75 * s, fy + 1.75 * s, x - 0.15 * s, fy + 2.3 * s, x - 0.9 * s, fy + 2.6 * s,
+    ].join(' ');
+    return sv('g', null, [
+      path(d, { stroke: COLOR.paperInk, 'stroke-width': s * 0.22, 'stroke-linecap': 'round' }),
+      circle(x - 0.05 * s, fy - 0.55 * s, s * 0.28, COLOR.paperInk),
+      circle(x + 1.45 * s, fy - 0.5 * s, s * 0.15, COLOR.paperInk),
+      circle(x + 1.45 * s, fy + 0.5 * s, s * 0.15, COLOR.paperInk),
+    ]);
+  }
+
+  function percClef(x, top) {
+    const s = S.s;
+    return sv('g', null, [
+      rect(x, top + s * 0.9, s * 0.34, s * 2.2, COLOR.paperInk),
+      rect(x + s * 0.62, top + s * 0.9, s * 0.34, s * 2.2, COLOR.paperInk),
+    ]);
+  }
+
+  function clefOf(kind, x, top) {
+    if (kind === 'bass') return bassClef(x, top);
+    if (kind === 'perc') return percClef(x, top);
+    return trebleClef(x, top);
+  }
+
+  // ── 박자표 ─────────────────────────────
+  function timeSig(x, top, t) {
+    const s = S.s;
+    return sv('g', null, [
+      text(x, top + s * 1.05, t[0], { 'font-size': s * 2.3, 'font-weight': 700, fill: COLOR.paperInk }),
+      text(x, top + s * 3.05, t[1], { 'font-size': s * 2.3, 'font-weight': 700, fill: COLOR.paperInk }),
+    ]);
+  }
+
+  // ── 음표 ──────────────────────────────
+  function ledgers(clef, step, x, top, g) {
+    const base = BOTTOM_STEP[clef] != null ? BOTTOM_STEP[clef] : BOTTOM_STEP.treble;
+    const w = S.noteR * 2.1;
+    for (let k = base + 10; k <= step; k += 2) g.appendChild(line(x - w, stepToY(clef, k, top), x + w, stepToY(clef, k, top), COLOR.paperInk, 0.9));
+    for (let k = base - 2; k >= step; k -= 2) g.appendChild(line(x - w, stepToY(clef, k, top), x + w, stepToY(clef, k, top), COLOR.paperInk, 0.9));
+  }
+
+  function head(x, y, dur, kind, fill) {
+    if (kind === 'x') {
+      const r = S.noteR * 0.86;
+      return sv('g', null, [
+        line(x - r, y - r, x + r, y + r, fill, 1.8),
+        line(x - r, y + r, x + r, y - r, fill, 1.8),
+      ]);
+    }
+    const hollow = dur <= 2;
+    return ellipse(x, y, S.noteR, S.noteR * 0.76, hollow ? 'none' : fill, -18,
+      hollow ? { stroke: fill, 'stroke-width': 1.7 } : null);
+  }
+
+  function flags(x, y, dir, dur, g, fill) {
+    const n = dur === 8 ? 1 : dur === 16 ? 2 : 0;
+    for (let i = 0; i < n; i++) {
+      const y0 = y + dir * (i * S.s * 0.85);
+      g.appendChild(path(
+        ['M', x, y0, 'C', x + S.s * 0.9, y0 + dir * S.s * 0.55, x + S.s * 0.75, y0 + dir * S.s * 1.35, x + S.s * 0.15, y0 + dir * S.s * 1.7].join(' '),
+        { stroke: fill, 'stroke-width': 1.9, 'stroke-linecap': 'round' }));
+    }
+  }
+
+  // 쉼표
+  function restGlyph(x, top, dur) {
+    const s = S.s, midY = top + 2 * s;
+    if (dur <= 1) return rect(x - s * 0.5, top + s - s * 0.28, s, s * 0.42, COLOR.paperInk);
+    if (dur === 2) return rect(x - s * 0.5, top + 2 * s - s * 0.14, s, s * 0.42, COLOR.paperInk);
+    if (dur === 4) {
+      return path(['M', x - s * 0.25, midY - s * 1.1, 'l', s * 0.55, s * 0.75, 'l', -s * 0.6, s * 0.7,
+        'l', s * 0.7, s * 0.8].join(' '), { stroke: COLOR.paperInk, 'stroke-width': 2.1, 'stroke-linecap': 'round' });
+    }
+    const g = sv('g');
+    g.appendChild(path(['M', x + s * 0.4, midY - s * 0.9, 'L', x - s * 0.2, midY + s * 1.0].join(' '),
+      { stroke: COLOR.paperInk, 'stroke-width': 1.6 }));
+    g.appendChild(circle(x - s * 0.1, midY - s * 0.65, s * 0.22, COLOR.paperInk));
+    if (dur >= 16) g.appendChild(circle(x + s * 0.05, midY + s * 0.1, s * 0.22, COLOR.paperInk));
+    return g;
+  }
+
+  const WIDTH_OF = { 1: 3.0, 2: 1.9, 4: 1.15, 8: 0.75, 16: 0.55 };
+  // 한 박(4분음표)을 넘어가면 빔을 끊는다. 4/4 에서 "1앤 2앤" 이 따로 묶이는 이유.
+  const BEAM_UNIT = 1;
+
+  // 이벤트 하나의 머리를 그리고, 기둥이 어디서 시작해야 하는지 돌려준다.
+  // 기둥 끝은 빔 묶음이 정해진 뒤에야 알 수 있으므로 여기서 그리지 않는다.
+  function drawHeads(g, ev, x, top, clef, percMap) {
+    const dur = ev.d || 4;
+    const fill = ev.color || COLOR.paperInk;
+    if (ev.p == null) { g.appendChild(restGlyph(x, top, dur)); return null; }
+
+    const list = Array.isArray(ev.p) ? ev.p : [ev.p];
+    const ys = [];
+    list.forEach((p) => {
+      let y, kind = ev.head || 'normal', up = true;
+      if (clef === 'perc') {
+        const m = percMap && percMap[p];
+        if (!m) return;
+        y = top + 4 * S.s - m.pos * (S.s / 2);
+        kind = m.head || 'normal';
+        up = m.up !== false;
+      } else {
+        const n = parseNote(p);
+        if (!n) return;
+        const step = noteStep(n);
+        y = stepToY(clef, step, top);
+        ledgers(clef, step, x, top, g);
+        up = true;                        // 방향은 아래에서 화음 전체를 보고 한 번에 정한다
+        if (n.alter) g.appendChild(text(x - S.noteR - 6, y, ALTER_SIGN[String(n.alter)], { 'font-size': S.s * 1.7, fill: fill }));
+      }
+      ys.push({ y: y, up: up });
+      g.appendChild(head(x, y, dur, kind, fill));
+      if (ev.dot) g.appendChild(circle(x + S.noteR + 4, y - S.s * 0.25, 1.9, fill));
+    });
+    if (!ys.length) return null;
+    // 음표를 하나로 묶는 규칙: 화음은 기둥이 하나다.
+    // 가운데 줄에서 가장 멀리 떨어진 음이 아래에 있으면 기둥은 위로, 위에 있으면 아래로.
+    if (clef !== 'perc') {
+      const mid = top + 2 * S.s;
+      let far = ys[0].y;
+      ys.forEach((v) => { if (Math.abs(v.y - mid) > Math.abs(far - mid)) far = v.y; });
+      const up = far > mid;
+      ys.forEach((v) => { v.up = up; });
+    }
+    if (dur <= 1) return null;
+    return { x: x, dur: dur, fill: fill, ys: ys };
+  }
+
+  // 기둥 하나(위 또는 아래). tipY 를 주면 그 높이까지 뽑는다(빔에 맞추기).
+  function drawStem(g, st, up, tipY, withFlag) {
+    const part = st.ys.filter((v) => v.up === up);
+    if (!part.length) return null;
+    const yTop = Math.min.apply(null, part.map((v) => v.y));
+    const yBot = Math.max.apply(null, part.map((v) => v.y));
+    const sx = up ? st.x + S.noteR - 0.8 : st.x - S.noteR + 0.8;
+    const end = tipY != null ? tipY : (up ? yTop - S.stem : yBot + S.stem);
+    g.appendChild(line(sx, up ? yBot : yTop, sx, end, st.fill, 1.7));
+    if (withFlag) flags(sx, end, up ? 1 : -1, st.dur, g, st.fill);
+    return { sx: sx, end: end };
+  }
+
+  // 이어진 8분·16분음표를 박 단위로 묶는다
+  function beamGroups(events) {
+    const groups = [];
+    let cur = [], pos = 0, curStart = 0;
+    const flush = () => { if (cur.length > 1) groups.push(cur); cur = []; };
+    events.forEach((e) => {
+      const dur = e.ev.d || 4;
+      const len = (4 / dur) * (e.ev.dot ? 1.5 : 1);
+      const beamable = e.ev.p != null && dur >= 8 && !e.ev.dot;
+      if (!beamable) { flush(); pos += len; return; }
+      if (cur.length && Math.floor(pos / BEAM_UNIT) !== Math.floor(curStart / BEAM_UNIT)) flush();
+      if (!cur.length) curStart = pos;
+      cur.push(e);
+      pos += len;
+    });
+    flush();
+    return groups;
+  }
+
+  // 악보 전체
+  function renderScore(spec) {
+    const clef = spec.clef || 'treble';
+    const measures = spec.measures || [];
+    const top = spec.top == null ? 52 : spec.top;
+    const showTime = spec.time !== false;
+
+    // 가로 자리 먼저 계산
+    let x = S.leftPad + (showTime ? 34 : 0);
+    const placed = [];
+    measures.forEach((m, mi) => {
+      x += S.measurePad * 0.6;
+      m.forEach((ev) => {
+        const w = S.noteGap * (WIDTH_OF[ev.d || 4] || 1) * (ev.dot ? 1.25 : 1);
+        placed.push({ ev, x: x + w / 2, mi });
+        x += w;
+      });
+      x += S.measurePad * 0.6;
+      placed.push({ bar: true, x: x, mi });
+    });
+    const W = Math.max(x + 16, 260);
+    const H = top + 4 * S.s + (spec.bottom == null ? 62 : spec.bottom);
+
+    const root = svgRoot(W, H, 'score');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.paper, { rx: 8 }));
+    root.appendChild(g);
+
+    staffLines(S.leftPad * 0.35, top, W - S.leftPad * 0.35 - 12, g);
+    g.appendChild(clefOf(clef, S.leftPad * 0.35 + (clef === 'bass' ? 10 : 14), top));
+    if (showTime) g.appendChild(timeSig(S.leftPad + 8, top, spec.time || [4, 4]));
+
+    // 1) 머리를 먼저 그리고 기둥 정보를 모은다
+    const stems = new Map();
+    placed.forEach((p) => {
+      if (p.bar) {
+        g.appendChild(line(p.x, top, p.x, top + 4 * S.s, COLOR.paperInk, p.mi === measures.length - 1 ? 2.6 : 1));
+        return;
+      }
+      const st = drawHeads(g, p.ev, p.x, top, clef, spec.percMap);
+      if (st) stems.set(p, st);
+      if (p.ev.text) g.appendChild(text(p.x, top + 4 * S.s + 34, p.ev.text, { 'font-size': 12, fill: '#444' }));
+      if (p.ev.label) g.appendChild(text(p.x, top - 24, p.ev.label, { 'font-size': 11, fill: '#666' }));
+    });
+
+    // 2) 빔으로 묶일 것들을 먼저 처리한다. 방향마다 따로 센다 —
+    //    드럼은 한 이벤트에서 손(위)만 빔으로 묶이고 발(아래)은 홀로 남는 일이 흔하다.
+    const beamedUp = new Set(), beamedDown = new Set();
+    measures.forEach((m, mi) => {
+      const evs = placed.filter((p) => !p.bar && p.mi === mi);
+      beamGroups(evs).forEach((grp) => {
+        const sts = grp.map((p) => stems.get(p)).filter(Boolean);
+        if (sts.length < 2) return;
+        // 묶음 안에서 위·아래 기둥을 각각 빔으로 잇는다(드럼은 손이 위, 발이 아래)
+        [true, false].forEach((up) => {
+          const part = sts.filter((st) => st.ys.some((v) => v.up === up));
+          if (part.length < 2) return;
+          const extremes = part.map((st) => {
+            const ys = st.ys.filter((v) => v.up === up).map((v) => v.y);
+            return up ? Math.min.apply(null, ys) : Math.max.apply(null, ys);
+          });
+          const tip = up ? Math.min.apply(null, extremes) - S.stem : Math.max.apply(null, extremes) + S.stem;
+          const tips = part.map((st) => drawStem(g, st, up, tip, false)).filter(Boolean);
+          part.forEach((st) => (up ? beamedUp : beamedDown).add(st));
+          const x1 = tips[0].sx, x2 = tips[tips.length - 1].sx;
+          const th = S.s * 0.46;
+          g.appendChild(rect(x1, up ? tip : tip - th, x2 - x1, th, part[0].fill));
+          if (part.every((st) => st.dur >= 16)) {
+            const off = up ? th + S.s * 0.3 : -(th + S.s * 0.3);
+            g.appendChild(rect(x1, (up ? tip : tip - th) + off, x2 - x1, th, part[0].fill));
+          }
+        });
+      });
+    });
+
+    // 3) 빔에 안 들어간 것들은 기둥 + 꼬리
+    placed.forEach((p) => {
+      const st = stems.get(p);
+      if (!st) return;
+      [true, false].forEach((up) => {
+        if ((up ? beamedUp : beamedDown).has(st)) return;
+        drawStem(g, st, up, null, true);
+      });
+    });
+
+    if (spec.title) root.appendChild(text(14, 18, spec.title, { 'text-anchor': 'start', 'font-size': 12, fill: '#555' }));
+    return root;
+  }
+
+  // 코드 한 개를 큰보표(오른손 위 · 왼손 아래)에 세로로 쌓아 그린다. 도수 이름을 옆에 붙인다.
+  function renderGrandChord(voicing, opts) {
+    const o = opts || {};
+    const s = S.s;
+    const topT = 46, topB = topT + 4 * s + 44;          // 두 보표 사이 간격
+    const W = o.width || 320, H = topB + 4 * s + 34;
+    const root = svgRoot(W, H, 'score');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.paper, { rx: 8 }));
+    root.appendChild(g);
+
+    const x0 = S.leftPad * 0.35;
+    const w = W - x0 - 14;
+    staffLines(x0, topT, w, g);
+    staffLines(x0, topB, w, g);
+    g.appendChild(trebleClef(x0 + 14, topT));
+    g.appendChild(bassClef(x0 + 10, topB));
+    // 큰보표 묶음
+    g.appendChild(line(x0, topT, x0, topB + 4 * s, COLOR.paperInk, 2.4));
+    g.appendChild(line(x0 + w, topT, x0 + w, topB + 4 * s, COLOR.paperInk, 2.4));
+
+    const noteX = x0 + 108;
+    const draw = (items, clef, top) => {
+      items.forEach((it) => {
+        const step = noteStep(it.note);
+        const y = stepToY(clef, step, top);
+        ledgers(clef, step, noteX, top, g);
+        const col = DEG_COLOR[it.tone ? it.tone.role : 'R'] || COLOR.paperInk;
+        if (it.note.alter) g.appendChild(text(noteX - S.noteR - 7, y, ALTER_SIGN[String(it.note.alter)], { 'font-size': s * 1.7, fill: col }));
+        g.appendChild(head(noteX, y, 2, 'normal', col));
+        g.appendChild(text(noteX + 30, y, it.tone ? it.tone.short : '', { 'font-size': 11, fill: col, 'font-weight': 700 }));
+      });
+    };
+    draw(voicing.right, 'treble', topT);
+    draw(voicing.left, 'bass', topB);
+
+    g.appendChild(text(x0 + 8, topT - 26, '오른손', { 'text-anchor': 'start', 'font-size': 11, fill: '#777' }));
+    g.appendChild(text(x0 + 8, topB - 12, '왼손', { 'text-anchor': 'start', 'font-size': 11, fill: '#777' }));
+    return root;
+  }
+
+  // 한 보표만 쓰는 코드 그림(기타 · 베이스용). 낮은 음부터 쌓는다.
+  function renderChordStaff(items, clef, opts) {
+    const o = opts || {};
+    const s = S.s, top = 52;
+    const W = o.width || 240, H = top + 4 * s + 52;
+    const root = svgRoot(W, H, 'score');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.paper, { rx: 8 }));
+    root.appendChild(g);
+    const x0 = S.leftPad * 0.35;
+    staffLines(x0, top, W - x0 - 14, g);
+    g.appendChild(clefOf(clef, x0 + (clef === 'bass' ? 10 : 14), top));
+
+    const noteX = x0 + 96;
+    items.forEach((it) => {
+      const step = noteStep(it.note);
+      const y = stepToY(clef, step, top);
+      ledgers(clef, step, noteX, top, g);
+      const col = DEG_COLOR[it.tone ? it.tone.role : 'R'] || COLOR.paperInk;
+      if (it.note.alter) g.appendChild(text(noteX - S.noteR - 7, y, ALTER_SIGN[String(it.note.alter)], { 'font-size': s * 1.7, fill: col }));
+      g.appendChild(head(noteX, y, 2, 'normal', col));
+      g.appendChild(text(noteX + 28, y, it.tone ? it.tone.short : '', { 'font-size': 11, fill: col, 'font-weight': 700 }));
+    });
+    if (o.note) root.appendChild(text(12, H - 12, o.note, { 'text-anchor': 'start', 'font-size': 11, fill: '#777' }));
+    return root;
+  }
+
+  // 기타 악보는 실제 소리보다 한 옥타브 높게 적는다는 표시(8vb)
+  function octaveHint() {
+    return '기타 악보는 실제 소리보다 한 옥타브 높게 적는다 (8vb)';
+  }
+
+  __M.renderScore = renderScore; __M.renderGrandChord = renderGrandChord; __M.renderChordStaff = renderChordStaff; __M.octaveHint = octaveHint;
+})();
+
+// ── render/fret.js ─────────────────────────────
+(function () {
+  // 지판 그림. 코드 다이어그램(세로)과 지판 전체 지도(가로) 두 가지.
+
+  const { FRET_METRIC, COLOR, DEG_COLOR, TUNINGS } = __M;
+  const { sv, svgRoot, line, rect, circle, text } = __M;
+
+  const F = FRET_METRIC;
+  const INLAY = [3, 5, 7, 9, 15, 17, 19, 21];
+
+  // 코드 하나의 운지. shape 는 theory/fretboard.js 의 findShapes 결과.
+  function renderChordBox(shape, opts) {
+    const o = opts || {};
+    const tuning = TUNINGS[shape.tuningKey];
+    const n = shape.frets.length;
+    const rows = F.windowFrets;
+    const baseFret = shape.lowFret <= 1 ? 1 : shape.lowFret;   // 첫 칸에 해당하는 프렛 번호
+    const boxW = (n - 1) * F.stringGap;
+    const boxH = rows * F.fretGap;
+    const padL = F.pad + 14, padT = 64;      // 위쪽은 ○✕ 와 도수 이름 자리
+    const W = boxW + padL + F.pad + 10, H = boxH + padT + 34;
+
+    const root = svgRoot(W, H, 'fretbox');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.panel2, { rx: 10 }));
+    root.appendChild(g);
+
+    const xOf = (i) => padL + i * F.stringGap;
+    const yOf = (r) => padT + r * F.fretGap;
+
+    // 프렛(가로줄)
+    for (let r = 0; r <= rows; r++) {
+      const nut = r === 0 && baseFret === 1;
+      g.appendChild(line(xOf(0), yOf(r), xOf(n - 1), yOf(r), nut ? COLOR.ink : COLOR.line, nut ? 5 : 1.4));
+    }
+    // 줄(세로줄) — 낮은 줄이 왼쪽
+    for (let i = 0; i < n; i++) g.appendChild(line(xOf(i), yOf(0), xOf(i), yOf(rows), COLOR.line, i === 0 ? 2 : 1.4));
+
+    // 몇 번 프렛인지
+    if (baseFret > 1) g.appendChild(text(padL - 20, yOf(0) + F.fretGap / 2, baseFret + 'fr', { 'font-size': 11, fill: COLOR.dim }));
+
+    // 위쪽 ○ ✕
+    shape.frets.forEach((f, i) => {
+      const mark = f < 0 ? '✕' : f === 0 ? '○' : '';
+      if (mark) g.appendChild(text(xOf(i), padT - 16, mark, { 'font-size': 13, fill: f < 0 ? COLOR.dim : COLOR.ok }));
+    });
+
+    // 바레
+    if (shape.barre) {
+      const r = shape.barre.fret - baseFret + 0.5;
+      if (r >= 0 && r < rows) {
+        g.appendChild(rect(xOf(shape.barre.from) - 8, yOf(r) - 8, (shape.barre.to - shape.barre.from) * F.stringGap + 16, 16,
+          'rgba(228,87,46,.28)', { rx: 8, stroke: DEG_COLOR.R, 'stroke-width': 1 }));
+      }
+    }
+
+    // 짚는 자리
+    shape.tones.forEach((t) => {
+      if (t.fret === 0) {
+        const col = t.tone ? DEG_COLOR[t.tone.role] : COLOR.ok;
+        g.appendChild(circle(xOf(t.string), padT - 16, 7, 'none', { stroke: col, 'stroke-width': 2 }));
+        g.appendChild(text(xOf(t.string), padT - 34, t.tone ? t.tone.short : '', { 'font-size': 10, fill: col, 'font-weight': 700 }));
+        return;
+      }
+      const r = t.fret - baseFret + 0.5;
+      if (r < 0 || r > rows) return;
+      const col = t.tone ? DEG_COLOR[t.tone.role] : COLOR.accent;
+      g.appendChild(circle(xOf(t.string), yOf(r), F.dotR + 2, col));
+      g.appendChild(text(xOf(t.string), yOf(r), t.tone ? t.tone.short : '', { 'font-size': 9.5, fill: '#fff', 'font-weight': 700 }));
+    });
+
+    // 줄 이름
+    tuning.names.forEach((nm, i) => {
+      g.appendChild(text(xOf(i), yOf(rows) + 16, nm.slice(1), { 'font-size': 10, fill: COLOR.dim }));
+    });
+
+    if (o.caption) root.appendChild(text(W / 2, 14, o.caption, { 'font-size': 11, fill: COLOR.dim }));
+    return root;
+  }
+
+  // 지판 전체 지도. 코드톤이 어디 있는지 한눈에 본다(베이스 · 루트 찾기용).
+  function renderFretMap(map, opts) {
+    const o = opts || {};
+    const rowsN = map.rows.length;
+    const cols = map.max;
+    const padL = 62, padT = 30;             // 줄 이름 + 개방현 점 자리
+    const cellW = o.cellW || 34, cellH = F.stringGap + 6;
+    const W = padL + (cols + 1) * cellW + 16;
+    const H = padT + (rowsN - 1) * cellH + 46;
+
+    const root = svgRoot(W, H, 'fretmap');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.panel2, { rx: 10 }));
+    root.appendChild(g);
+
+    const xOf = (f) => padL + f * cellW + cellW * 0.5;
+    // 낮은 줄이 아래로 가도록 뒤집어 그린다(연주자가 보는 방향)
+    const yOf = (i) => padT + (rowsN - 1 - i) * cellH;
+
+    for (let i = 0; i < rowsN; i++) {
+      g.appendChild(line(padL, yOf(i), padL + (cols + 1) * cellW, yOf(i), COLOR.line, 1.2));
+      g.appendChild(text(padL - 40, yOf(i), map.tuning.names[i], { 'font-size': 10, fill: COLOR.dim }));
+    }
+    for (let f = 0; f <= cols; f++) {
+      const x = padL + f * cellW;
+      g.appendChild(line(x, yOf(rowsN - 1), x, yOf(0), COLOR.line, f === 1 ? 3.5 : 1));
+      if (INLAY.indexOf(f) >= 0 || f === 12) {
+        g.appendChild(text(xOf(f), yOf(0) + 16, f, { 'font-size': 10, fill: f === 12 ? COLOR.warn : COLOR.dim }));
+      }
+    }
+
+    map.rows.forEach((row, i) => {
+      row.forEach((cell) => {
+        if (!cell) return;
+        const keep = cell.tone.keep;
+        const col = keep ? DEG_COLOR[cell.tone.role] : DEG_COLOR.X;
+        g.appendChild(circle(cell.fret === 0 ? padL - 16 : xOf(cell.fret), yOf(i), keep ? 8.5 : 6.5,
+          keep ? col : 'none', keep ? null : { stroke: col, 'stroke-width': 1.4, 'stroke-dasharray': '2 2' }));
+        g.appendChild(text(cell.fret === 0 ? padL - 16 : xOf(cell.fret), yOf(i), cell.label,
+          { 'font-size': 9, fill: keep ? '#fff' : col, 'font-weight': 700 }));
+      });
+    });
+
+    if (o.caption) root.appendChild(text(W / 2, 14, o.caption, { 'font-size': 11, fill: COLOR.dim }));
+    return root;
+  }
+
+  // 한 음만 짚는 그림(베이스). positions 중 앞의 몇 개만 찍는다.
+  function renderSingleNote(tuningKey, positions, label, opts) {
+    const o = opts || {};
+    const tuning = TUNINGS[tuningKey];
+    const rowsN = tuning.strings.length;
+    const cols = o.frets || 12;
+    const padL = 62, padT = 30, cellW = 34, cellH = F.stringGap + 6;
+    const W = padL + (cols + 1) * cellW + 16, H = padT + (rowsN - 1) * cellH + 46;
+    const root = svgRoot(W, H, 'fretmap');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.panel2, { rx: 10 }));
+    root.appendChild(g);
+    const xOf = (f) => padL + f * cellW + cellW * 0.5;
+    const yOf = (i) => padT + (rowsN - 1 - i) * cellH;
+    for (let i = 0; i < rowsN; i++) {
+      g.appendChild(line(padL, yOf(i), padL + (cols + 1) * cellW, yOf(i), COLOR.line, 1.2));
+      g.appendChild(text(padL - 40, yOf(i), tuning.names[i], { 'font-size': 10, fill: COLOR.dim }));
+    }
+    for (let f = 0; f <= cols; f++) {
+      const x = padL + f * cellW;
+      g.appendChild(line(x, yOf(rowsN - 1), x, yOf(0), COLOR.line, f === 1 ? 3.5 : 1));
+      if (INLAY.indexOf(f) >= 0 || f === 12) g.appendChild(text(xOf(f), yOf(0) + 16, f, { 'font-size': 10, fill: COLOR.dim }));
+    }
+    positions.forEach((p, k) => {
+      const first = k === 0;
+      g.appendChild(circle(p.fret === 0 ? padL - 16 : xOf(p.fret), yOf(p.string), first ? 9.5 : 7.5,
+        first ? DEG_COLOR.R : 'none', first ? null : { stroke: DEG_COLOR.R, 'stroke-width': 1.4 }));
+      g.appendChild(text(p.fret === 0 ? padL - 16 : xOf(p.fret), yOf(p.string), label,
+        { 'font-size': 9, fill: first ? '#fff' : DEG_COLOR.R, 'font-weight': 700 }));
+    });
+    if (o.caption) root.appendChild(text(W / 2, 14, o.caption, { 'font-size': 11, fill: COLOR.dim }));
+    return root;
+  }
+
+
+  __M.renderChordBox = renderChordBox; __M.renderFretMap = renderFretMap; __M.renderSingleNote = renderSingleNote;
+})();
+
+// ── render/keys.js ─────────────────────────────
+(function () {
+  // 건반 그림. 어느 건반을 누르는지, 그게 왼손인지 오른손인지, 몇 도인지까지 한 장에 담는다.
+
+  const { KEY_METRIC, COLOR, DEG_COLOR } = __M;
+  const { sv, svgRoot, rect, text, line } = __M;
+  const { midiToNote, noteName } = __M;
+
+  const K = KEY_METRIC;
+  const WHITE_PC = [0, 2, 4, 5, 7, 9, 11];
+  const isWhite = (midi) => WHITE_PC.indexOf(((midi % 12) + 12) % 12) >= 0;
+
+  // low 부터 midi 까지 흰 건반이 몇 개인가
+  function whiteIndex(low, midi) {
+    let k = 0;
+    for (let m = low; m < midi; m++) if (isWhite(m)) k++;
+    return k;
+  }
+
+  // press: Map(midi -> {tone, hand})
+  function renderKeyboard(press, opts) {
+    const o = opts || {};
+    const low = o.low == null ? K.lowMidi : o.low;
+    const octaves = o.octaves == null ? K.octaves : o.octaves;
+    const high = low + octaves * 12;
+    let whites = 0;
+    for (let m = low; m <= high; m++) if (isWhite(m)) whites++;
+
+    const padL = 10, padT = 22;
+    const W = padL * 2 + whites * K.whiteW;
+    const H = padT + K.whiteH + 30;
+    const root = svgRoot(W, H, 'keyboard');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.panel2, { rx: 10 }));
+    root.appendChild(g);
+
+    const xWhite = (midi) => padL + whiteIndex(low, midi) * K.whiteW;
+
+    // 흰 건반 먼저
+    for (let m = low; m <= high; m++) {
+      if (!isWhite(m)) continue;
+      const x = xWhite(m);
+      const hit = press && press.get(m);
+      const col = hit ? DEG_COLOR[hit.tone ? hit.tone.role : 'R'] : '#f3f1ec';
+      g.appendChild(rect(x, padT, K.whiteW - 1.5, K.whiteH, hit ? col : '#f3f1ec',
+        { rx: 3, stroke: '#0d0f14', 'stroke-width': 1 }));
+      if (((m % 12) + 12) % 12 === 0) {
+        g.appendChild(text(x + K.whiteW / 2, padT + K.whiteH + 12, noteName(midiToNote(m), true),
+          { 'font-size': 9, fill: COLOR.dim }));
+      }
+      if (hit) {
+        g.appendChild(text(x + K.whiteW / 2, padT + K.whiteH - 16, hit.tone ? hit.tone.short : '',
+          { 'font-size': 10, fill: '#fff', 'font-weight': 700 }));
+        g.appendChild(text(x + K.whiteW / 2, padT - 10, hit.hand === 'L' ? '왼' : '오',
+          { 'font-size': 10, fill: hit.hand === 'L' ? COLOR.warn : COLOR.ok, 'font-weight': 700 }));
+      }
+    }
+
+    // 검은 건반은 위에 얹는다
+    for (let m = low; m <= high; m++) {
+      if (isWhite(m)) continue;
+      const x = xWhite(m) - K.blackW / 2;
+      const hit = press && press.get(m);
+      const col = hit ? DEG_COLOR[hit.tone ? hit.tone.role : 'R'] : '#15181f';
+      g.appendChild(rect(x, padT, K.blackW, K.blackH, col, { rx: 2, stroke: '#0d0f14', 'stroke-width': 1 }));
+      if (hit) {
+        g.appendChild(text(x + K.blackW / 2, padT + K.blackH - 12, hit.tone ? hit.tone.short : '',
+          { 'font-size': 9, fill: '#fff', 'font-weight': 700 }));
+        g.appendChild(text(x + K.blackW / 2, padT - 10, hit.hand === 'L' ? '왼' : '오',
+          { 'font-size': 10, fill: hit.hand === 'L' ? COLOR.warn : COLOR.ok, 'font-weight': 700 }));
+      }
+    }
+
+    // 가온다 표시
+    if (low <= 60 && 60 <= high) {
+      const x = xWhite(60);
+      g.appendChild(line(x, padT + K.whiteH + 18, x + K.whiteW - 1.5, padT + K.whiteH + 18, COLOR.accent, 2));
+    }
+    return root;
+  }
+
+  __M.renderKeyboard = renderKeyboard;
+})();
+
+// ── lesson/vocal.js ─────────────────────────────
+(function () {
+  // 보컬. 내용은 아직 뼈대다 — steps 에 항목을 더 넣으면 화면은 그대로 늘어난다.
+
+  const LESSON_VOCAL = {
+    id: 'vocal',
+    title: '보컬',
+    tagline: '악기가 몸 안에 있다. 그래서 자세와 호흡이 먼저다.',
+    gear: ['거울', '휴대폰 녹음기', '물'],
+    steps: [
+      { n: 1, title: '서는 법', body: ['발은 어깨 너비, 무릎은 잠그지 않는다.', '턱은 바닥과 평행. 고음에서 턱이 올라가면 목이 조인다.'], tip: '벽에 뒤통수·등·엉덩이를 대고 서 보면 그 자세가 기준이다.' },
+      { n: 2, title: '숨', body: ['배가 나오게 4초 들이마시고, 8초에 걸쳐 "스—" 하고 내보낸다.', '어깨가 올라가면 가슴으로 마신 것이다. 다시.'], tip: '누워서 배 위에 책을 올리면 어디가 움직여야 하는지 바로 안다.' },
+      { n: 3, title: '소리 내기', body: ['입술 떨기(립트릴)로 낮은 음에서 높은 음까지 훑는다.', '"음—" 하는 허밍으로 코와 광대에 울림을 느낀다.'], tip: '목이 아프면 그날은 거기서 멈춘다. 성대는 근육이 아니라 점막이다.' },
+      { n: 4, title: '음정 맞추기', body: ['건반이나 튜너로 한 음을 주고, 같은 음을 낸다.', '아래 발성 악보를 반음씩 올려 가며 한다.'], tip: '이 앱의 튜너 탭을 켜 두고 노래하면 지금 내가 무슨 음을 내는지 바로 보인다.' },
+      { n: 5, title: '가사 붙이기', body: ['받침을 뭉개지 않는다. 특히 ㄴ ㅇ ㅁ.', '한 마디를 정하고 숨을 어디서 쉴지 먼저 표시한다.'], tip: '' },
+    ],
+    scores: [
+      {
+        title: '5음 발성 — 도레미파솔 · 솔파미레도 (반음씩 올려 간다)',
+        spec: { clef: 'treble', time: [4, 4], measures: [
+          [{ p: 'C4', d: 4, text: '아' }, { p: 'D4', d: 4, text: '아' }, { p: 'E4', d: 4, text: '아' }, { p: 'F4', d: 4, text: '아' }],
+          [{ p: 'G4', d: 2, text: '아—' }, { p: 'F4', d: 4, text: '아' }, { p: 'E4', d: 4, text: '아' }],
+          [{ p: 'D4', d: 4, text: '아' }, { p: 'C4', d: 2, dot: true, text: '아—' }],
+        ] },
+      },
+      {
+        title: '아르페지오 — 1도 3도 5도. 코드의 뼈대를 목소리로 익힌다',
+        spec: { clef: 'treble', time: [4, 4], measures: [
+          [{ p: 'C4', d: 4, label: 'R' }, { p: 'E4', d: 4, label: '3' }, { p: 'G4', d: 4, label: '5' }, { p: 'C5', d: 4, label: 'R' }],
+          [{ p: 'G4', d: 4, label: '5' }, { p: 'E4', d: 4, label: '3' }, { p: 'C4', d: 2, label: 'R' }],
+        ] },
+      },
+    ],
+    practice: ['매일 10분. 립트릴 3분 → 허밍 3분 → 발성 악보 4분.', '녹음해서 다시 듣는다. 부르는 동안에는 자기 소리가 안 들린다.'],
+  };
+
+  __M.LESSON_VOCAL = LESSON_VOCAL;
+})();
+
+// ── lesson/guitar.js ─────────────────────────────
+(function () {
+  const LESSON_GUITAR = {
+    id: 'guitar',
+    title: '기타',
+    tagline: '왼손은 음을 정하고 오른손은 리듬을 정한다. 둘을 따로 연습한다.',
+    gear: ['기타', '피크 0.7mm 근처', '클립 튜너(또는 이 앱의 튜너 탭)'],
+    steps: [
+      { n: 1, title: '줄 이름', body: ['굵은 줄부터 6-5-4-3-2-1번. 소리는 E A D G B E.', '숫자가 클수록 굵고 낮다.'], tip: '"에이디지비이" 를 소리 내어 외운다. 코드 사전이 이 순서로 그림을 그린다.' },
+      { n: 2, title: '잡는 법', body: ['왼손 엄지는 넥 뒤 가운데. 손가락은 세워서 프렛 바로 뒤를 누른다.', '지판 위가 아니라 쇠(프렛) 바로 옆을 눌러야 힘이 덜 든다.'], tip: '소리가 붕 뜨면 눌러야 할 곳보다 뒤를 눌렀거나, 옆줄에 손가락이 닿은 것이다.' },
+      { n: 3, title: '첫 코드 셋', body: ['Em → G → C → D 네 개면 노래 수십 곡이 된다.', '코드 사전 탭에서 이름을 치면 어디를 짚는지 나온다.'], tip: '코드 바꾸는 연습은 소리 없이도 된다. 손 모양만 왔다 갔다.' },
+      { n: 4, title: '오른손', body: ['↓ ↓ ↑ ↑ ↓ ↑ 이 국민 스트로크다.', '손목으로 젓는다. 팔로 젓지 않는다.'], tip: '메트로놈 탭을 60에 놓고 시작한다. 빠르게 치는 것보다 안 흔들리는 게 먼저다.' },
+      { n: 5, title: '바레', body: ['검지로 여섯 줄을 한 번에 누르는 것. F 코드가 첫 벽이다.', '검지를 살짝 옆으로 눕히면 관절 홈에 줄이 안 빠진다.'], tip: '안 눌리면 힘이 아니라 각도 문제인 경우가 대부분이다.' },
+    ],
+    scores: [
+      {
+        title: '크로마틱 워밍업 — 1·2·3·4 손가락 순서로 한 프렛씩',
+        spec: { clef: 'treble', time: [4, 4], measures: [
+          [{ p: 'E4', d: 8, text: '1' }, { p: 'F4', d: 8, text: '2' }, { p: 'F#4', d: 8, text: '3' }, { p: 'G4', d: 8, text: '4' },
+           { p: 'A4', d: 8, text: '1' }, { p: 'A#4', d: 8, text: '2' }, { p: 'B4', d: 8, text: '3' }, { p: 'C5', d: 8, text: '4' }],
+        ] },
+        note: '기타 악보는 실제 소리보다 한 옥타브 높게 적는다.',
+      },
+      {
+        title: '국민 스트로크 — ↓ ↓ ↑ ↑ ↓ ↑ (한 마디에 한 코드)',
+        spec: { clef: 'treble', time: [4, 4], measures: [
+          [{ p: ['E4', 'B4', 'E5'], d: 4, text: '↓', label: 'Em' }, { p: ['E4', 'B4', 'E5'], d: 8, text: '↓' }, { p: ['E4', 'B4', 'E5'], d: 8, text: '↑' },
+           { p: ['E4', 'B4', 'E5'], d: 8, text: '↑' }, { p: ['E4', 'B4', 'E5'], d: 8, text: '↓' }, { p: ['E4', 'B4', 'E5'], d: 4, text: '↑' }],
+          [{ p: ['G4', 'B4', 'G5'], d: 4, text: '↓', label: 'G' }, { p: ['G4', 'B4', 'G5'], d: 8, text: '↓' }, { p: ['G4', 'B4', 'G5'], d: 8, text: '↑' },
+           { p: ['G4', 'B4', 'G5'], d: 8, text: '↑' }, { p: ['G4', 'B4', 'G5'], d: 8, text: '↓' }, { p: ['G4', 'B4', 'G5'], d: 4, text: '↑' }],
+        ] },
+      },
+    ],
+    practice: ['코드 바꾸기 1분 재기 — Em↔G 를 1분에 몇 번 바꾸는지 세고 매일 적는다.', '메트로놈 60 → 일주일마다 5씩 올린다.'],
+  };
+
+  __M.LESSON_GUITAR = LESSON_GUITAR;
+})();
+
+// ── lesson/bass.js ─────────────────────────────
+(function () {
+  const LESSON_BASS = {
+    id: 'bass',
+    title: '베이스',
+    tagline: '한 번에 한 음이다. 그 한 음이 코드를 정한다.',
+    gear: ['베이스', '앰프 또는 헤드폰 인터페이스', '메트로놈'],
+    steps: [
+      { n: 1, title: '왜 한 음인가', body: ['베이스가 화음을 잡으면 낮은 음끼리 뭉개져 웅웅거린다.', '그래서 코드에서 루트 하나만 고른다. 화음은 기타와 건반이 맡는다.'], tip: '코드 사전의 베이스 칸이 늘 한 음만 찍는 이유다.' },
+      { n: 2, title: '줄 이름', body: ['4현 기준 굵은 줄부터 4-3-2-1번, 소리는 E A D G.', '기타의 아래 네 줄과 같고 한 옥타브 낮다.'], tip: '' },
+      { n: 3, title: '오른손', body: ['검지·중지를 번갈아 뜯는다. 한 손가락으로만 치면 빨라지지 않는다.', '엄지는 픽업 위에 올려 둔다.'], tip: '안 치는 줄은 손가락이 눌러 죽인다. 베이스는 소리를 내는 것만큼 끄는 게 중요하다.' },
+      { n: 4, title: '왼손', body: ['한 손가락에 한 프렛. 네 손가락이 네 프렛을 덮는다.', '누른 손가락 외에는 줄에 살짝 얹어 잡음을 막는다.'], tip: '' },
+      { n: 5, title: '첫 라인', body: ['코드가 바뀔 때 그 코드의 루트로 간다. 이것만 해도 곡이 된다.', '익숙해지면 루트 → 5도 → 옥타브 순으로 넓힌다.'], tip: '코드 사전에서 개수를 2·3 으로 올리면 5도와 3도가 지판 어디 있는지 회색으로 같이 보인다.' },
+    ],
+    scores: [
+      {
+        title: '루트 8비트 — 코드가 바뀌면 그 코드의 루트로',
+        spec: { clef: 'bass', time: [4, 4], measures: [
+          [{ p: 'C2', d: 8, label: 'C' }, { p: 'C2', d: 8 }, { p: 'C2', d: 8 }, { p: 'C2', d: 8 },
+           { p: 'C2', d: 8 }, { p: 'C2', d: 8 }, { p: 'C2', d: 8 }, { p: 'C2', d: 8 }],
+          [{ p: 'A1', d: 8, label: 'Am' }, { p: 'A1', d: 8 }, { p: 'A1', d: 8 }, { p: 'A1', d: 8 },
+           { p: 'A1', d: 8 }, { p: 'A1', d: 8 }, { p: 'A1', d: 8 }, { p: 'A1', d: 8 }],
+        ] },
+      },
+      {
+        title: '루트 · 5도 · 옥타브 — 한 음씩 넓히기',
+        spec: { clef: 'bass', time: [4, 4], measures: [
+          [{ p: 'C2', d: 4, label: 'R' }, { p: 'G2', d: 4, label: '5' }, { p: 'C3', d: 4, label: 'R' }, { p: 'G2', d: 4, label: '5' }],
+          [{ p: 'F2', d: 4, label: 'R' }, { p: 'C3', d: 4, label: '5' }, { p: 'F3', d: 4, label: 'R' }, { p: 'C3', d: 4, label: '5' }],
+        ] },
+      },
+    ],
+    practice: ['메트로놈 70 에 맞춰 한 음을 4분음표로 4분간. 지루한 게 정상이고 이게 제일 는다.', '드럼의 킥과 같은 자리에 놓는 연습.'],
+  };
+
+  __M.LESSON_BASS = LESSON_BASS;
+})();
+
+// ── lesson/keys.js ─────────────────────────────
+(function () {
+  const LESSON_KEYS = {
+    id: 'keys',
+    title: '건반',
+    tagline: '왼손은 뿌리, 오른손은 화음. 두 손이 하는 일이 다르다.',
+    gear: ['건반(61건반 이상)', '의자', '메트로놈'],
+    steps: [
+      { n: 1, title: '건반 읽기', body: ['검은 건반은 두 개·세 개씩 묶여 있다. 두 개짜리 왼쪽 흰 건반이 도(C).', '가운데 도가 C4 다. 악보의 큰보표 한가운데.'], tip: '코드 사전의 건반 그림에서 가온다 아래에 주황 줄이 그어져 있다.' },
+      { n: 2, title: '손 모양', body: ['공을 살짝 쥔 모양. 손목은 건반과 나란히.', '손가락 번호는 엄지 1 · 검지 2 · 중지 3 · 약지 4 · 새끼 5.'], tip: '손톱이 길면 손가락이 눕는다. 깎는다.' },
+      { n: 3, title: '오른손 도레미', body: ['1-2-3 을 치고 엄지를 3 밑으로 넣어 4-5 로 잇는다(엄지 넘기기).', '내려올 때는 중지를 엄지 위로 넘긴다.'], tip: '' },
+      { n: 4, title: '왼손 코드', body: ['왼손은 루트 한 음으로 시작한다. 익숙해지면 루트+5도.', '오른손이 3음·7음·텐션을 맡는다.'], tip: '코드 사전에서 개수를 올리면 어느 음이 어느 손으로 가는지 왼/오 로 표시된다.' },
+      { n: 5, title: '두 손 합치기', body: ['먼저 왼손만 4분음표로. 그 위에 오른손을 얹는다.', '한 번에 두 손을 새로 배우지 않는다.'], tip: '안 되면 속도를 반으로. 반으로도 안 되면 다시 반으로.' },
+    ],
+    scores: [
+      {
+        title: '오른손 5음 — 손가락 번호 1 2 3 4 5',
+        spec: { clef: 'treble', time: [4, 4], measures: [
+          [{ p: 'C4', d: 4, text: '1' }, { p: 'D4', d: 4, text: '2' }, { p: 'E4', d: 4, text: '3' }, { p: 'F4', d: 4, text: '4' }],
+          [{ p: 'G4', d: 2, text: '5' }, { p: 'E4', d: 4, text: '3' }, { p: 'C4', d: 4, text: '1' }],
+        ] },
+      },
+      {
+        title: '왼손 루트 — C · Am · F · G 네 마디',
+        spec: { clef: 'bass', time: [4, 4], measures: [
+          [{ p: 'C3', d: 2, label: 'C' }, { p: 'C3', d: 2 }],
+          [{ p: 'A2', d: 2, label: 'Am' }, { p: 'A2', d: 2 }],
+          [{ p: 'F2', d: 2, label: 'F' }, { p: 'F2', d: 2 }],
+          [{ p: 'G2', d: 2, label: 'G' }, { p: 'G2', d: 2 }],
+        ] },
+      },
+    ],
+    practice: ['하농 대신: 도레미파솔 을 메트로놈 60 에 맞춰 양손 따로 5분.', '코드 사전에서 코드 하나 골라 왼손·오른손 나눠 짚어 보기.'],
+  };
+
+  __M.LESSON_KEYS = LESSON_KEYS;
+})();
+
+// ── lesson/drums.js ─────────────────────────────
+(function () {
+  // 드럼은 음 높이가 없으므로 오선의 자리를 악기마다 미리 정해 둔다.
+  // pos = 맨 아래 줄이 0, 한 칸(줄↔칸)마다 1. up 은 기둥 방향(손은 위, 발은 아래).
+
+  const DRUM_MAP = {
+    CR: { pos: 10, head: 'x', up: true,  name: '크래시' },
+    HH: { pos: 9,  head: 'x', up: true,  name: '하이햇' },
+    RD: { pos: 8,  head: 'x', up: true,  name: '라이드' },
+    T1: { pos: 7,  head: 'normal', up: true, name: '하이탐' },
+    T2: { pos: 6,  head: 'normal', up: true, name: '미드탐' },
+    SN: { pos: 5,  head: 'normal', up: true, name: '스네어' },
+    FT: { pos: 3,  head: 'normal', up: true, name: '플로어탐' },
+    BD: { pos: 1,  head: 'normal', up: false, name: '베이스드럼(킥)' },
+    HF: { pos: -1, head: 'x', up: false, name: '하이햇 페달' },
+  };
+
+  const LESSON_DRUMS = {
+    id: 'drums',
+    title: '드럼',
+    tagline: '음정이 없다. 대신 시간을 정확히 나누는 일을 한다.',
+    gear: ['드럼 또는 연습패드', '스틱 5A', '메트로놈'],
+    steps: [
+      { n: 1, title: '스틱 잡기', body: ['엄지와 검지로 받침점을 만들고 나머지 세 손가락은 가볍게 감싼다.', '받침점은 스틱 끝에서 1/3 지점.'], tip: '꽉 쥐면 튕김이 죽는다. 스틱이 알아서 튀어 오르게 둔다.' },
+      { n: 2, title: '악보 읽기', body: ['오선에 자리를 정해 놓고 쓴다. ✕ 는 심벌, ● 는 북.', '위 칸이 하이햇, 가운데가 스네어, 아래 칸이 킥.'], tip: '기둥이 위로 붙은 것은 손, 아래로 붙은 것은 발이다.' },
+      { n: 3, title: '8비트', body: ['하이햇을 8분음표로 쉬지 않고, 2·4박에 스네어, 1·3박에 킥.', '이 한 줄이 대중음악의 절반이다.'], tip: '하이햇만 먼저 → 킥 추가 → 스네어 추가. 한 번에 셋을 하지 않는다.' },
+      { n: 4, title: '박 세기', body: ['"하나 둘 셋 넷" 을 소리 내어 세면서 친다.', '8분음표는 "하나 앤 둘 앤".'], tip: '' },
+      { n: 5, title: '필인', body: ['네 마디마다 마지막 한 마디를 탐으로 채워 다음으로 넘긴다.', '처음에는 스네어만으로도 된다.'], tip: '' },
+    ],
+    scores: [
+      {
+        title: '8비트 기본 — 하이햇 8분 · 2·4박 스네어 · 1·3박 킥',
+        spec: { clef: 'perc', time: [4, 4], percMap: DRUM_MAP, measures: [
+          [{ p: ['HH', 'BD'], d: 8, text: '1' }, { p: 'HH', d: 8, text: '앤' },
+           { p: ['HH', 'SN'], d: 8, text: '2' }, { p: 'HH', d: 8, text: '앤' },
+           { p: ['HH', 'BD'], d: 8, text: '3' }, { p: 'HH', d: 8, text: '앤' },
+           { p: ['HH', 'SN'], d: 8, text: '4' }, { p: 'HH', d: 8, text: '앤' }],
+        ] },
+      },
+      {
+        title: '간단한 필인 — 스네어에서 탐으로 내려간다',
+        spec: { clef: 'perc', time: [4, 4], percMap: DRUM_MAP, measures: [
+          [{ p: 'SN', d: 8 }, { p: 'SN', d: 8 }, { p: 'T1', d: 8 }, { p: 'T1', d: 8 },
+           { p: 'T2', d: 8 }, { p: 'T2', d: 8 }, { p: 'FT', d: 8 }, { p: 'FT', d: 8 }],
+          [{ p: ['CR', 'BD'], d: 4 }, { p: null, d: 4 }, { p: null, d: 2 }],
+        ] },
+      },
+    ],
+    practice: ['메트로놈 70 에 8비트 4분간 끊지 않고.', '왼손만 · 오른손만 따로 연습패드에서 5분씩.'],
+  };
+
+  __M.DRUM_MAP = DRUM_MAP; __M.LESSON_DRUMS = LESSON_DRUMS;
+})();
+
+// ── lesson/index.js ─────────────────────────────
+(function () {
+  // 파트 다섯 개를 한 곳에 모은다. 화면은 이 목록만 본다.
+
+  const { LESSON_VOCAL } = __M;
+  const { LESSON_GUITAR } = __M;
+  const { LESSON_BASS } = __M;
+  const { LESSON_KEYS } = __M;
+  const { LESSON_DRUMS } = __M;
+
+  const LESSONS = {
+    vocal: LESSON_VOCAL,
+    guitar: LESSON_GUITAR,
+    bass: LESSON_BASS,
+    keys: LESSON_KEYS,
+    drums: LESSON_DRUMS,
+  };
+
+  __M.LESSONS = LESSONS;
+})();
+
+// ── ui/lesson.js ─────────────────────────────
+(function () {
+  // 파트별 튜토리얼 화면. lesson/*.js 의 자료를 그대로 그린다.
+
+  const { el, clear } = __M;
+  const { renderScore } = __M;
+
+  function mountLesson(host, lesson) {
+    clear(host);
+
+    host.appendChild(el('div.page-head', [
+      el('h2', lesson.title),
+      el('p.tagline', lesson.tagline),
+      el('div.chips.static', lesson.gear.map((g) => el('span.chip.ghost', g))),
+    ]));
+
+    host.appendChild(el('div.steps', lesson.steps.map((s) => el('div.card.step', [
+      el('div.step-no', String(s.n)),
+      el('div.step-body', [
+        el('h3', s.title),
+        el('ul', s.body.map((b) => el('li', b))),
+        s.tip ? el('p.tip', [el('b', '요령 '), s.tip]) : null,
+      ]),
+    ]))));
+
+    host.appendChild(el('h3.section', '예시 악보'));
+    lesson.scores.forEach((sc) => {
+      const box = el('div.card.score-card', [el('div.score-title', sc.title)]);
+      const wrap = el('div.score-scroll');
+      wrap.appendChild(renderScore(sc.spec));
+      box.appendChild(wrap);
+      if (sc.note) box.appendChild(el('p.tip', sc.note));
+      host.appendChild(box);
+    });
+
+    host.appendChild(el('h3.section', '오늘 할 것'));
+    host.appendChild(el('div.card', [el('ul', lesson.practice.map((p) => el('li', p)))]));
+  }
+
+  __M.mountLesson = mountLesson;
+})();
+
+// ── ui/chordlab.js ─────────────────────────────
+(function () {
+  // 코드 사전. 코드 이름을 치면 기타 · 베이스 · 건반에서 어떻게 잡는지 한 화면에 보여 준다.
+  // 잡을 음 개수를 1 개부터 늘려 가며 볼 수 있고, 생략된 음은 왜 빼도 되는지까지 적는다.
+
+  const { el, clear, chipGroup } = __M;
+  const { DEG_COLOR, TUNINGS } = __M;
+  const { parseChord, chordExamples } = __M;
+  const { tonePlan, countHint } = __M;
+  const { degLabel } = __M;
+  const { findShapes, fretMap, notePositions } = __M;
+  const { handVoicing, voicingIndex, voicingMidis } = __M;
+  const { notePc, noteName, noteMidi, makeNote } = __M;
+  const { renderChordBox, renderFretMap, renderSingleNote } = __M;
+  const { renderKeyboard } = __M;
+  const { renderGrandChord, renderChordStaff } = __M;
+  const { playMidis } = __M;
+
+  const ROOTS = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+
+  const state = { text: 'Cmaj7', count: null, guitarTuning: 'guitar', bassTuning: 'bass' };
+
+  function mountChordLab(host) {
+    clear(host);
+    const input = el('input.chord-input', { type: 'text', value: state.text, spellcheck: 'false',
+      placeholder: '코드 이름 — Cmaj7 · Am7 · G7sus4 · F♯m7♭5 · B♭13 · C/E' });
+    const out = el('div.chord-out');
+
+    const redraw = () => { state.text = input.value; draw(out, input); };
+    input.addEventListener('input', () => { state.count = null; redraw(); });
+
+    host.appendChild(el('div.page-head', [
+      el('h2', '코드 사전'),
+      el('p.tagline', '이름을 치면 세 악기에서 어디를 잡는지 나온다. 몇 개만 잡을지도 고를 수 있다.'),
+    ]));
+    host.appendChild(el('div.card.chord-search', [
+      input,
+      el('div.chips.static', ROOTS.map((r) => el('button.chip.ghost', { type: 'button', onclick: () => {
+        const rest = input.value.replace(/^[A-Ga-g][#b♯♭]*/, '');
+        input.value = r + rest; state.count = null; redraw();
+      } }, r))),
+      el('div.chips.static', chordExamples('C').map((c) => el('button.chip.ghost', { type: 'button', onclick: () => {
+        input.value = c; state.count = null; redraw();
+      } }, c))),
+    ]));
+    host.appendChild(out);
+    draw(out, input);
+  }
+
+  function draw(out, input) {
+    clear(out);
+    const chord = parseChord(state.text);
+    if (!chord) {
+      out.appendChild(el('div.card.warn', '읽을 수 없는 코드 이름이다. Cmaj7 · Am7 · G7sus4 · B♭13 · C/E 처럼 적는다.'));
+      return;
+    }
+    const max = chord.degs.length;
+    if (state.count == null || state.count > max) state.count = max;
+    const plan = tonePlan(chord, state.count);
+
+    // 머리말 + 개수 고르개
+    out.appendChild(el('div.card.chord-head', [
+      el('div.chord-name', [el('b', chord.sym), el('span.chord-kor', chord.name)]),
+      chord.hint ? el('p.tagline', chord.hint) : null,
+      el('div.count-row', [
+        el('span.field-label', '잡을 음 개수'),
+        chipGroup(
+          Array.from({ length: max }, (_, i) => ({ value: i + 1, label: String(i + 1) })),
+          plan.count,
+          (v) => { state.count = v; draw(out, input); }
+        ),
+      ]),
+      el('p.tip', countHint(plan)),
+    ]));
+
+    out.appendChild(tonePanel(plan));
+    out.appendChild(guitarPanel(plan, out, input));
+    out.appendChild(bassPanel(plan, out, input));
+    out.appendChild(keysPanel(plan));
+  }
+
+  // ── 도수 표 ───────────────────────────
+  function tonePanel(plan) {
+    const rows = plan.tones.map((t) => el('tr', { class: t.keep ? '' : 'off' }, [
+      el('td', [el('span.deg-dot', { style: { background: t.keep ? DEG_COLOR[t.role] : 'transparent',
+        borderColor: DEG_COLOR[t.role] } }), el('b', t.short)]),
+      el('td', degLabel(t.deg)),
+      el('td', noteName(t.note) + (t.alias ? ' (= ' + t.alias + ')' : '')),
+      el('td.muted', t.keep ? t.roleText : '생략 — ' + t.omitWhy),
+    ]));
+    const omittable = plan.tones.filter((t) => t.bandOmit).map((t) => t.short).join(' · ');
+    return el('div.card', [
+      el('h3.section', '이 코드에 든 음'),
+      el('table.tone-table', [
+        el('thead', el('tr', [el('th', '도수'), el('th', ''), el('th', '음'), el('th', '하는 일')])),
+        el('tbody', rows),
+      ]),
+      el('p.tip', ['밴드에서 빼도 되는 음: ', el('b', omittable || '없다'),
+        ' — 베이스가 루트를 치고 완전5도는 소리에 거의 영향이 없다.']),
+    ]);
+  }
+
+  // ── 기타 ─────────────────────────────
+  function guitarPanel(plan, out, input) {
+    const bassPc = plan.chord.bass ? notePc(plan.chord.bass) : notePc(plan.chord.root);
+    const shapes = findShapes(state.guitarTuning, plan, bassPc);
+    const body = el('div.panel-body');
+
+    if (!shapes.length) {
+      body.appendChild(el('p.tip', '이 조합은 여섯 줄 안에서 손가락 네 개로 잡을 자리를 못 찾았다. 개수를 줄여 보라.'));
+    } else {
+      const boxes = el('div.shape-row');
+      shapes.forEach((s, i) => {
+        const midis = s.tones.map((t) => t.midi);
+        boxes.appendChild(el('div.shape', [
+          renderChordBox(s, { caption: i === 0 ? '가장 쉬운 자리' : (s.lowFret || 1) + '프렛 자리' }),
+          el('button.mini', { type: 'button', onclick: () => playMidis(midis, true) }, '소리 ▶'),
+          el('div.shape-meta', (s.barre ? '바레 · ' : '') + '손가락 ' + s.fingers + '개'),
+        ]));
+      });
+      body.appendChild(boxes);
+
+      // 악보에는 기타 관례대로 실제 소리보다 한 옥타브 높여 적는다
+      const staffItems = shapes[0].tones.map((t) => {
+        const tone = t.tone;
+        const n = fitNote(tone, t.midi + 12);
+        return { note: n, tone: tone };
+      });
+      body.appendChild(el('div.score-scroll', renderChordStaff(staffItems, 'treble',
+        { width: 260, note: '실제 소리보다 한 옥타브 높게 적었다' })));
+    }
+
+    body.appendChild(el('div.score-scroll', renderFretMap(fretMap(state.guitarTuning, plan),
+      { caption: '지판 전체 — 색이 찬 것은 지금 잡는 음, 점선은 생략한 음' })));
+
+    return el('div.card.panel', [
+      el('div.panel-head', [el('h3', '🎸 기타'), tuningPicker('guitarTuning', ['guitar', 'guitarDrop', 'guitarHalf'], out, input)]),
+      body,
+    ]);
+  }
+
+  // 도수 음을 원하는 MIDI 높이에 맞춰 철자 유지한 채 옥타브만 정한다
+  function fitNote(tone, midi) {
+    const n = makeNote(tone.note.letter, tone.note.alter, 4);
+    while (noteMidi(n) < midi - 6) n.oct += 1;
+    while (noteMidi(n) > midi + 6) n.oct -= 1;
+    return n;
+  }
+
+  // ── 베이스 ────────────────────────────
+  function bassPanel(plan, out, input) {
+    const bassNote = plan.chord.bass || plan.chord.root;
+    const pos = notePositions(state.bassTuning, notePc(bassNote), 12);
+    const rootTone = plan.tones.find((t) => notePc(t.note) === notePc(bassNote)) || plan.tones[0];
+    const staffNote = fitNote(rootTone, pos.length ? pos[0].midi : 40);
+
+    return el('div.card.panel', [
+      el('div.panel-head', [el('h3', '🎻 베이스'), el('span.badge', '언제나 한 음'),
+        tuningPicker('bassTuning', ['bass', 'bass5'], out, input)]),
+      el('div.panel-body', [
+        el('p.tip', ['베이스는 ', el('b', noteName(bassNote)), ' 한 음만 잡는다. 낮은 음끼리 겹치면 뭉개지기 때문이다. ',
+          '색이 진한 자리가 제일 낮은(기본) 자리이고, 나머지는 같은 음의 다른 자리다.']),
+        el('div.score-scroll', renderSingleNote(state.bassTuning, pos, noteName(bassNote),
+          { caption: '이 음을 잡을 수 있는 자리' })),
+        el('div.score-scroll', renderChordStaff([{ note: staffNote, tone: rootTone }], 'bass',
+          { width: 220, note: '실제 소리보다 한 옥타브 높게 적었다' })),
+        el('div.score-scroll', renderFretMap(fretMap(state.bassTuning, plan),
+          { caption: '코드톤 위치 — 워킹 베이스로 넓힐 때 쓴다' })),
+        el('button.mini', { type: 'button', onclick: () => playMidis([pos.length ? pos[0].midi : 40], false) }, '소리 ▶'),
+      ]),
+    ]);
+  }
+
+  // ── 건반 ─────────────────────────────
+  function keysPanel(plan) {
+    const v = handVoicing(plan);
+    const press = voicingIndex(v);
+    const midis = voicingMidis(v);
+    const hands = (list, label) => el('div.hand', [
+      el('span.hand-label', label),
+      el('span', list.length ? list.map((x) => noteName(x.note, true) + ' (' + x.tone.short + ')').join(' · ') : '없음'),
+    ]);
+
+    return el('div.card.panel', [
+      el('div.panel-head', [el('h3', '🎹 건반'), el('span.badge', '양손')]),
+      el('div.panel-body', [
+        el('div.hands', [hands(v.left, '왼손'), hands(v.right, '오른손')]),
+        el('div.score-scroll', renderKeyboard(press, { low: 36, octaves: 4 })),
+        el('div.score-scroll', renderGrandChord(v, { width: 330 })),
+        el('button.mini', { type: 'button', onclick: () => playMidis(midis, false) }, '소리 ▶'),
+        el('p.tip', '왼손이 뿌리를 잡고 오른손이 성격을 만든다. 개수를 줄이면 오른손부터 가벼워진다.'),
+      ]),
+    ]);
+  }
+
+  function tuningPicker(key, opts, out, input) {
+    return chipGroup(
+      opts.map((o) => ({ value: o, label: TUNINGS[o].short, title: TUNINGS[o].label })),
+      state[key],
+      (v) => { state[key] = v; draw(out, input); }
+    );
+  }
+
+  __M.mountChordLab = mountChordLab;
+})();
+
+// ── ui/tuner.js ─────────────────────────────
+(function () {
+  // 튜너 화면. 마이크를 켜면 지금 내는 소리가 무슨 음이고 몇 센트 어긋났는지 보여 준다.
+
+  const { el, clear, chipGroup } = __M;
+  const { COLOR, TUNER, TUNINGS } = __M;
+  const { sv, svgRoot, line, path, text, circle, rect } = __M;
+  const { createTuner } = __M;
+  const { playFreq } = __M;
+  const { midiToNote, noteName, midiToFreq } = __M;
+
+  const st = { preset: 'guitar', tuner: null, on: false };
+
+  function mountTuner(host) {
+    clear(host);
+    const gauge = el('div.gauge');
+    const read = el('div.tuner-read', '—');
+    const detail = el('div.tuner-detail', '마이크를 켜고 한 줄씩 울려 본다');
+    const strings = el('div.string-row');
+
+    const paint = (r) => {
+      clear(gauge);
+      gauge.appendChild(needle(r));
+      if (!r) { read.textContent = '—'; read.className = 'tuner-read'; detail.textContent = st.on ? '소리를 기다리는 중' : '마이크가 꺼져 있다'; return; }
+      read.textContent = noteName(r.note, true);
+      const good = Math.abs(r.cents) <= TUNER.inTuneCents;
+      read.className = 'tuner-read' + (good ? ' good' : '');
+      detail.textContent = r.hz.toFixed(1) + ' Hz · ' + (r.cents > 0 ? '+' : '') + r.cents + ' 센트 · '
+        + (good ? '맞았다' : r.cents > 0 ? '높다 — 조금 풀어라' : '낮다 — 조금 조여라');
+      paintStrings(strings, r.midi);
+    };
+
+    const btn = el('button.big', { type: 'button' }, '마이크 켜기');
+    btn.addEventListener('click', async () => {
+      if (st.on) { st.tuner.stop(); st.on = false; btn.textContent = '마이크 켜기'; paint(null); return; }
+      st.tuner = createTuner(paint);
+      try {
+        await st.tuner.start();
+        st.on = true; btn.textContent = '마이크 끄기';
+      } catch (e) {
+        detail.textContent = '마이크를 열 수 없다. 브라우저 주소창의 권한을 확인하라. (' + (e && e.name) + ')';
+      }
+    });
+
+    host.appendChild(el('div.page-head', [
+      el('h2', '튜너'),
+      el('p.tagline', '자기상관으로 기본 주파수를 찾는다. 소리는 브라우저 밖으로 나가지 않는다.'),
+    ]));
+    host.appendChild(el('div.card.tuner-card', [
+      gauge, read, detail, btn,
+      el('div.count-row', [el('span.field-label', '조율'),
+        chipGroup(Object.keys(TUNINGS).map((k) => ({ value: k, label: TUNINGS[k].short, title: TUNINGS[k].label })),
+          st.preset, (v) => { st.preset = v; paintStrings(strings, null); })]),
+      strings,
+      el('p.tip', '줄 이름을 누르면 기준음이 난다. 그 소리에 귀를 맞춘 뒤 줄을 울려 바늘을 본다.'),
+    ]));
+    paintStrings(strings, null);
+    paint(null);
+  }
+
+  // 바늘 눈금 — 가운데가 0센트, 좌우 ±50
+  function needle(r) {
+    const W = 420, H = 150, cx = W / 2, cy = H - 14, R = 118;
+    const root = svgRoot(W, H, 'gauge-svg');
+    const g = sv('g');
+    root.appendChild(rect(0, 0, W, H, COLOR.panel2, { rx: 10 }));
+    root.appendChild(g);
+    for (let c = -50; c <= 50; c += 10) {
+      const a = (c / 50) * (Math.PI / 2.6) - Math.PI / 2;
+      const x1 = cx + Math.cos(a) * (R - 10), y1 = cy + Math.sin(a) * (R - 10);
+      const x2 = cx + Math.cos(a) * R, y2 = cy + Math.sin(a) * R;
+      g.appendChild(line(x1, y1, x2, y2, c === 0 ? COLOR.ok : COLOR.line, c === 0 ? 2.4 : 1.2));
+      if (c % 25 === 0) g.appendChild(text(cx + Math.cos(a) * (R - 24), cy + Math.sin(a) * (R - 24), c, { 'font-size': 10, fill: COLOR.dim }));
+    }
+    const cents = r ? Math.max(-50, Math.min(50, r.cents)) : 0;
+    const a = (cents / 50) * (Math.PI / 2.6) - Math.PI / 2;
+    const col = !r ? COLOR.line : Math.abs(r.cents) <= TUNER.inTuneCents ? COLOR.ok : COLOR.accent;
+    g.appendChild(line(cx, cy, cx + Math.cos(a) * (R - 16), cy + Math.sin(a) * (R - 16), col, 3));
+    g.appendChild(circle(cx, cy, 5, col));
+    return root;
+  }
+
+  function paintStrings(host, midi) {
+    clear(host);
+    const t = TUNINGS[st.preset];
+    t.strings.forEach((m, i) => {
+      const b = el('button.string-btn', { type: 'button', onclick: () => playFreq(midiToFreq(m), null, 1.6, 0.9) },
+        [el('b', t.names[i]), el('span', noteName(midiToNote(m), true))]);
+      if (midi != null && Math.abs(midi - m) <= 1) b.classList.add('near');
+      host.appendChild(b);
+    });
+  }
+
+  __M.mountTuner = mountTuner;
+})();
+
+// ── ui/metronome.js ─────────────────────────────
+(function () {
+  // 메트로놈 화면. 박이 올 때마다 램프가 켜진다.
+
+  const { el, clear, chipGroup } = __M;
+  const { METRO } = __M;
+  const { createMetronome, createTapTempo } = __M;
+
+  const st = { metro: null, tap: null };
+
+  function mountMetronome(host) {
+    clear(host);
+    const lamps = el('div.lamps');
+    const bpmView = el('div.bpm', String(METRO.bpmDefault));
+
+    if (!st.metro) st.metro = createMetronome();
+    if (!st.tap) st.tap = createTapTempo();
+    const m = st.metro;
+    bpmView.textContent = String(m.state.bpm);
+
+    const drawLamps = (active) => {
+      clear(lamps);
+      for (let i = 0; i < m.state.beats; i++) {
+        const d = el('span.lamp' + (i === 0 ? '.first' : ''));
+        if (i === active) d.classList.add('on');
+        lamps.appendChild(d);
+      }
+    };
+    m.onBeat = (beat) => drawLamps(beat);
+
+    const setBpm = (v) => {
+      const bpm = Math.max(METRO.bpmMin, Math.min(METRO.bpmMax, Math.round(v)));
+      m.set('bpm', bpm);
+      bpmView.textContent = String(bpm);
+      slider.value = String(bpm);
+    };
+
+    const slider = el('input.slider', { type: 'range', min: METRO.bpmMin, max: METRO.bpmMax, value: m.state.bpm,
+      oninput: (e) => setBpm(+e.target.value) });
+
+    const startBtn = el('button.big', { type: 'button' }, m.state.running ? '멈춤 ■' : '시작 ▶');
+    startBtn.addEventListener('click', () => {
+      if (m.state.running) { m.stop(); startBtn.textContent = '시작 ▶'; drawLamps(-1); }
+      else { m.start(); startBtn.textContent = '멈춤 ■'; }
+    });
+
+    host.appendChild(el('div.page-head', [
+      el('h2', '메트로놈'),
+      el('p.tagline', 'setInterval 이 아니라 오디오 시계에 미리 잡아 두는 방식이라 흔들리지 않는다.'),
+    ]));
+    host.appendChild(el('div.card.metro-card', [
+      bpmView, lamps,
+      el('div.metro-row', [
+        el('button.mini', { type: 'button', onclick: () => setBpm(m.state.bpm - 5) }, '−5'),
+        slider,
+        el('button.mini', { type: 'button', onclick: () => setBpm(m.state.bpm + 5) }, '+5'),
+      ]),
+      startBtn,
+      el('div.metro-row', [
+        el('button.mini', { type: 'button', onclick: () => { const v = st.tap(); if (v) setBpm(v); } }, '탭 템포 (두드려서 맞추기)'),
+      ]),
+      el('div.count-row', [el('span.field-label', '한 마디 박'),
+        chipGroup([2, 3, 4, 5, 6, 7].map((v) => ({ value: v, label: v + '박' })), m.state.beats,
+          (v) => { m.set('beats', v); drawLamps(-1); })]),
+      el('div.count-row', [el('span.field-label', '쪼개기'),
+        chipGroup([
+          { value: 1, label: '４분' }, { value: 2, label: '８분' },
+          { value: 3, label: '셋잇단' }, { value: 4, label: '16분' },
+        ], m.state.sub, (v) => m.set('sub', v))]),
+      el('div.count-row', [el('span.field-label', '첫 박 강조'),
+        chipGroup([{ value: true, label: '켬' }, { value: false, label: '끔' }], m.state.accent,
+          (v) => m.set('accent', v))]),
+    ]));
+    drawLamps(-1);
+  }
+
+  __M.mountMetronome = mountMetronome;
+})();
+
+// ── ui/shell.js ─────────────────────────────
+(function () {
+  // 전체 껍데기. 위쪽 탭과 본문 자리를 만들고, 탭에 맞는 화면을 붙인다.
+
+  const { APP, TABS } = __M;
+  const { el, clear } = __M;
+  const { LESSONS } = __M;
+  const { mountLesson } = __M;
+  const { mountChordLab } = __M;
+  const { mountTuner } = __M;
+  const { mountMetronome } = __M;
+
+  let current = null;
+
+  function mountShell(root) {
+    clear(root);
+    const body = el('main.body');
+    const tabs = el('nav.tabs');
+
+    TABS.forEach((t) => {
+      const b = el('button.tab', { type: 'button', 'data-id': t.id },
+        [el('span.tab-icon', t.icon), el('span.tab-label', t.label)]);
+      b.addEventListener('click', () => go(t.id));
+      tabs.appendChild(b);
+    });
+
+    root.appendChild(el('header.top', [
+      el('div.brand', [el('b', APP.title), el('span', APP.subtitle)]),
+      tabs,
+    ]));
+    root.appendChild(body);
+    root.appendChild(el('footer.foot', '학원 없이 혼자 보는 악기 교실 · 서버 없이 이 파일 하나로 돈다'));
+
+    function go(id) {
+      current = id;
+      try { localStorage.setItem(APP.storageKey, id); } catch (e) { /* 막혀 있어도 상관없다 */ }
+      if (location.hash.slice(1) !== id) location.hash = id;
+      tabs.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+      body.scrollTop = 0;
+      render(body, id);
+    }
+
+    window.addEventListener('hashchange', () => {
+      const id = location.hash.slice(1);
+      if (id && id !== current && TABS.some((t) => t.id === id)) go(id);
+    });
+
+    let start = location.hash.slice(1);
+    if (!start || !TABS.some((t) => t.id === start)) {
+      try { start = localStorage.getItem(APP.storageKey); } catch (e) { start = null; }
+    }
+    go(TABS.some((t) => t.id === start) ? start : 'vocal');
+  }
+
+  function render(body, id) {
+    clear(body);
+    const page = el('div.page');
+    body.appendChild(page);
+    if (LESSONS[id]) mountLesson(page, LESSONS[id]);
+    else if (id === 'chord') mountChordLab(page);
+    else if (id === 'tuner') mountTuner(page);
+    else if (id === 'metro') mountMetronome(page);
+  }
+
+  __M.mountShell = mountShell;
+})();
+
+// ── main.js ─────────────────────────────
+(function () {
+  // 진입점.
+
+  const { mountShell } = __M;
+
+  function boot() {
+    const root = document.getElementById('app');
+    if (!root) return;
+    mountShell(root);
+    const b = document.getElementById('boot');
+    if (b) b.remove();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+})();
+
+</script>
+</body>
+</html>

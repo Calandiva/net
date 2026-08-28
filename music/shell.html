@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="보컬·기타·베이스·건반·드럼 튜토리얼과 코드 사전, 튜너, 메트로놈. 학원 없이 혼자 보는 악기 교실.">
+<title>악기 교실 — 보컬 · 기타 · 베이스 · 건반 · 드럼</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #12141a; --panel: #191c24; --panel2: #20242e; --line: #2e3440;
+    --ink: #e8e6e1; --dim: #9aa0ac; --accent: #e4572e; --ok: #5aa469; --warn: #d9a441;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.65; -webkit-text-size-adjust: 100%;
+  }
+  #app { display: flex; flex-direction: column; min-height: 100%; }
+
+  /* ── 머리와 탭 ── */
+  .top { position: sticky; top: 0; z-index: 9; background: rgba(18,20,26,.94);
+         backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px 6px; }
+  .brand b { font-size: 17px; letter-spacing: .02em; }
+  .brand span { font-size: 12px; color: var(--dim); }
+  .tabs { display: flex; gap: 4px; padding: 0 10px 8px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; cursor: pointer;
+         padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+         background: transparent; color: var(--dim); font: inherit; font-size: 13px; }
+  .tab:hover { color: var(--ink); border-color: #3d4658; }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab-icon { font-size: 14px; }
+
+  .body { flex: 1; }
+  .page { max-width: 940px; margin: 0 auto; padding: 20px 16px 60px; }
+  .foot { text-align: center; color: #5d6470; font-size: 12px; padding: 18px; border-top: 1px solid var(--line); }
+
+  /* ── 공통 조각 ── */
+  .page-head { margin-bottom: 18px; }
+  .page-head h2 { font-size: 24px; letter-spacing: -.01em; }
+  .tagline { color: var(--dim); font-size: 13.5px; margin-top: 4px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+          padding: 16px; margin-bottom: 14px; }
+  .card.warn { border-color: var(--warn); color: var(--warn); }
+  h3.section { font-size: 15px; margin: 22px 0 10px; color: var(--dim); font-weight: 600; }
+  .card h3 { font-size: 15.5px; margin-bottom: 6px; }
+  ul { padding-left: 18px; }
+  li { margin: 3px 0; font-size: 14px; }
+  .tip { font-size: 12.5px; color: var(--dim); margin-top: 8px;
+         border-left: 2px solid var(--line); padding-left: 10px; }
+  .tip b { color: var(--warn); }
+  .muted { color: var(--dim); }
+  .badge { font-size: 11px; color: var(--warn); border: 1px solid var(--warn);
+           border-radius: 999px; padding: 1px 8px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips.static { margin-top: 8px; }
+  .chip { cursor: pointer; font: inherit; font-size: 12.5px; padding: 4px 11px;
+          border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--dim); }
+  .chip:hover { color: var(--ink); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip.ghost { background: transparent; }
+  .field-label { font-size: 12px; color: var(--dim); flex: 0 0 auto; }
+  .count-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+
+  button.big { display: block; width: 100%; margin: 12px 0 4px; padding: 12px;
+               font: inherit; font-size: 15px; cursor: pointer; border-radius: 10px;
+               border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  button.big:hover { filter: brightness(1.08); }
+  button.mini { cursor: pointer; font: inherit; font-size: 12px; padding: 5px 12px; margin-top: 8px;
+                border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); }
+  button.mini:hover { border-color: var(--accent); }
+
+  /* ── 튜토리얼 ── */
+  .steps { display: grid; gap: 10px; }
+  .card.step { display: flex; gap: 14px; margin-bottom: 0; }
+  .step-no { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--panel2);
+             color: var(--accent); display: flex; align-items: center; justify-content: center;
+             font-weight: 700; font-size: 14px; }
+  .step-body { flex: 1; min-width: 0; }
+  .score-card .score-title { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
+  .score-scroll { overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
+  .score-scroll svg { display: block; }
+
+  /* ── 코드 사전 ── */
+  .chord-input { width: 100%; padding: 12px 14px; font: inherit; font-size: 18px;
+                 border-radius: 10px; border: 1px solid var(--line);
+                 background: var(--panel2); color: var(--ink); }
+  .chord-input:focus { outline: none; border-color: var(--accent); }
+  .chord-name { display: flex; align-items: baseline; gap: 10px; }
+  .chord-name b { font-size: 26px; }
+  .chord-kor { color: var(--dim); font-size: 13px; }
+  .tone-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tone-table th { text-align: left; color: var(--dim); font-weight: 600; font-size: 11.5px;
+                   border-bottom: 1px solid var(--line); padding: 4px 6px; }
+  .tone-table td { padding: 6px; border-bottom: 1px solid #232833; vertical-align: top; }
+  .tone-table tr.off td { opacity: .5; text-decoration-color: var(--dim); }
+  .deg-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+             border: 1.5px solid; margin-right: 6px; vertical-align: -1px; }
+  .panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
+  .panel-head h3 { margin: 0; flex: 1; }
+  .shape-row { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
+  .shape { flex: 0 0 auto; text-align: center; }
+  .shape-meta { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .hands { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; }
+  .hand { display: flex; gap: 8px; }
+  .hand-label { color: var(--warn); font-size: 12px; flex: 0 0 auto; }
+
+  /* ── 튜너 ── */
+  .tuner-card { text-align: center; }
+  .gauge { display: flex; justify-content: center; }
+  .tuner-read { font-size: 40px; font-weight: 700; margin-top: 6px; letter-spacing: .02em; }
+  .tuner-read.good { color: var(--ok); }
+  .tuner-detail { font-size: 13px; color: var(--dim); min-height: 20px; }
+  .string-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+  .string-btn { cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 1px;
+                padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+                background: var(--panel2); color: var(--ink); font-size: 11px; }
+  .string-btn b { font-size: 13px; }
+  .string-btn.near { border-color: var(--ok); color: var(--ok); }
+
+  /* ── 메트로놈 ── */
+  .metro-card { text-align: center; }
+  .bpm { font-size: 54px; font-weight: 700; line-height: 1.1; }
+  .lamps { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; }
+  .lamp { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); }
+  .lamp.first { border-color: var(--accent); }
+  .lamp.on { background: var(--accent); box-shadow: 0 0 10px rgba(228,87,46,.7); }
+  .metro-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 8px; }
+  .slider { flex: 1; max-width: 340px; accent-color: var(--accent); }
+  .metro-card .count-row { justify-content: center; }
+
+  @media (max-width: 560px) {
+    .page { padding: 16px 12px 48px; }
+    .page-head h2 { font-size: 21px; }
+    .bpm { font-size: 44px; }
+  }
+
+  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+          background: var(--bg); color: var(--dim); font-size: 13px; z-index: 20; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="boot">불러오는 중…</div>
+<script>
+/* BUNDLE */
+</script>
+</body>
+</html>
