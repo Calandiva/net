@@ -49,7 +49,7 @@ export function drawBuildingLabels(ctx, cam, map, player) {
       for (const b of map.chunk(cx, cy).buildings) {
         if (seen.has(b.id)) continue;
         seen.add(b.id);
-        const bx = (b.x + b.w / 2) * S, by = b.y * S;
+        const bx = b.cx * S, by = (b.cy - b.sh / 2) * S;
         const d = Math.hypot(bx - player.x, by - player.y);
         if (d > RENDER.labelMaxDistance && !b.landmark) continue;
         cands.push({ b, d, bx, by });

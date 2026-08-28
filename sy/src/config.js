@@ -8,16 +8,17 @@ export const SEED = 'gurae-2026';
 // ── 좌표계 ──────────────────────────────────────────────────────────────
 // 실제 위경도(WGS84)를 타일 좌표로 옮기는 기준. 지도 데이터를 갈아끼울 때 여기만 바꾼다.
 export const GEO = {
-  // 김포시 구래동 ~ 양촌읍(양곡·학운산업단지)을 감싸는 영역
-  south: 37.6120,
-  north: 37.6660,
-  west: 126.5820,
-  east: 126.6560,
+  // 김포시 구래동(북) ~ 양촌읍 학운 산업단지(남) · 가현산(남동)을 감싸는 영역.
+  // tools/bake_overture.py 의 값과 반드시 같아야 한다 (구운 좌표가 이 기준이다).
+  south: 37.6020,
+  north: 37.6620,
+  west: 126.5980,
+  east: 126.6620,
   // 타일 하나가 실제 몇 미터인가
   metersPerTile: 2.5,
-  // 위도 1도 / 경도 1도의 미터 환산 (중위도 근사)
-  metersPerLat: 110990,
-  metersPerLon: 88150, // 위도 37.64° 기준
+  // 위도 1도 / 경도 1도의 미터 환산 (위도 37.63° 기준)
+  metersPerLat: 111132,
+  metersPerLon: 88162,
 };
 
 // ── 타일 / 청크 ─────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ export const ROAD_CLASS = {
   expressway: { width: 10, sidewalk: 0, crossing: false },  // 자동차전용도로 (김포한강로)
   arterial:   { width: 8, sidewalk: 2, crossing: true },    // 6~8차선 (김포한강7로 등)
   main:       { width: 6, sidewalk: 2, crossing: true },    // 4차선
-  local:      { width: 4, sidewalk: 1, crossing: true },    // 2차선 이면도로
+  local:      { width: 4, sidewalk: 1, crossing: false },   // 2차선 이면도로
   alley:      { width: 3, sidewalk: 0, crossing: false },   // 골목
   path:       { width: 2, sidewalk: 0, crossing: false, ground: GROUND.TRACK }, // 산책로
 };
@@ -299,7 +300,8 @@ export const GAME = {
   deadline: 9 * 3600,              // 이 시각을 넘기면 지각
   timeScale: 6,                    // 실제 1초 = 게임 6초
   // 여기에 발을 들이면 도착. 학운 단지들은 가는 길에 있으므로 목적지가 아니다.
-  goalRegions: ['yangchon-ind'],
+  // 목적지 — 양촌읍 학운리 산업단지 (실제 좌표). 이 반경 안에 들면 도착이다.
+  goal: { lon: 126.6157, lat: 37.6116, radius: 150 },   // radius 는 미터
   goalName: '양촌산단',
   interactRadius: 27,              // 물건에 이만큼(픽셀) 다가가면 만질 수 있다
   petRadius: 28,                   // 고양이

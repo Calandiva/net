@@ -65,14 +65,17 @@ export function drawWorldMap(ctx, state) {
     return true;
   };
 
-  // 목적지 구역을 테두리로 강조
-  for (const r of state.mapRegions) {
-    if (!GAME.goalRegions.includes(r.id)) continue;
+  // 도착지를 동그라미로 강조
+  {
+    const gx = px(state.goalPoint.x / S), gy = py(state.goalPoint.y / S);
+    const rr = Math.max(6, (GAME.goal.radius / GEO.metersPerTile / UI.minimapScale) * scale);
     ctx.strokeStyle = UI_COLOR.accent;
     ctx.lineWidth = 2;
-    ctx.strokeRect(px(r.minX), py(r.minY), px(r.maxX) - px(r.minX), py(r.maxY) - py(r.minY));
+    ctx.beginPath();
+    ctx.arc(gx, gy, rr, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.lineWidth = 1;
-    drawText(ctx, `${GAME.goalName} · 도착지`, px(r.cx), py(r.minY) - 6,
+    drawText(ctx, `${GAME.goalName} · 도착지`, gx, gy - rr - 6,
       { size: 12, align: 'center', color: UI_COLOR.accent });
   }
 
@@ -174,15 +177,21 @@ export function pickOnMap(state, sx, sy) {
 
 // 지도에 쓸 구역·랜드마크 목록을 한 번만 만들어 둔다
 export function buildMapMarks(map, buildings) {
-  const regions = map.regions.map((r) => {
-    const b = pathBounds(r.path);
-    return { id: r.id, name: r.name, label: r.label, kind: r.kind,
+  // 동네 이름표 (행정동) + 이름 있는 큰 구역 (산업단지·공원)
+  const regions = map.areaLabels.map((a) => ({
+    id: a.name, name: a.name, label: true, kind: 'city',
+    cx: a.x, cy: a.y, minX: a.x - 40, minY: a.y - 40, maxX: a.x + 40, maxY: a.y + 40,
+  }));
+  for (const r of map.regions) {
+    if (!r.name || (r.kind !== 'industrial' && r.kind !== 'park' && r.kind !== 'forest')) continue;
+    const b = r.bounds;
+    if ((b.maxX - b.minX) * (b.maxY - b.minY) < 3000) continue;   // 작은 것은 이름표를 달지 않는다
+    regions.push({ id: r.name, name: r.name, label: true, kind: r.kind,
       cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2,
-      minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
-  });
+      minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY });
+  }
   const landmarks = buildings.list
     .filter((b) => b.landmark)
-    .map((b) => ({ name: b.name, kind: b.kind,
-      tx: b.x + b.w / 2, ty: b.y + b.h / 2 }));
+    .map((b) => ({ name: b.name, kind: b.kind, tx: b.cx, ty: b.cy }));
   return { regions, landmarks };
 }

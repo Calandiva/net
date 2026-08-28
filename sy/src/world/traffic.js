@@ -3,7 +3,6 @@
 
 import { SEED, TILE, TRAFFIC } from '../config.js';
 import { makeRng } from '../util/rng.js';
-import { projectPath } from './geo.js';
 import { ROADS } from './data/roads.js';
 import { ROAD_CLASS } from '../config.js';
 
@@ -20,7 +19,7 @@ function inView(car, view) {
 function makeLanes(road) {
   const spec = ROAD_CLASS[road.cls];
   if (!TRAFFIC.classes.includes(road.cls)) return [];
-  const pts = projectPath(road.path);
+  const pts = road.tiles;
   // 누적 길이
   let total = 0;
   const nodes = pts.map((p, i) => {

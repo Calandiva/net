@@ -2,7 +2,7 @@
 // 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
 
 import {
-  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE, PATHING,
+  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, GEO, BUILDING, INTERIOR, IN, SEED, LIFE, PATHING,
 } from './config.js';
 import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
 import { withJosa } from './util/hangul.js';
@@ -66,18 +66,23 @@ function init() {
 
   // 길 위의 물건들을 걸어갈 수 있는 칸에 앉힌다
   state.outdoorGizmos = outdoorGizmos().map((g) => {
-    const [tx, ty] = project([g.at.lon, g.at.lat]);
+    let tx, ty;
+    if (g.at.near) {
+      // 실제 건물을 기준으로 몇 칸 떨어진 자리 (좌표를 손으로 적는 것보다 튼튼하다)
+      const host = buildings.list.find((b) => b.name === g.at.near);
+      const out = host ? doorOutside(host) : { x: 0, y: 0 };
+      tx = out.x + (g.at.dx || 0);
+      ty = out.y + (g.at.dy || 0);
+    } else {
+      [tx, ty] = project([g.at.lon, g.at.lat]);
+    }
     const spot = nearestWalkable(Math.round(tx), Math.round(ty));
     return { ...g, tx: spot.x, ty: spot.y };
   });
 
-  // 목적지 — 양촌공단 한가운데
-  const goalRegion = map.regions.find((r) => GAME.goalRegions.includes(r.id));
-  const gb = pathBounds(goalRegion.path);
-  state.goalPoint = {
-    x: ((gb.minX + gb.maxX) / 2) * S,
-    y: ((gb.minY + gb.maxY) / 2) * S,
-  };
+  // 목적지 — 양촌읍 학운리 산업단지 (실제 좌표)
+  const [gx, gy] = project([GAME.goal.lon, GAME.goal.lat]);
+  state.goalPoint = { x: gx * S, y: gy * S };
   // 기본 목적지 표시는 오늘의 목표 — 지도에서 다른 곳을 찍으면 그쪽으로 바뀐다
   state.waypoint = {
     tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName,
@@ -958,23 +963,10 @@ function updatePlaceName() {
 }
 
 function checkGoal() {
-  const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
-  for (const r of map.regionIndex.queryPoint(tx, ty)) {
-    if (!GAME.goalRegions.includes(r.id)) continue;
-    if (pointInside(tx, ty, r.path)) { finish('goal'); return; }
-  }
+  const d = Math.hypot(state.player.x - state.goalPoint.x, state.player.y - state.goalPoint.y);
+  if (d / S * GEO.metersPerTile <= GAME.goal.radius) finish('goal');
 }
 
-function pointInside(px, py, path) {
-  let inside = false;
-  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
-    const [xi, yi] = path[i], [xj, yj] = path[j];
-    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-12) + xi) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
 
 function checkImmediateEnding() { finish('any'); }
 

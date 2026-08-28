@@ -4,27 +4,34 @@
 import {
   SEED, TILE, GROUND, GROUND_SOLID, PROP, PROP_SOLID, PROP_RULES, GEO, BUILDING,
 } from '../config.js';
-import { WORLD_W, WORLD_H, projectPath, pathBounds, pointInPath, distToSegment, metersToTiles }
+import { WORLD_W, WORLD_H, pathBounds, pointInPath, distToSegment, metersToTiles }
   from './geo.js';
 import { GridIndex } from './spatial.js';
-import { doorOutside } from './buildings.js';
+import { doorOutside, rectContains } from './buildings.js';
 import { noiseAt, fbm, seedOf } from '../util/rng.js';
 import { MAP_KIND } from '../render/palette.js';
-import { REGIONS, WATERWAYS } from './data/regions.js';
+import { GROUND_AREAS, WATERWAYS, AREA_LABELS } from './data/ground.js';
 
 const CH = TILE.chunk;
 const NEIGHBORS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const CROSSWALK_SPACING = 46;  // 횡단보도 간격 (타일)
-const CROSSWALK_HALF = 1.6;    // 횡단보도 폭의 절반 (타일)
+const CROSSWALK_SPACING = 78;  // 횡단보도 간격 (타일)
+const CROSSWALK_HALF = 1.0;    // 횡단보도 폭의 절반 (타일)
 
 // 그 칸이 (자기 자신 말고) 다른 건물에 덮여 있는가
 function buildingCovers(list, x, y, self) {
   for (const b of list) {
     if (b === self) continue;
-    if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return true;
+    if (rectContains(b, x + 0.5, y + 0.5)) return true;
   }
   return false;
 }
+
+// 구역 성격 → 바닥과 소품 밀도
+const AREA_GROUND = {
+  city: GROUND.SIDEWALK, industrial: GROUND.YARD, field: GROUND.FIELD,
+  park: GROUND.GRASS, forest: GROUND.GRASS, water: GROUND.WATER,
+};
+const AREA_PROPS = { forest: 0.42, park: 0.14, field: 0.01, city: 0.02, industrial: 0 };
 
 const groundSolid = new Set(GROUND_SOLID);
 const propSolid = new Set(PROP_SOLID);
@@ -40,33 +47,27 @@ export class WorldMap {
     this.buildings = buildings;
     this.chunks = new Map();      // key → {ground, prop, solid, buildings}
     this.order = [];              // LRU
+    this.cacheMax = TILE.chunkCacheMax;   // 점검 도구는 이 값을 크게 올려 쓴다
     this.regionIndex = new GridIndex(CH * 2);
     this.waterIndex = new GridIndex(CH);
 
-    // 구역 폴리곤을 타일 좌표로 미리 변환해 둔다
-    this.regions = REGIONS.map((r) => {
-      const path = projectPath(r.path);
-      const b = pathBounds(path);
-      const region = { ...r, path, bounds: b, order: 0 };
+    // 실제 토지이용 구역 (이미 타일 좌표로 구워져 있다)
+    this.regions = GROUND_AREAS.map((r, i) => {
+      const b = pathBounds(r.path);
+      const region = {
+        ...r, bounds: b, order: i,
+        ground: AREA_GROUND[r.kind] !== undefined ? AREA_GROUND[r.kind] : GROUND.GRASS,
+        propRate: AREA_PROPS[r.kind] || 0,
+      };
       this.regionIndex.insert(region, b.minX, b.minY, b.maxX, b.maxY);
       return region;
     });
-    this.regions.forEach((r, i) => { r.order = i; });
-
-    // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
-    this.areaIndex = new GridIndex(CH);
-    const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA,
-      yard: GROUND.YARD, lawn: GROUND.GRASS, playground: GROUND.SAND,
-      asphalt: GROUND.ASPHALT };
-    for (const a of buildings.areas || []) {
-      const area = { ...a, kind: areaGround[a.ground] };
-      this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
-    }
+    this.areaLabels = AREA_LABELS;
 
     // 하천 선분
     this.waterways = [];
     for (const w of WATERWAYS) {
-      const path = projectPath(w.path);
+      const path = w.path;
       const half = metersToTiles(w.width) / 2;
       for (let i = 0; i < path.length - 1; i++) {
         const seg = { name: w.name, half, ax: path[i][0], ay: path[i][1],
@@ -89,7 +90,7 @@ export class WorldMap {
     c = this._generate(cx, cy);
     this.chunks.set(key, c);
     this.order.push(key);
-    while (this.order.length > TILE.chunkCacheMax) {
+    while (this.order.length > this.cacheMax) {
       const old = this.order.shift();
       if (old !== key) this.chunks.delete(old);
     }
@@ -120,12 +121,15 @@ export class WorldMap {
       .sort((a, b) => a.order - b.order);
     const regionRate = new Float32Array(n); // 소품 밀도 (숲은 높다)
     for (const r of regions) {
-      for (let y = 0; y < CH; y++) {
+      // 구역 경계상자와 청크가 겹치는 칸만 본다 (구역이 천 개라 이게 성능을 가른다)
+      const yA = Math.max(0, Math.floor(r.bounds.minY - oy));
+      const yB = Math.min(CH - 1, Math.ceil(r.bounds.maxY - oy));
+      const xA = Math.max(0, Math.floor(r.bounds.minX - ox));
+      const xB = Math.min(CH - 1, Math.ceil(r.bounds.maxX - ox));
+      for (let y = yA; y <= yB; y++) {
         const ty = oy + y + 0.5;
-        if (ty < r.bounds.minY || ty > r.bounds.maxY) continue;
-        for (let x = 0; x < CH; x++) {
+        for (let x = xA; x <= xB; x++) {
           const tx = ox + x + 0.5;
-          if (tx < r.bounds.minX || tx > r.bounds.maxX) continue;
           if (!pointInPath(tx, ty, r.path)) continue;
           const i = y * CH + x;
           ground[i] = r.ground;
@@ -136,24 +140,6 @@ export class WorldMap {
             ground[i] = v > 0.66 ? GROUND.GRASS : v < 0.32 ? GROUND.PLAZA : GROUND.SIDEWALK;
             regionRate[i] = v > 0.66 ? 0.05 : 0.015;
           }
-        }
-      }
-    }
-
-    // 2-1) 블록 바닥
-    for (const a of this.areaIndex.query(ox, oy, ox + CH, oy + CH)) {
-      const x0 = Math.max(0, a.x - ox), x1 = Math.min(CH, a.x + a.w - ox);
-      const y0 = Math.max(0, a.y - oy), y1 = Math.min(CH, a.y + a.h - oy);
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const i = y * CH + x;
-          // 단지 마당은 조경과 포장이 섞인다. 상가 아스팔트에는 화단이 없다.
-          const noise = fbm(S_CITY, ox + x, oy + y, 7, 2);
-          let g = a.kind;
-          if (a.kind === GROUND.GRASS) g = noise > 0.44 ? GROUND.GRASS : GROUND.PLAZA;
-          else if (a.kind !== GROUND.ASPHALT && noise > 0.86) g = GROUND.GRASS;
-          ground[i] = g;
-          regionRate[i] = g === GROUND.GRASS ? 0.04 : 0;
         }
       }
     }
@@ -262,13 +248,15 @@ export class WorldMap {
       }
     }
 
-    // 6) 건물 — 벽은 막히고 출입구만 뚫린다
+    // 6) 건물 — 벽은 막히고 출입구만 뚫린다.
+    //    건물은 길을 따라 기울어 있으므로 칸마다 회전 사각형 안인지 본다.
     const here = this.buildings.index.query(ox, oy, ox + CH, oy + CH);
     for (const b of here) {
       const x0 = Math.max(0, b.x - ox), x1 = Math.min(CH, b.x + b.w - ox);
       const y0 = Math.max(0, b.y - oy), y1 = Math.min(CH, b.y + b.h - oy);
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
+          if (!rectContains(b, ox + x + 0.5, oy + y + 0.5)) continue;
           const i = y * CH + x;
           ground[i] = GROUND.FLOOR;
           prop[i] = PROP.NONE;
@@ -276,7 +264,11 @@ export class WorldMap {
         }
       }
       const dx = b.door.x - ox, dy = b.door.y - oy;
-      if (dx >= 0 && dx < CH && dy >= 0 && dy < CH) solid[dy * CH + dx] = 0;
+      if (dx >= 0 && dx < CH && dy >= 0 && dy < CH) {
+        solid[dy * CH + dx] = 0;
+        ground[dy * CH + dx] = GROUND.FLOOR;
+        prop[dy * CH + dx] = PROP.NONE;
+      }
     }
 
     // 6-1) 문 앞은 비워 둔다 — 나무나 화단이 문을 막으면 안에 갇힌다.
@@ -380,17 +372,17 @@ export class WorldMap {
     return kind;
   }
 
-  // 지금 서 있는 곳이 어느 구역인가 (이름 표시용)
+  // 지금 서 있는 곳이 어느 동네인가 (행정동 이름표 중 가장 가까운 것)
   regionNameAt(tx, ty) {
-    let found = '';
-    for (const r of this.regionIndex.queryPoint(tx, ty)) {
-      if (r.label && pointInPath(tx, ty, r.path)) found = r.name;
+    let best = '', bestD = Infinity;
+    for (const a of this.areaLabels) {
+      const d = Math.hypot(a.x - tx, a.y - ty);
+      if (d < bestD) { bestD = d; best = a.name; }
     }
-    return found;
+    return best;
   }
 }
 
-// 미니맵·전체지도용 저해상도 그림. 시작할 때 한 번만 만든다.
 // 지형색이 아니라 지도 기호색 코드(MAP_KIND)를 담는다.
 export function buildOverview(map, scale) {
   const w = Math.ceil(WORLD_W / scale), h = Math.ceil(WORLD_H / scale);

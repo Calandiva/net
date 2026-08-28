@@ -273,7 +273,7 @@ export function wallHeight(b) {
 // 같은 종류라도 채마다 파사드·차양·옥상 구조물이 달라진다.
 function pickStyle(b, rng) {
   const tall = b.floors >= 8;
-  const wide = b.w >= 10;
+  const wide = b.sw >= 10;
   return {
     facade: rng.pick(tall ? ['glass', 'glass', 'grid'] : ['grid', 'tile', 'glass']),
     awning: (b.kind === KIND.SHOP || b.kind === KIND.MART) && rng.chance(0.55),
@@ -295,11 +295,11 @@ function pickStyle(b, rng) {
 // 건물 한 채를 통째로 그린 캔버스. 아래 끝이 건물 남쪽 벽에 맞는다.
 export function buildingSprite(b) {
   const wh = wallHeight(b);
-  const key = `${b.kind}|${b.w}|${b.h}|${b.floors}|${b.seed}|${b.door.dir}`;
+  const key = `${b.kind}|${b.sw}|${b.sh}|${b.floors}|${b.seed}|${b.door.dir}`;
   let hit = buildingCache.get(key);
   if (hit) return hit;
 
-  const pw = b.w * S, ph = b.h * S + wh;
+  const pw = b.sw * S, ph = b.sh * S + wh;
   const { canvas, ctx } = makeCanvas(pw, ph);
   let col = BUILDING_COLOR[b.kind] || BUILDING_COLOR[KIND.SHOP];
   // 비닐하우스는 흰 비닐이 씌워져 있다
@@ -312,7 +312,7 @@ export function buildingSprite(b) {
   const wall = shade(col.wall, rng.range(-0.10, 0.10));
   const roof = shade(col.roof, rng.range(-0.12, 0.12));
   const trim = col.trim;
-  const roofH = b.h * S;
+  const roofH = b.sh * S;
 
   // 옥상
   px(ctx, 0, 0, pw, roofH, roof);
@@ -341,6 +341,36 @@ export function buildingSprite(b) {
 
 function drawRoofDetail(ctx, b, pw, roofH, roof, trim, col, rng, style) {
   const dark = shade(roof, -0.16), light = shade(roof, 0.12);
+  // 넓은 지붕은 그냥 두면 회색 판때기로 보인다 — 패널 이음선과 설비를 깐다
+  if (pw > 150 || roofH > 150) {
+    const seam = shade(roof, -0.07);
+    for (let x = 24; x < pw - 8; x += 24) px(ctx, x, 2, 1, roofH - 4, seam);
+    for (let y = 24; y < roofH - 8; y += 24) px(ctx, 2, y, pw - 4, 1, seam);
+    // 옥상 설비 — 몇 무리로 뭉쳐 놓는다
+    const groups = Math.max(2, Math.floor((pw * roofH) / 26000));
+    for (let g = 0; g < groups; g++) {
+      const gx = rng.int(8, Math.max(9, pw - 60));
+      const gy = rng.int(6, Math.max(7, roofH - 40));
+      const cols = rng.int(2, 4), rows = rng.int(1, 3);
+      for (let cx2 = 0; cx2 < cols; cx2++) {
+        for (let cy2 = 0; cy2 < rows; cy2++) {
+          const ux = gx + cx2 * 13, uy = gy + cy2 * 12;
+          if (ux + 10 > pw - 4 || uy + 9 > roofH - 4) continue;
+          px(ctx, ux, uy, 10, 9, shade(roof, -0.26));
+          px(ctx, ux + 1, uy + 1, 8, 4, shade(roof, 0.14));
+          px(ctx, ux + 1, uy + 8, 8, 1, shade(roof, -0.36));
+        }
+      }
+    }
+    // 채광창 줄
+    if (rng.chance(0.7)) {
+      const sy = Math.floor(roofH * rng.range(0.3, 0.7));
+      for (let x = 16; x < pw - 20; x += 34) px(ctx, x, sy, 22, 7, shade('#bcd6e2', rng.range(-0.1, 0.1)));
+    }
+    // 난간
+    px(ctx, 1, 1, pw - 2, 3, light);
+    px(ctx, 1, roofH - 4, pw - 2, 3, dark);
+  }
   switch (b.kind) {
     case KIND.APARTMENT: case KIND.TOWER: {
       // 옥상 난간
@@ -490,7 +520,7 @@ function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng, style) {
   if (b.kind === KIND.APARTMENT) {
     return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng, style);
   }
-  if (b.kind === KIND.FARMHOUSE && b.w < 6) return;
+  if (b.kind === KIND.FARMHOUSE && b.sw < 6) return;
   const glass = shade(col.accent, rng.range(-0.05, 0.1));
 
   // 창고·공장 앞면은 하역 도크 셔터가 늘어선다

@@ -4,7 +4,7 @@
 export const ENCOUNTERS_DEEP = [
   {
     id: 'alien', name: '들판에 내려앉은 것', icon: 'ufo',
-    at: { lon: 126.6042, lat: 37.6386 },
+    at: { lon: 126.6050, lat: 37.6300 },
     intro: ['논 가운데에 사람 키만 한 것이 서 있다. 사람은 아니다.',
       '이쪽을 향해 팔 같은 것을 천천히 들어 보인다.',
       '기다리는 것 같다.'],
@@ -40,9 +40,9 @@ export const ENCOUNTERS_DEEP = [
     ],
   },
   {
-    id: 'kaiju', name: '갯벌에서 올라온 것', icon: 'kaiju',
-    at: { lon: 126.5934, lat: 37.6418 },
-    intro: ['둑 너머에서 뭔가 아주 큰 것이 몸을 일으킨다.',
+    id: 'kaiju', name: '유수지에서 올라온 것', icon: 'kaiju',
+    at: { lon: 126.6120, lat: 37.6100 },
+    intro: ['수문 너머에서 뭔가 아주 큰 것이 몸을 일으킨다.',
       '물이 한꺼번에 밀려 둑을 때린다.',
       '사이렌은 아직 울리지 않는다.'],
     outcomes: [
@@ -74,8 +74,8 @@ export const ENCOUNTERS_DEEP = [
   },
   {
     id: 'bunker', name: '지하 통로 끝의 문', icon: 'door',
-    at: { place: '학운2일반산업단지 폐수처리장', floor: 1, slot: 8 },
-    intro: ['처리조 뒤로 아래로 내려가는 계단이 있다. 도면에는 없는 층이다.',
+    at: { place: '한양정밀', floor: 1, slot: 8 },
+    intro: ['공장 뒤로 아래로 내려가는 계단이 있다. 도면에는 없는 층이다.',
       '끝에 두꺼운 문이 있고, 옆에 카드 리더와 손잡이가 있다.',
       '문 너머에서 아주 낮은 소리가 계속 난다.'],
     outcomes: [
@@ -112,7 +112,7 @@ export const ENCOUNTERS_DEEP = [
   },
   {
     id: 'army', name: '갑자기 생긴 검문소', icon: 'gate',
-    at: { lon: 126.6086, lat: 37.6428 },
+    at: { lon: 126.6135, lat: 37.6155 },
     intro: ['산단 진입로에 어제 없던 초소와 차단기가 있다.',
       '군복 입은 사람들이 신분증을 확인하고 있다.',
       '"오늘 이 구간은 통제입니다."'],
@@ -145,7 +145,7 @@ export const ENCOUNTERS_DEEP = [
   },
   {
     id: 'agent', name: '수첩을 든 사람', icon: 'note',
-    at: { lon: 126.6152, lat: 37.6366 },
+    at: { lon: 126.6180, lat: 37.6220 },
     intro: ['정장 차림 한 사람이 논둑에 서서 수첩에 뭔가 적고 있다.',
       '"혹시 오늘 아침에 이상한 거 보셨어요?"',
       '어디 소속인지는 말하지 않는다.'],
@@ -178,7 +178,7 @@ export const ENCOUNTERS_DEEP = [
   },
   {
     id: 'balloon-sky', name: '하늘에 걸린 것', icon: 'ufo',
-    at: { lon: 126.6206, lat: 37.6528 },
+    at: { lon: 126.6300, lat: 37.6520 },
     intro: ['하늘 높이 흰 것이 하나 떠 있다. 구름은 아니다.',
       '몇 시간째 같은 자리에 있다.'],
     outcomes: [
@@ -206,7 +206,7 @@ export const ENCOUNTERS_DEEP = [
   },
   {
     id: 'factory-line', name: '멈춘 라인과 쏟아진 화물', icon: 'boxes',
-    at: { place: '학운5일반산업단지 공동물류창고', floor: 1, slot: 6 },
+    at: { place: '메카존', floor: 1, slot: 6 },
     intro: ['컨베이어가 멈춰 있고 상자가 통로를 덮었다.',
       '한 사람이 그 앞에 주저앉아 있다. 다친 데는 없어 보인다.'],
     outcomes: [

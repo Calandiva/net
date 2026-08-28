@@ -247,21 +247,31 @@ export class Scene {
     const wh = wallHeight(b);
     // 출입구 발판은 건물보다 먼저 (땅에 깔린 것)
     ctx.drawImage(doorMatSprite(), b.door.x * S, b.door.y * S);
+    // 건물은 길을 따라 기울어 앉아 있다 — 중심에서 돌려 그린다
+    const pw = b.sw * S, phRoof = b.sh * S;
+    ctx.save();
+    ctx.translate(b.cx * S, b.cy * S);
+    if (b.rad) ctx.rotate(b.rad);
     ctx.globalAlpha = RENDER.shadowAlpha * alpha;
     ctx.fillStyle = '#000000';
-    ctx.fillRect(b.x * S + 2, (b.y + b.h) * S - 2, b.w * S, 4);
+    ctx.fillRect(-pw / 2 + 2, phRoof / 2 - 2, pw, 4);
     ctx.globalAlpha = alpha;
-    ctx.drawImage(sprite, b.x * S, b.y * S - wh);
+    ctx.drawImage(sprite, -pw / 2, -phRoof / 2 - wh);
+    ctx.restore();
     // 반투명해진 건물은 윤곽선을 남겨 어디까지가 건물인지 알 수 있게 한다
     if (alpha < 0.95) {
       const edge = (1 - alpha);
+      ctx.save();
+      ctx.translate(b.cx * S, b.cy * S);
+      if (b.rad) ctx.rotate(b.rad);
       ctx.globalAlpha = edge * 0.9;
       ctx.strokeStyle = UI_COLOR.labelShadow;
       ctx.lineWidth = 1;
-      ctx.strokeRect(b.x * S + 0.5, b.y * S - wh + 0.5, b.w * S - 1, b.h * S + wh - 1);
+      ctx.strokeRect(-pw / 2 + 0.5, -phRoof / 2 - wh + 0.5, pw - 1, phRoof + wh - 1);
       ctx.globalAlpha = edge * 0.5;
       ctx.strokeStyle = UI_COLOR.label;
-      ctx.strokeRect(b.x * S + 1.5, b.y * S - wh + 1.5, b.w * S - 3, b.h * S + wh - 3);
+      ctx.strokeRect(-pw / 2 + 1.5, -phRoof / 2 - wh + 1.5, pw - 3, phRoof + wh - 3);
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }

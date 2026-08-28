@@ -25,8 +25,8 @@ export function makeInterior(b, floor) {
   const small = b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE;
   const minW = small ? 13 : INTERIOR.minW;
   const minH = small ? 11 : INTERIOR.minH;
-  const w = clampInt(Math.round(b.w * INTERIOR.scale), minW, INTERIOR.maxW);
-  const h = clampInt(Math.round(b.h * INTERIOR.scale), minH, INTERIOR.maxH);
+  const w = clampInt(Math.round(b.sw * INTERIOR.scale), minW, INTERIOR.maxW);
+  const h = clampInt(Math.round(b.sh * INTERIOR.scale), minH, INTERIOR.maxH);
   const tiles = new Uint8Array(w * h).fill(IN.FLOOR);
   const at = (x, y) => y * w + x;
   const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < w && y < h) tiles[at(x, y)] = v; };

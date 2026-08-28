@@ -226,7 +226,7 @@ function drawHelp(ctx, W, H, touch) {
     ['다시 시작', 'R (결말 화면에서)'],
   ];
   const boxW = Math.min(420, W - 48);
-  const boxH = lines.length * 26 + 150;
+  const boxH = lines.length * 26 + 174;
   const x = (W - boxW) / 2;
   const y = Math.max(20, (H - boxH) / 2);
   panel(ctx, x, y, boxW, boxH);
@@ -245,6 +245,10 @@ function drawHelp(ctx, W, H, touch) {
   }
   drawText(ctx, touch ? '화면을 눌러 시작' : '아무 키나 눌러 시작 · H 도움말', x + boxW / 2, ly + 16,
     { size: 12, align: 'center', color: UI_COLOR.textDim });
+  // 지도 데이터 출처 (ODbL 이므로 반드시 밝힌다)
+  drawText(ctx, '지형·도로·건물: © OpenStreetMap 기여자 · Overture Maps (ODbL)',
+    x + boxW / 2, ly + 38,
+    { size: 10, align: 'center', color: 'rgba(255,255,255,0.42)', shadow: false });
 }
 
 // 목적지가 화면 밖에 있으면 가장자리에, 안에 있으면 그 자리에 표시한다.

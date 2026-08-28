@@ -4,7 +4,7 @@
 export const ENCOUNTERS_NATURE = [
   {
     id: 'ritual', name: '가현산 중턱의 사람들', icon: 'fire',
-    at: { lon: 126.6172, lat: 37.6206 },
+    at: { lon: 126.6520, lat: 37.6240 },
     intro: ['흰옷 입은 사람 예닐곱이 둥글게 서서 같은 말을 반복하고 있다.',
       '가운데에 돌무더기가 있고, 그 위에 아무것도 없다.',
       '한 사람이 눈을 뜨고 이쪽을 본다. "왔네."'],
@@ -37,7 +37,7 @@ export const ENCOUNTERS_NATURE = [
   },
   {
     id: 'boar', name: '길을 막은 멧돼지', icon: 'animal',
-    at: { lon: 126.6158, lat: 37.6252 },
+    at: { lon: 126.6480, lat: 37.6270 },
     intro: ['등산로 한가운데 멧돼지 한 마리가 서 있다.',
       '이쪽을 보고 있지만 달려오지는 않는다.'],
     outcomes: [
@@ -69,7 +69,7 @@ export const ENCOUNTERS_NATURE = [
   },
   {
     id: 'bugs', name: '벌레 떼', icon: 'bug',
-    at: { lon: 126.6204, lat: 37.6338 },
+    at: { lon: 126.6270, lat: 37.6280 },
     intro: ['공기 중에 검은 점이 가득하다. 붙었다 떨어졌다 한다.',
       '지나가던 사람이 손을 휘저으며 뛰어간다.'],
     outcomes: [
@@ -101,7 +101,7 @@ export const ENCOUNTERS_NATURE = [
   },
   {
     id: 'dog', name: '목줄 없는 개', icon: 'animal',
-    at: { lon: 126.6222, lat: 37.6382 },
+    at: { lon: 126.6240, lat: 37.6300 },
     intro: ['논둑에 개 한 마리가 앉아 있다. 목에 줄자국이 있다.',
       '도망가지도, 다가오지도 않는다.'],
     outcomes: [
@@ -129,7 +129,7 @@ export const ENCOUNTERS_NATURE = [
   },
   {
     id: 'fish', name: '낚시터의 커다란 것', icon: 'fish',
-    at: { lon: 126.6130, lat: 37.6294 },
+    at: { lon: 126.6394, lat: 37.6299 },
     intro: ['수면이 한 번 크게 부풀었다 가라앉는다.',
       '낚시터 주인이 담배를 끄며 말한다. "저거 십 년째 못 잡았어요."'],
     outcomes: [
@@ -157,7 +157,7 @@ export const ENCOUNTERS_NATURE = [
   },
   {
     id: 'crop-circle', name: '논에 눌린 무늬', icon: 'circle',
-    at: { lon: 126.6086, lat: 37.6350 },
+    at: { lon: 126.6100, lat: 37.6250 },
     intro: ['벼가 원 모양으로 눕혀져 있다. 지름이 이십 미터쯤 된다.',
       '가장자리는 자로 그은 것처럼 반듯하다.'],
     outcomes: [
@@ -188,25 +188,25 @@ export const ENCOUNTERS_NATURE = [
     ],
   },
   {
-    id: 'heron', name: '한강 하구의 새 떼', icon: 'bird',
-    at: { lon: 126.5962, lat: 37.6486 },
-    intro: ['둑 너머 갯벌에 큰 새들이 내려앉아 있다.',
+    id: 'heron', name: '들판의 새 떼', icon: 'bird',
+    at: { lon: 126.6020, lat: 37.6180 },
+    intro: ['수로 건너 논에 큰 새들이 내려앉아 있다.',
       '한 사람이 삼각대를 세워 두고 숨죽이고 있다.'],
     outcomes: [
       { item: 'binoculars', title: '재두루미', tag: 'true',
         lines: ['쌍안경을 들자 목에 회색 띠가 보였다.',
-          '"재두루미예요. 여기까지 오는 건 드물어요." 옆 사람이 속삭였다.',
+          '"재두루미예요. 이 논에 오는 건 드물어요." 옆 사람이 속삭였다.',
           '이십 분을 그렇게 서 있었다. 회사에는 늦었다.'] },
       { item: 'tripod', title: '삼각대를 빌려줬다', tag: 'good',
         lines: ['들고 있던 삼각대를 옆 사람에게 넘겼다.',
           '그 사람은 사진 한 장을 찍고 오래 아무 말도 안 했다.',
           '연락처를 받았다. 사진은 아직 안 왔다.'] },
       { item: 'net', title: '망을 들었더니', tag: 'bad',
-        lines: ['포충망을 들고 둑에 올라섰다.',
+        lines: ['포충망을 들고 논둑에 올라섰다.',
           '새들이 한꺼번에 날았다. 소리가 바람 같았다.',
           '옆 사람이 삼각대를 접으며 말했다. "…축하해요."'] },
       { item: 'seeds', title: '씨앗을 뿌렸다', tag: 'odd',
-        lines: ['둑 아래로 씨앗을 조금 뿌렸다.',
+        lines: ['논둑 아래로 씨앗을 조금 뿌렸다.',
           '새들은 쳐다보지도 않았다. 먹는 게 아니었다.',
           '대신 참새가 왔다. 그것도 나쁘지 않았다.'] },
       { item: null, title: '숨을 죽였다', tag: 'good',

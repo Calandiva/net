@@ -7,7 +7,7 @@
 export const ENCOUNTERS_CITY = [
   {
     id: 'bar', name: '아침부터 문을 연 술집', icon: 'door',
-    at: { lon: 126.6296, lat: 37.6447 },
+    at: { near: '구래역', dx: -12, dy: 9 },
     intro: ['셔터가 반만 올라가 있다. 안에서 사람 소리가 난다.',
       '"들어와요. 어차피 오늘 아무도 안 와."'],
     outcomes: [
@@ -103,7 +103,7 @@ export const ENCOUNTERS_CITY = [
   },
   {
     id: 'apart-elevator', name: '멈춘 엘리베이터', icon: 'alarm',
-    at: { lon: 126.6338, lat: 37.6462 },
+    at: { near: '김포 한강 아이파크 아파트', dx: 4, dy: 6 },
     intro: ['1층 홀에 사람들이 모여 있다. 엘리베이터가 층 사이에 섰다.',
       '안에서 문 두드리는 소리가 난다.'],
     outcomes: [
@@ -135,7 +135,7 @@ export const ENCOUNTERS_CITY = [
   },
   {
     id: 'fire', name: '상가 3층에서 나는 연기', icon: 'fire',
-    at: { lon: 126.6274, lat: 37.6428 },
+    at: { near: '두원타워', dx: -14, dy: 10 },
     intro: ['상가 3층 창문으로 흰 연기가 새어 나온다.',
       '아래에서 사람들이 올려다보고만 있다.'],
     outcomes: [
@@ -167,7 +167,7 @@ export const ENCOUNTERS_CITY = [
   },
   {
     id: 'school-roof', name: '옥상 난간 위의 아이들', icon: 'alarm',
-    at: { place: '김포한가람중학교', floor: 4, slot: 3 },
+    at: { place: '한가람중학교', floor: 4, slot: 3 },
     intro: ['옥상 문이 열려 있다. 아이 둘이 난간에 앉아 발을 흔들고 있다.',
       '"저희 안 떨어져요. 여기 자주 와요."'],
     outcomes: [
@@ -227,7 +227,7 @@ export const ENCOUNTERS_CITY = [
   },
   {
     id: 'sinkhole', name: '공터에 생긴 구멍', icon: 'hole',
-    at: { lon: 126.6244, lat: 37.6414 },
+    at: { near: '메가박스 김포한강신도시', dx: 18, dy: 14 },
     intro: ['공터 한가운데 지름 2미터쯤 되는 구멍이 있다.',
       '어제까지는 없던 것이다. 안은 보이지 않는다.'],
     outcomes: [
