@@ -4,3 +4,5 @@ __pycache__/
 node_modules/
 sy/tools/osm-cache.json
 sy/tools/overture-cache/
+package.json
+package-lock.json
