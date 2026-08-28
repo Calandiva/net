@@ -340,6 +340,7 @@ const __M = Object.create(null);
   // ── 게임 규칙 ───────────────────────────────────────────────────────────
   // 구래동에서 출발해 양촌공단에 닿으면 끝난다. 도중에 무엇을 건드렸느냐로 결말이 갈린다.
   const GAME = {
+    noticeEncounter: 220,             // 사건이 이만큼(픽셀) 가까우면 귀띔한다
     startClock: 8 * 3600 + 10 * 60,  // 시작 시각 08:10
     deadline: 9 * 3600,              // 이 시각을 넘기면 지각
     timeScale: 6,                    // 실제 1초 = 게임 6초
@@ -6995,7 +6996,7 @@ const __M = Object.create(null);
     if (state.prompt && !state.dialogue) {   // 말하는 중에는 안내를 감춘다
       const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
       const w = textWidth(ctx, text, 14) + 36;
-      const py = state.isTouch ? H - 176 : H - 76;   // 터치 버튼과 겹치지 않게 위로
+      const py = state.isTouch ? H - 240 : H - 76;   // 터치 버튼 위로 (버튼과 겹치지 않게)
       panel(ctx, (W - w) / 2, py, w, 34);
       drawText(ctx, text, W / 2, py + 22, { size: 14, align: 'center' });
     }
@@ -7007,7 +7008,7 @@ const __M = Object.create(null);
     drawWaypointMarker(ctx, state, W, H);
 
     // ── 알림 ─────────────────────────────────────────────────
-    let y = state.isTouch ? H - 210 : H - 110;
+    let y = state.isTouch ? H - 268 : H - 110;
     for (const t of state.toasts) {
       const alpha = Math.min(1, t.life / 0.5);
       ctx.globalAlpha = alpha;
@@ -7031,7 +7032,7 @@ const __M = Object.create(null);
   // 손에 든 것 한 칸. 없으면 어디서 얻는지 알려 준다.
   function drawHeldItem(ctx, state, W, H) {
     const id = state.game.item;
-    const x = 12, y = 74;
+    const x = 12, y = state.isTouch ? 138 : 74;   // 터치에서는 도움말 버튼 아래
     const item = id ? ITEM_BY_ID.get(id) : null;
     const label = item ? item.name : '맨손';
     const w = Math.max(126, textWidth(ctx, label, 13) + 60);
@@ -7124,8 +7125,8 @@ const __M = Object.create(null);
     // 지금 보고 있는 범위 (축척) — 지도 밑에 한 줄로
     const spanM = (size / zoom) * scale * GEO.metersPerTile;
     const spanText = spanM >= 1000 ? `${(spanM / 1000).toFixed(1)}km` : `${Math.round(spanM / 10) * 10}m`;
-    drawText(ctx, `가로 ${spanText} · ${state.isTouch ? '눌러 지도' : '클릭 지도 · [ ] 축척'}`,
-      x + size / 2, y + size + 15,
+    drawText(ctx, state.isTouch ? `가로 ${spanText}` : `가로 ${spanText} · 클릭 지도 · [ ] 축척`,
+      x + size / 2, y + size + 14,
       { size: 10, align: 'center', color: UI_COLOR.textDim });
   }
 
@@ -9037,7 +9038,7 @@ const __M = Object.create(null);
     // 고를 게 있으면 그 높이만큼 위로 올린다 (화면 밖으로 나가지 않게)
     const last = d.index >= d.lines.length - 1;
     const extra = (d.choices && last) ? d.choices.length * 30 + 10 : 0;
-    const y = H - boxH - extra - (state.isTouch ? 150 : 60);
+    const y = H - boxH - extra - (state.isTouch ? 210 : 60);
 
     panel(ctx, x, y, boxW, boxH);
     // 말하는 사람
@@ -9235,7 +9236,7 @@ const __M = Object.create(null);
         // 도움말은 왼쪽 위 시계판(높이 54) 아래에 둔다
         { id: 'help', label: '?', x: m + 22, y: 12 + 54 + 12 + 22, r: 24 },
         // 전체화면은 오른쪽, 미니맵 아래 (DOM 버튼은 터치에서 감춘다 — 만지기와 겹쳤다)
-        { id: 'fs', label: '⛶', x: W - m - 22, y: 12 + 54 + 12 + 130, r: 24 },
+        { id: 'fs', label: '⛶', x: W - m - 22, y: 12 + 54 + 12 + 156, r: 24 },
       ];
     }
 
@@ -9739,6 +9740,7 @@ const __M = Object.create(null);
       });
       cam.follow(state.player.x, state.player.y, dt);
       checkCarHit();
+      noticeEncounter();
       updatePlaceName();
       noticeOutdoorEvent();
       checkGoal();
@@ -10276,6 +10278,20 @@ const __M = Object.create(null);
     stopAutoWalk();
     toast('차에 치였다. 다리를 절며 걷는다.');
     toast('두원타워 3층에 병원이 있다.');
+  }
+
+  // 사건이 가까우면 한 번만 귀띔한다 (어디 있는지는 말해 주지 않는다)
+  const noticedEncounters = new Set();
+  function noticeEncounter() {
+    const p = state.player;
+    for (const g of state.outdoorGizmos) {
+      if (!g.encounter || noticedEncounters.has(g.id)) continue;
+      const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+      if (d > GAME.noticeEncounter) continue;
+      noticedEncounters.add(g.id);
+      toast('저쪽에 뭔가 있다.');
+      break;
+    }
   }
 
   // ── 결말 ────────────────────────────────────────────────────────────────

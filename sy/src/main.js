@@ -385,6 +385,7 @@ function update(dt) {
     });
     cam.follow(state.player.x, state.player.y, dt);
     checkCarHit();
+    noticeEncounter();
     updatePlaceName();
     noticeOutdoorEvent();
     checkGoal();
@@ -922,6 +923,20 @@ function checkCarHit() {
   stopAutoWalk();
   toast('차에 치였다. 다리를 절며 걷는다.');
   toast('두원타워 3층에 병원이 있다.');
+}
+
+// 사건이 가까우면 한 번만 귀띔한다 (어디 있는지는 말해 주지 않는다)
+const noticedEncounters = new Set();
+function noticeEncounter() {
+  const p = state.player;
+  for (const g of state.outdoorGizmos) {
+    if (!g.encounter || noticedEncounters.has(g.id)) continue;
+    const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+    if (d > GAME.noticeEncounter) continue;
+    noticedEncounters.add(g.id);
+    toast('저쪽에 뭔가 있다.');
+    break;
+  }
 }
 
 // ── 결말 ────────────────────────────────────────────────────────────────

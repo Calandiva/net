@@ -60,7 +60,7 @@ export function drawHud(ctx, state) {
   if (state.prompt && !state.dialogue) {   // 말하는 중에는 안내를 감춘다
     const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
     const w = textWidth(ctx, text, 14) + 36;
-    const py = state.isTouch ? H - 176 : H - 76;   // 터치 버튼과 겹치지 않게 위로
+    const py = state.isTouch ? H - 240 : H - 76;   // 터치 버튼 위로 (버튼과 겹치지 않게)
     panel(ctx, (W - w) / 2, py, w, 34);
     drawText(ctx, text, W / 2, py + 22, { size: 14, align: 'center' });
   }
@@ -72,7 +72,7 @@ export function drawHud(ctx, state) {
   drawWaypointMarker(ctx, state, W, H);
 
   // ── 알림 ─────────────────────────────────────────────────
-  let y = state.isTouch ? H - 210 : H - 110;
+  let y = state.isTouch ? H - 268 : H - 110;
   for (const t of state.toasts) {
     const alpha = Math.min(1, t.life / 0.5);
     ctx.globalAlpha = alpha;
@@ -96,7 +96,7 @@ export function drawHud(ctx, state) {
 // 손에 든 것 한 칸. 없으면 어디서 얻는지 알려 준다.
 function drawHeldItem(ctx, state, W, H) {
   const id = state.game.item;
-  const x = 12, y = 74;
+  const x = 12, y = state.isTouch ? 138 : 74;   // 터치에서는 도움말 버튼 아래
   const item = id ? ITEM_BY_ID.get(id) : null;
   const label = item ? item.name : '맨손';
   const w = Math.max(126, textWidth(ctx, label, 13) + 60);
@@ -189,8 +189,8 @@ function drawMinimap(ctx, state, H, W) {
   // 지금 보고 있는 범위 (축척) — 지도 밑에 한 줄로
   const spanM = (size / zoom) * scale * GEO.metersPerTile;
   const spanText = spanM >= 1000 ? `${(spanM / 1000).toFixed(1)}km` : `${Math.round(spanM / 10) * 10}m`;
-  drawText(ctx, `가로 ${spanText} · ${state.isTouch ? '눌러 지도' : '클릭 지도 · [ ] 축척'}`,
-    x + size / 2, y + size + 15,
+  drawText(ctx, state.isTouch ? `가로 ${spanText}` : `가로 ${spanText} · 클릭 지도 · [ ] 축척`,
+    x + size / 2, y + size + 14,
     { size: 10, align: 'center', color: UI_COLOR.textDim });
 }
 

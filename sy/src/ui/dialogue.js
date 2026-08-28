@@ -16,7 +16,7 @@ export function drawDialogue(ctx, state) {
   // 고를 게 있으면 그 높이만큼 위로 올린다 (화면 밖으로 나가지 않게)
   const last = d.index >= d.lines.length - 1;
   const extra = (d.choices && last) ? d.choices.length * 30 + 10 : 0;
-  const y = H - boxH - extra - (state.isTouch ? 150 : 60);
+  const y = H - boxH - extra - (state.isTouch ? 210 : 60);
 
   panel(ctx, x, y, boxW, boxH);
   // 말하는 사람
