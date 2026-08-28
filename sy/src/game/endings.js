@@ -1,3 +1,5 @@
+import { encounterEndings } from './encounters.js';
+
 // 결말. 위에 있는 것부터 검사해서 처음 맞는 하나가 그 판의 결말이 된다.
 //
 // when: 'any'  건드린 순간 바로 끝난다
@@ -251,16 +253,22 @@ export const ENDINGS = [
   },
 ];
 
+// 사건에서 나오는 결말들을 앞에 붙인다.
+// (사건 결말은 그 자리에서 바로 끝나므로 먼저 본다)
+const ALL_ENDINGS = encounterEndings().concat(ENDINGS);
+
+export const ENDING_LIST = ALL_ENDINGS;
+
 // 상태에 맞는 결말 하나 (없으면 null)
 export function evaluateEnding(state, where) {
-  for (const e of ENDINGS) {
+  for (const e of ALL_ENDINGS) {
     if (where !== 'goal' && e.when !== 'any') continue; // 도착 전에는 즉시 결말만 본다
     if (e.test(state)) return e;
   }
   return null;
 }
 
-export const ENDING_COUNT = ENDINGS.length;
+export const ENDING_COUNT = ALL_ENDINGS.length;
 
 // 태그별 색 (엔딩 화면·목록에서 쓴다)
 export const TAG_COLOR = {

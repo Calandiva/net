@@ -1104,6 +1104,90 @@ export function gizmoSprite(icon, active) {
       px(ctx, 4, 10, 8, 2, '#b8923a');
       px(ctx, 7, 12, 2, 2, '#8a6a24');
       break;
+    // ── 사건 표시 ──────────────────────────────────────────────
+    case 'fire':
+      px(ctx, 6, 10, 4, 4, '#e2554a');
+      px(ctx, 5, 6, 6, 5, '#e2884a');
+      px(ctx, 7, 3, 3, 4, '#f2c14e');
+      break;
+    case 'ufo':
+      px(ctx, 5, 4, 6, 3, '#a8c8f0');
+      px(ctx, 2, 7, 12, 3, '#8a919c');
+      px(ctx, 4, 10, 2, 2, '#f2c14e');
+      px(ctx, 10, 10, 2, 2, '#f2c14e');
+      break;
+    case 'kaiju':
+      px(ctx, 4, 6, 8, 7, '#5a7a5e');
+      px(ctx, 6, 3, 4, 4, '#5a7a5e');
+      px(ctx, 6, 4, 1, 1, '#f2c14e');
+      px(ctx, 9, 4, 1, 1, '#f2c14e');
+      px(ctx, 3, 9, 2, 4, '#4a6a4e');
+      px(ctx, 11, 9, 2, 4, '#4a6a4e');
+      break;
+    case 'bug':
+      px(ctx, 6, 5, 4, 7, '#2f2a30');
+      px(ctx, 3, 6, 3, 2, '#4a4450');
+      px(ctx, 10, 6, 3, 2, '#4a4450');
+      px(ctx, 7, 3, 2, 2, '#c04a4a');
+      break;
+    case 'animal':
+      px(ctx, 4, 7, 9, 5, '#7a6a54');
+      px(ctx, 11, 5, 3, 3, '#7a6a54');
+      px(ctx, 3, 8, 1, 4, '#5a4a34');
+      px(ctx, 12, 6, 1, 1, '#20202a');
+      break;
+    case 'fish':
+      px(ctx, 4, 7, 8, 4, '#6a8faa');
+      px(ctx, 12, 6, 2, 6, '#4a6f8a');
+      px(ctx, 6, 8, 1, 1, '#20202a');
+      break;
+    case 'bird':
+      px(ctx, 6, 6, 5, 6, '#e8e4dc');
+      px(ctx, 8, 3, 2, 4, '#e8e4dc');
+      px(ctx, 10, 4, 2, 1, '#f2c14e');
+      px(ctx, 7, 12, 1, 2, '#8a8477');
+      break;
+    case 'circle':
+      px(ctx, 3, 7, 10, 1, '#b8a86a');
+      px(ctx, 5, 5, 6, 1, '#b8a86a');
+      px(ctx, 5, 10, 6, 1, '#b8a86a');
+      px(ctx, 3, 8, 1, 2, '#b8a86a');
+      px(ctx, 12, 8, 1, 2, '#b8a86a');
+      break;
+    case 'hole':
+      px(ctx, 3, 6, 10, 7, '#2a2620');
+      px(ctx, 4, 5, 8, 2, '#5a5044');
+      break;
+    case 'train':
+      px(ctx, 4, 3, 8, 9, '#8fa8c0');
+      px(ctx, 5, 5, 6, 3, '#2a3038');
+      px(ctx, 5, 12, 2, 2, '#3a3a44');
+      px(ctx, 9, 12, 2, 2, '#3a3a44');
+      break;
+    case 'screen':
+      px(ctx, 2, 4, 12, 8, '#e8e8ee');
+      px(ctx, 3, 5, 10, 6, '#7a90a8');
+      break;
+    case 'alarm':
+      px(ctx, 4, 6, 8, 6, '#e2554a');
+      px(ctx, 7, 3, 2, 3, '#8a919c');
+      px(ctx, 6, 8, 4, 2, '#f2eddc');
+      break;
+    case 'gate':
+      px(ctx, 2, 11, 12, 2, '#5a5f68');
+      px(ctx, 3, 4, 2, 8, '#8a919c');
+      px(ctx, 5, 6, 9, 2, '#e2554a');
+      break;
+    case 'boxes':
+      px(ctx, 3, 8, 6, 5, '#b08a5a');
+      px(ctx, 9, 6, 5, 7, '#c99a68');
+      px(ctx, 4, 5, 5, 3, '#c99a68');
+      break;
+    case 'door':
+      px(ctx, 4, 2, 9, 12, '#7a5f44');
+      px(ctx, 5, 3, 7, 10, '#a8825c');
+      px(ctx, 10, 8, 1, 2, '#f2c14e');
+      break;
     default:
       px(ctx, 4, 4, 8, 8, body);
       px(ctx, 6, 6, 4, 4, active ? '#8fc48a' : '#e2554a');
@@ -1113,10 +1197,75 @@ export function gizmoSprite(icon, active) {
   return hit;
 }
 
+// ── 아이템 그림 ─────────────────────────────────────────────────────────
+// 종류(icon)별로 한 가지씩. 색만 아이템 이름 해시로 조금씩 달라진다.
+const itemCache = new Map();
+export function itemSprite(icon, tint) {
+  const key = icon + '|' + tint;
+  let hit = itemCache.get(key);
+  if (hit) return hit;
+  const { canvas, ctx } = makeCanvas(S, S);
+  const c = tint || '#c8c4bc';
+  switch (icon) {
+    case 'cylinder':      // 소화기·보온병·캔
+      px(ctx, 5, 4, 6, 10, c);
+      px(ctx, 6, 2, 4, 2, '#8a919c');
+      px(ctx, 5, 7, 6, 2, '#00000033');
+      break;
+    case 'cloth':         // 장갑·안전모·장바구니
+      px(ctx, 3, 6, 10, 6, c);
+      px(ctx, 5, 4, 6, 2, c);
+      px(ctx, 3, 11, 10, 1, '#00000033');
+      break;
+    case 'stick':         // 우산·낚싯대·스틱·포충망
+      px(ctx, 7, 2, 2, 11, c);
+      px(ctx, 5, 12, 6, 2, '#5a5044');
+      px(ctx, 6, 2, 4, 2, '#8a919c');
+      break;
+    case 'device':        // 손전등·라디오·레이저·무전기
+      px(ctx, 4, 4, 8, 9, '#3d4450');
+      px(ctx, 5, 5, 6, 3, c);
+      px(ctx, 6, 10, 4, 1, '#8a919c');
+      break;
+    case 'food':          // 김밥·도토리·시식·팝콘
+      px(ctx, 4, 6, 8, 6, c);
+      px(ctx, 6, 8, 4, 2, '#f2eddc');
+      break;
+    case 'plant':         // 꽃·향
+      px(ctx, 7, 7, 2, 7, '#5a7a4e');
+      px(ctx, 5, 3, 6, 4, c);
+      px(ctx, 7, 4, 2, 2, '#f2eddc');
+      break;
+    case 'ball':          // 야구공·풍선
+      px(ctx, 5, 4, 6, 6, c);
+      px(ctx, 7, 10, 2, 4, '#8a8477');
+      break;
+    case 'paper':         // 부적·지도·표·씨앗봉지
+      px(ctx, 4, 3, 8, 11, '#f2eddc');
+      px(ctx, 6, 6, 4, 1, c);
+      px(ctx, 6, 8, 4, 1, c);
+      break;
+    case 'card':          // 출입카드
+      px(ctx, 3, 5, 10, 7, '#e8e8ee');
+      px(ctx, 4, 6, 4, 4, c);
+      px(ctx, 9, 7, 3, 1, '#8a919c');
+      break;
+    case 'metal':         // 열쇠·자석·건전지·삽
+      px(ctx, 5, 3, 6, 4, c);
+      px(ctx, 7, 7, 2, 7, '#8a919c');
+      break;
+    default:
+      px(ctx, 4, 4, 8, 8, c);
+  }
+  hit = canvas;
+  itemCache.set(key, hit);
+  return hit;
+}
+
 // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
 export function clearSpriteCaches() {
   groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
-  eventPropCache.clear();
+  eventPropCache.clear(); itemCache.clear();
   buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
   npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
 }

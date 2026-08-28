@@ -2,7 +2,7 @@
 
 import { UI } from '../config.js';
 import { UI_COLOR } from '../render/palette.js';
-import { ENDINGS, ENDING_COUNT, TAG_COLOR, TAG_LABEL } from '../game/endings.js';
+import { ENDING_LIST, ENDING_COUNT, TAG_COLOR, TAG_LABEL } from '../game/endings.js';
 import { drawText, textWidth, viewSize } from './labels.js';
 import { panel } from './hud.js';
 
@@ -54,45 +54,59 @@ export function drawEnding(ctx, state) {
     { size: 13, align: 'center', color: UI_COLOR.textDim });
 }
 
-// 지금까지 본 결말 목록
+// 지금까지 본 결말 목록. 결말이 많아 쪽으로 나눠 보여 준다.
 export function drawGallery(ctx, state) {
   const { w: W, h: H } = viewSize(ctx);
   const found = state.game.found;
 
   ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, `엔딩 ${found.size} / ${ENDING_COUNT}`, W / 2, 46,
-    { size: 22, align: 'center', bold: true });
-  drawText(ctx, '못 본 결말에는 힌트가 붙어 있다', W / 2, 68,
-    { size: 12, align: 'center', color: UI_COLOR.textDim });
 
   const cols = W >= 1000 ? 3 : W >= 680 ? 2 : 1;
-  const cardW = Math.min(320, (W - 60) / cols - 12);
-  const cardH = 54;
+  const cardW = Math.min(340, (W - 60) / cols - 12);
+  const cardH = 52;
   const startX = (W - (cardW * cols + 12 * (cols - 1))) / 2;
-  let top = 92;
-  const rows = Math.ceil(ENDINGS.length / cols);
-  const maxRows = Math.floor((H - top - 60) / (cardH + 8));
-  const scale = rows > maxRows ? (H - top - 60) / (rows * (cardH + 8)) : 1;
+  const top = 96;
+  const rowsPerPage = Math.max(1, Math.floor((H - top - 56) / (cardH + 8)));
+  const perPage = rowsPerPage * cols;
+  const pages = Math.max(1, Math.ceil(ENDING_LIST.length / perPage));
+  const page = Math.max(0, Math.min(pages - 1, state.galleryPage || 0));
+  state.galleryPage = page;
+  state.galleryPages = pages;
 
-  ENDINGS.forEach((e, i) => {
+  drawText(ctx, `엔딩 ${found.size} / ${ENDING_COUNT}`, W / 2, 46,
+    { size: 22, align: 'center', bold: true });
+  drawText(ctx, `${page + 1} / ${pages} 쪽 · 못 본 결말에는 어디서 무엇을 써야 하는지 적혀 있다`,
+    W / 2, 70, { size: 12, align: 'center', color: UI_COLOR.textDim });
+
+  const slice = ENDING_LIST.slice(page * perPage, (page + 1) * perPage);
+  slice.forEach((e, i) => {
     const col = i % cols, row = Math.floor(i / cols);
     const x = startX + col * (cardW + 12);
-    const y = top + row * (cardH + 8) * scale;
-    const h = cardH * scale;
+    const y = top + row * (cardH + 8);
     const got = found.has(e.id);
     ctx.fillStyle = got ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
-    ctx.fillRect(x, y, cardW, h);
+    ctx.fillRect(x, y, cardW, cardH);
     ctx.fillStyle = got ? TAG_COLOR[e.tag] : 'rgba(255,255,255,0.12)';
-    ctx.fillRect(x, y, 3, h);
-    drawText(ctx, e.id, x + 12, y + 20 * scale,
-      { size: 11 * scale, color: UI_COLOR.textDim, shadow: false });
-    drawText(ctx, got ? e.title : '？？？', x + 44, y + 21 * scale,
-      { size: 14 * scale, color: got ? UI_COLOR.text : UI_COLOR.textDim, shadow: false });
-    drawText(ctx, got ? e.lines[0] : e.hint, x + 12, y + 40 * scale,
-      { size: 11 * scale, color: got ? UI_COLOR.textDim : 'rgba(255,255,255,0.32)', shadow: false });
+    ctx.fillRect(x, y, 3, cardH);
+    drawText(ctx, fit(ctx, got ? e.title : '？？？', cardW - 20, 13), x + 12, y + 20,
+      { size: 13, color: got ? UI_COLOR.text : UI_COLOR.textDim, shadow: false });
+    drawText(ctx, fit(ctx, got ? e.lines[0] : e.hint, cardW - 20, 10), x + 12, y + 40,
+      { size: 10, color: got ? UI_COLOR.textDim : 'rgba(255,255,255,0.32)', shadow: false });
   });
 
-  drawText(ctx, 'L 로 닫기', W / 2, H - 24,
-    { size: 12, align: 'center', color: UI_COLOR.textDim });
+  drawText(ctx, state.isTouch ? '좌우를 눌러 쪽 넘기기 · 가운데를 눌러 닫기'
+    : '← → 쪽 넘기기 · L 로 닫기',
+    W / 2, H - 22, { size: 12, align: 'center', color: UI_COLOR.textDim });
+}
+
+// 칸 너비에 맞춰 자른다
+function fit(ctx, text, maxW, size) {
+  if (textWidth(ctx, text, size) <= maxW) return text;
+  let cur = '';
+  for (const ch of text) {
+    if (textWidth(ctx, cur + ch + '…', size) > maxW) break;
+    cur += ch;
+  }
+  return cur + '…';
 }

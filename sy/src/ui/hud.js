@@ -1,8 +1,9 @@
 // 화면 위에 얹히는 것들 — 시계, 안내문, 미니맵, 알림.
 
 import { TILE, UI, GAME, GEO } from '../config.js';
+import { ITEM_BY_ID } from '../game/data/items.js';
 import { UI_COLOR, MAP_COLOR } from '../render/palette.js';
-import { makeCanvas } from '../render/sprites.js';
+import { makeCanvas, itemSprite } from '../render/sprites.js';
 import { drawText, textWidth, viewSize } from './labels.js';
 import { WORLD_W, WORLD_H } from '../world/geo.js';
 
@@ -64,6 +65,9 @@ export function drawHud(ctx, state) {
     drawText(ctx, text, W / 2, py + 22, { size: 14, align: 'center' });
   }
 
+  // ── 왼쪽 위: 들고 있는 것 ─────────────────────────────────
+  drawHeldItem(ctx, state, W, H);
+
   // ── 목적지 표시 ───────────────────────────────────────────
   drawWaypointMarker(ctx, state, W, H);
 
@@ -88,6 +92,31 @@ export function drawHud(ctx, state) {
 
   if (state.showHelp) drawHelp(ctx, W, H, state.isTouch);
 }
+
+// 손에 든 것 한 칸. 없으면 어디서 얻는지 알려 준다.
+function drawHeldItem(ctx, state, W, H) {
+  const id = state.game.item;
+  const x = 12, y = 74;
+  const item = id ? ITEM_BY_ID.get(id) : null;
+  const label = item ? item.name : '맨손';
+  const w = Math.max(126, textWidth(ctx, label, 13) + 60);
+  panel(ctx, x, y, w, 38);
+  if (item) {
+    const sprite = itemSprite(item.icon, ITEM_TINT[item.icon] || '#c8c4bc');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sprite, x + 8, y + 8, 22, 22);
+  }
+  drawText(ctx, label, x + 36, y + 18, { size: 13, color: item ? UI_COLOR.text : UI_COLOR.textDim });
+  drawText(ctx, item ? `${item.tag} · ${state.isTouch ? '쓰기' : 'Q'}` : '사람에게 말을 걸어 보자',
+    x + 36, y + 32, { size: 10, color: UI_COLOR.textDim });
+}
+
+// 아이템 그림 색 (종류마다 하나씩)
+const ITEM_TINT = {
+  cylinder: '#e2554a', cloth: '#d8c07a', stick: '#7a9fd0', device: '#8fc48a',
+  food: '#c9a06a', plant: '#e28aa8', ball: '#e8e4dc', paper: '#f2c14e',
+  card: '#a8c8f0', metal: '#b8bfc8',
+};
 
 function drawMinimap(ctx, state, H, W) {
   const size = state.isTouch ? Math.round(UI.minimapSize * 0.8) : UI.minimapSize;

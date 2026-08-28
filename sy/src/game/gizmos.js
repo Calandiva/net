@@ -5,6 +5,8 @@
 //   { lon, lat }                                            길 위
 // effect 에서 상태에 플래그를 남기고, 그 조합이 endings.js 에서 결말이 된다.
 
+import { encounterGizmos } from './encounters.js';
+
 export const GIZMOS = [
   // ── 길 위 ──────────────────────────────────────────────────────
   {
@@ -192,7 +194,7 @@ export const GIZMOS = [
 // 실내 물건을 건물 이름으로 묶어 둔다 (건물에 들어갈 때 꺼내 쓴다)
 export function indexIndoorGizmos() {
   const byPlace = new Map();
-  for (const g of GIZMOS) {
+  for (const g of GIZMOS.concat(encounterGizmos())) {
     if (!g.at.place) continue;
     const key = `${g.at.place}|${g.at.floor}`;
     let list = byPlace.get(key);
@@ -203,5 +205,5 @@ export function indexIndoorGizmos() {
 }
 
 export function outdoorGizmos() {
-  return GIZMOS.filter((g) => g.at.lon !== undefined);
+  return GIZMOS.concat(encounterGizmos()).filter((g) => g.at.lon !== undefined);
 }

@@ -13,7 +13,10 @@ export function drawDialogue(ctx, state) {
   const boxW = Math.min(560, W - 40);
   const boxH = 96;
   const x = (W - boxW) / 2;
-  const y = H - boxH - (state.isTouch ? 120 : 60);
+  // 고를 게 있으면 그 높이만큼 위로 올린다 (화면 밖으로 나가지 않게)
+  const last = d.index >= d.lines.length - 1;
+  const extra = (d.choices && last) ? d.choices.length * 30 + 10 : 0;
+  const y = H - boxH - extra - (state.isTouch ? 150 : 60);
 
   panel(ctx, x, y, boxW, boxH);
   // 말하는 사람
@@ -29,9 +32,55 @@ export function drawDialogue(ctx, state) {
     drawText(ctx, row, x + 16, y + 52 + i * 20, { size: 14 });
   });
 
-  const more = d.index < d.lines.length - 1;
+  const more = !last;
+
+  // 마지막 줄에서 고를 것이 있으면 아래에 붙여 보여 준다
+  if (!more && d.choices) {
+    const rowH = 26;
+    const cy = y + boxH + 6;
+    d.rects = [];
+    d.choices.forEach((c, i) => {
+      const ry = cy + i * (rowH + 4);
+      const on = i === d.choice;
+      ctx.fillStyle = on ? 'rgba(242, 193, 78, 0.18)' : UI_COLOR.panel;
+      ctx.fillRect(x, ry, boxW, rowH);
+      ctx.strokeStyle = on ? UI_COLOR.accent : UI_COLOR.panelEdge;
+      ctx.strokeRect(x + 0.5, ry + 0.5, boxW - 1, rowH - 1);
+      drawText(ctx, `${on ? '▶ ' : '   '}${c.label}`, x + 14, ry + 18,
+        { size: 13, color: on ? UI_COLOR.accent : UI_COLOR.text });
+      d.rects.push({ x, y: ry, w: boxW, h: rowH });
+    });
+    drawText(ctx, state.isTouch ? '눌러서 고르기' : '↑↓ 고르고 Space',
+      x + boxW - 16, y + boxH - 12, { size: 11, align: 'right', color: UI_COLOR.textDim });
+    return;
+  }
+
   drawText(ctx, more ? (state.isTouch ? '탭 ▶' : 'Space ▶') : (state.isTouch ? '탭 닫기' : 'Space 닫기'),
     x + boxW - 16, y + boxH - 12, { size: 11, align: 'right', color: UI_COLOR.textDim });
+}
+
+// 화면에서 고른 줄 번호 (없으면 -1)
+export function choiceRowAt(state, sx, sy) {
+  const d = state.dialogue;
+  if (!d || !d.rects) return -1;
+  return d.rects.findIndex((r) => sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h);
+}
+
+// 선택지 위아래로 옮기기
+export function moveChoice(state, delta) {
+  const d = state.dialogue;
+  if (!d || !d.choices) return;
+  d.choice = Math.max(0, Math.min(d.choices.length - 1, d.choice + delta));
+}
+
+// 지금 고른 것을 고른다
+export function pickChoice(state, index) {
+  const d = state.dialogue;
+  if (!d || !d.choices) return false;
+  const c = d.choices[index === undefined ? d.choice : index];
+  state.dialogue = null;
+  if (c && c.run) c.run();
+  return true;
 }
 
 // 글자 폭에 맞춰 줄바꿈
@@ -47,19 +96,30 @@ function wrap(ctx, text, maxW, size) {
   return rows;
 }
 
-// 대화 시작
-export function startDialogue(state, name, lines) {
+// 대화 시작.
+// opts.choices  [{ label, run }]  마지막 줄에서 고르게 한다
+// opts.onEnd    선택지 없이 끝났을 때 부를 것
+export function startDialogue(state, name, lines, opts) {
   const list = (lines && lines.length) ? lines : ['...'];
-  state.dialogue = { name, lines: list, index: 0 };
+  state.dialogue = {
+    name, lines: list, index: 0,
+    choices: (opts && opts.choices) || null,
+    choice: 0,
+    onEnd: (opts && opts.onEnd) || null,
+    rects: null,
+  };
 }
 
-// 다음 줄로. 끝이면 닫는다.
+// 다음 줄로. 끝이면 닫는다 (고를 게 있으면 고르는 것으로).
 export function advanceDialogue(state) {
-  if (!state.dialogue) return false;
-  if (state.dialogue.index < state.dialogue.lines.length - 1) {
-    state.dialogue.index++;
+  const d = state.dialogue;
+  if (!d) return false;
+  if (d.index < d.lines.length - 1) {
+    d.index++;
     return true;
   }
+  if (d.choices) return pickChoice(state);
   state.dialogue = null;
+  if (d.onEnd) d.onEnd();
   return false;
 }

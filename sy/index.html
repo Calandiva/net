@@ -239,6 +239,8 @@ const __M = Object.create(null);
 
   // ── 사람과 사건 ─────────────────────────────────────────────────────────
   const LIFE = {
+    giftChance: 0.34,        // 사람이 아이템을 하나 들고 있을 확률
+    encounterRadius: 46,     // 사건에 이만큼(픽셀) 다가가면 마주친다
     indoorPerRoom: 0.42,     // 방 하나에 사람이 있을 확률
     indoorMax: 10,           // 한 층에 최대 몇 명
     eventChance: 0.78,       // 건물 한 층에 사건이 있을 확률 (없으면 '평소와 같음')
@@ -310,6 +312,7 @@ const __M = Object.create(null);
     help: ['KeyH', 'Slash'],
     zoomIn: ['Equal', 'NumpadAdd'],
     zoomOut: ['Minus', 'NumpadSubtract'],
+    useItem: ['KeyQ'],                        // 들고 있는 것을 쓴다
     minimapIn: ['BracketRight', 'Period'],    // 미니맵 축척 — 가깝게
     minimapOut: ['BracketLeft', 'Comma'],     // 미니맵 축척 — 멀리
   };
@@ -424,6 +427,32 @@ const __M = Object.create(null);
   function clamp(v, min, max) { return v < min ? min : v > max ? max : v; }
 
   __M.hash32 = hash32; __M.makeRng = makeRng; __M.seedOf = seedOf; __M.noiseAt = noiseAt; __M.valueNoise = valueNoise; __M.fbm = fbm; __M.lerp = lerp; __M.smooth = smooth; __M.clamp = clamp;
+})();
+
+// ── util/hangul.js ─────────────────────────────
+(function () {
+  // 조사 붙이기. "장바구니을(를)" 같은 말이 나오지 않게 한다.
+  //
+  //   josa('장바구니', '을/를') → '를'
+  //   josa('소화기', '으로/로')  → '로'
+
+  function josa(word, pair) {
+    const [withJong, withoutJong] = pair.split('/');
+    const last = String(word || '').trim().slice(-1);
+    const code = last.charCodeAt(0);
+    if (!(code >= 0xac00 && code <= 0xd7a3)) return withoutJong;  // 한글이 아니면 받침 없는 쪽
+    const jong = (code - 0xac00) % 28;
+    // '으로/로' 는 ㄹ 받침도 받침 없는 쪽을 쓴다
+    if (jong === 8 && pair.startsWith('으로')) return withoutJong;
+    return jong ? withJong : withoutJong;
+  }
+
+  // 이름 + 조사
+  function withJosa(word, pair) {
+    return `${word}${josa(word, pair)}`;
+  }
+
+  __M.josa = josa; __M.withJosa = withJosa;
 })();
 
 // ── world/geo.js ─────────────────────────────
@@ -1950,6 +1979,266 @@ const __M = Object.create(null);
   const WORLD_DATA = { REGIONS, WATERWAYS, ROADS, DISTRICTS, PLACES };
 
   __M.WORLD_DATA = WORLD_DATA;
+})();
+
+// ── game/data/items.js ─────────────────────────────
+(function () {
+  // 아이템. NPC 에게서만 얻는다 (바닥에 떨어져 있지 않다).
+  // 한 번에 하나만 들고 다닐 수 있고, 새로 받으면 들고 있던 것을 놓아야 한다.
+  //
+  //   id     내부 이름 (사건의 결과가 이 값을 본다)
+  //   name   화면에 뜨는 이름
+  //   icon   render/sprites.js 의 아이템 그림 종류
+  //   tag    '도구' 계속 쓴다 · '투척' 던지면 사라진다 · '착용' 입고 다닌다
+  //   from   어디서 누구에게 받는지 (엔딩 목록의 힌트로도 쓴다)
+  //   give   이 아이템을 주는 사람이 있는 곳 (kinds: 건물 종류 · regions: 바깥 지역)
+  //   line   줄 때 그 사람이 하는 말
+  //   use    사건이 없는 데서 그냥 썼을 때 나오는 말
+
+  const ITEMS = [
+    { id: 'extinguisher', name: '소화기', icon: 'cylinder', tag: '도구',
+      from: '공장·상가 관리인',
+      give: { kinds: ['factory', 'warehouse', 'shop', 'tower'] },
+      line: '이거 하나 가져가요. 우리 층에 두 개 있어요.',
+      use: '안전핀을 뽑았다가 도로 꽂았다. 여기서 뿌릴 일은 아니다.' },
+
+    { id: 'gloves', name: '목장갑', icon: 'cloth', tag: '착용',
+      from: '공단 근로자',
+      give: { kinds: ['factory', 'warehouse'], regions: ['industrial'] },
+      line: '맨손으로 다니지 마요. 새것 한 켤레 있어요.',
+      use: '장갑을 고쳐 꼈다. 손바닥에 아직 풀 냄새가 난다.' },
+
+    { id: 'umbrella', name: '우산', icon: 'stick', tag: '도구',
+      from: '아파트 경비실',
+      give: { kinds: ['apartment', 'public', 'station'] },
+      line: '분실물이에요. 한 달째 아무도 안 찾아가네.',
+      use: '펴 봤다. 오늘 비는 안 온다고 했다.' },
+
+    { id: 'flashlight', name: '손전등', icon: 'device', tag: '도구',
+      from: '역무원·경비',
+      give: { kinds: ['station', 'public', 'apartment', 'warehouse'] },
+      line: '지하 내려갈 거면 이거 들고 가요.',
+      use: '천장에 동그란 빛을 비췄다. 밝은 데서는 표도 안 난다.' },
+
+    { id: 'thermos', name: '보온병', icon: 'cylinder', tag: '도구',
+      from: '편의점·상가 사람',
+      give: { kinds: ['shop', 'mart', 'tower'] },
+      line: '보리차예요. 아침엔 이게 낫습니다.',
+      use: '뚜껑에 따라 한 모금 마셨다. 아직 뜨겁다.' },
+
+    { id: 'kimbap', name: '김밥 한 줄', icon: 'food', tag: '투척',
+      from: '분식집 주인',
+      give: { kinds: ['shop', 'mart'] },
+      line: '끝줄이라 못 팔아요. 가져가서 드세요.',
+      use: '한 알 집어 먹었다. 단무지가 좋다.' },
+
+    { id: 'coffee', name: '캔커피', icon: 'cylinder', tag: '투척',
+      from: '길에서 만난 사람',
+      give: { regions: ['city', 'industrial'] },
+      line: '두 개 뽑혔어요. 하나 드세요.',
+      use: '따서 반쯤 마셨다. 손이 좀 따뜻해졌다.' },
+
+    { id: 'flower', name: '꽃 한 다발', icon: 'plant', tag: '투척',
+      from: '화원·화훼 하는 사람',
+      give: { kinds: ['shop'], regions: ['field'] },
+      line: '오늘 못 나가는 물건이에요. 들고 가요.',
+      use: '냄새를 맡았다. 이걸 누구한테 줄지는 아직 모른다.' },
+
+    { id: 'catsnack', name: '고양이 간식', icon: 'food', tag: '투척',
+      from: '길에서 밥 주는 사람',
+      give: { regions: ['city'], kinds: ['apartment'] },
+      line: '주머니에 늘 있어요. 하나 가져가요.',
+      use: '봉지를 흔들었다. 어디선가 보고는 있을 것이다.' },
+
+    { id: 'baseball', name: '야구공', icon: 'ball', tag: '투척',
+      from: '학교 학생',
+      give: { kinds: ['school'] },
+      line: '이거 담 넘어간 거예요. 저는 이제 안 해요.',
+      use: '위로 던졌다 받았다. 세 번째에 놓쳤다.' },
+
+    { id: 'tape', name: '줄자', icon: 'device', tag: '도구',
+      from: '부동산 중개인',
+      give: { kinds: ['shop', 'tower'] },
+      line: '집 볼 때 필요해요. 하나 더 있어요.',
+      use: '아무 데나 대고 재 봤다. 1미터 40.' },
+
+    { id: 'megaphone', name: '확성기', icon: 'device', tag: '도구',
+      from: '통장·자율방범대',
+      give: { kinds: ['public', 'apartment'], regions: ['city'] },
+      line: '반상회 때 쓰던 건데, 배터리는 있어요.',
+      use: '"아, 아." 소리가 골목을 한 바퀴 돌아왔다.' },
+
+    { id: 'radio', name: '휴대용 라디오', icon: 'device', tag: '도구',
+      from: '경비실 아저씨',
+      give: { kinds: ['apartment', 'public', 'warehouse', 'station'] },
+      line: '아침엔 이거 켜 놔야 시간 가는 줄 알아요.',
+      use: '주파수를 돌렸다. 교통정보와 잡음 사이 어딘가.' },
+
+    { id: 'rod', name: '낚싯대', icon: 'stick', tag: '도구',
+      from: '낚시터 주인',
+      give: { kinds: ['park_facility'], regions: ['field'] },
+      line: '한 대 남는 거요. 저녁까지 돌려주면 되고.',
+      use: '허공에 한 번 던졌다. 걸린 건 없다.' },
+
+    { id: 'pole', name: '등산 스틱', icon: 'stick', tag: '도구',
+      from: '가현산 등산객',
+      give: { regions: ['forest'] },
+      line: '두 짝인데 한 짝만 써요. 가져가요.',
+      use: '땅을 두 번 짚었다. 걷기가 조금 낫다.' },
+
+    { id: 'acorn', name: '도토리 한 줌', icon: 'food', tag: '투척',
+      from: '산에서 만난 할머니',
+      give: { regions: ['forest'] },
+      line: '주워도 다 못 가져가. 좀 덜어 가.',
+      use: '주머니에서 달그락거린다. 다람쥐 몫이라고 했다.' },
+
+    { id: 'talisman', name: '부적', icon: 'paper', tag: '착용',
+      from: '가현산 도인',
+      give: { regions: ['forest'], kinds: ['church'] },
+      line: '접어서 안주머니에. 오늘 하루치예요.',
+      use: '한자 같기도 하고 그림 같기도 하다.' },
+
+    { id: 'incense', name: '향 한 다발', icon: 'plant', tag: '투척',
+      from: '절·기도처 사람',
+      give: { kinds: ['church'], regions: ['forest'] },
+      line: '태우면 오 분쯤 가요.',
+      use: '냄새만 맡았다. 불은 붙이지 않았다.' },
+
+    { id: 'keys', name: '열쇠 꾸러미', icon: 'metal', tag: '도구',
+      from: '관리사무소 직원',
+      give: { kinds: ['apartment', 'public', 'tower'] },
+      line: '옥상이랑 지하 거예요. 잃어버리면 큰일 나요.',
+      use: '몇 개인지 세어 봤다. 열한 개.' },
+
+    { id: 'badge', name: '출입카드', icon: 'card', tag: '착용',
+      from: '공단 사무직',
+      give: { kinds: ['factory', 'tower'], regions: ['industrial'] },
+      line: '방문증이에요. 오늘까지만 됩니다.',
+      use: '아무 데나 대 봤다. 삑, 소리는 안 났다.' },
+
+    { id: 'helmet', name: '안전모', icon: 'cloth', tag: '착용',
+      from: '현장 소장',
+      give: { kinds: ['factory', 'warehouse'], regions: ['industrial'] },
+      line: '쓰고 다니세요. 여기 위에서 뭐 떨어져요.',
+      use: '턱끈을 조였다. 조금 우스운 기분이 든다.' },
+
+    { id: 'tripod', name: '삼각대', icon: 'stick', tag: '도구',
+      from: '사진 찍는 사람',
+      give: { regions: ['field', 'forest'], kinds: ['park_facility'] },
+      line: '무거워서요. 오는 길에 돌려주면 되고.',
+      use: '다리를 펴 세웠다. 위에 올릴 게 없다.' },
+
+    { id: 'binoculars', name: '쌍안경', icon: 'device', tag: '도구',
+      from: '새 보러 온 사람',
+      give: { regions: ['field'], kinds: ['park_facility'] },
+      line: '한강 쪽 보려면 이게 있어야 해요.',
+      use: '멀리 굴뚝이 보였다. 연기는 오늘도 오른다.' },
+
+    { id: 'loupe', name: '확대경', icon: 'device', tag: '도구',
+      from: '곤충 보는 아이',
+      give: { kinds: ['school'], regions: ['field', 'forest'] },
+      line: '아저씨도 봐요. 다리에 털 엄청 많아요.',
+      use: '손등을 봤다. 안 보던 게 보인다.' },
+
+    { id: 'net', name: '포충망', icon: 'stick', tag: '도구',
+      from: '방역반·곤충 채집',
+      give: { regions: ['field', 'forest'], kinds: ['school', 'public'] },
+      line: '오늘 벌레 많아요. 하나 들고 다니세요.',
+      use: '허공을 한 번 저었다. 뭔가 들어왔다가 나갔다.' },
+
+    { id: 'spray', name: '모기 스프레이', icon: 'cylinder', tag: '도구',
+      from: '보건소 직원',
+      give: { kinds: ['public', 'hospital', 'mart'] },
+      line: '이번 주 나눠 주는 거예요.',
+      use: '허공에 한 번 뿌렸다. 냄새가 오래 간다.' },
+
+    { id: 'balloon', name: '풍선', icon: 'ball', tag: '투척',
+      from: '아이',
+      give: { kinds: ['mart', 'apartment', 'school'], regions: ['city'] },
+      line: '두 개 받았어요. 하나 가져요.',
+      use: '손에서 놓았다가 급히 잡았다.' },
+
+    { id: 'basket', name: '장바구니', icon: 'cloth', tag: '도구',
+      from: '마트 판매사원',
+      give: { kinds: ['mart'] },
+      line: '이거 접으면 주머니에 들어가요.',
+      use: '펼쳤다 접었다. 넣을 게 없다.' },
+
+    { id: 'sample', name: '시식 접시', icon: 'food', tag: '투척',
+      from: '마트 시식 사원',
+      give: { kinds: ['mart'] },
+      line: '남은 거 다 가져가세요. 접시째로.',
+      use: '하나 집어 먹었다. 짜다.' },
+
+    { id: 'ticket', name: '영화표', icon: 'paper', tag: '도구',
+      from: '영화관 직원',
+      give: { kinds: ['cinema', 'mart', 'tower'] },
+      line: '조조 한 자리 남았어요. 안 쓰면 버려요.',
+      use: '상영 시각을 봤다. 출근 시간과 겹친다.' },
+
+    { id: 'popcorn', name: '팝콘', icon: 'food', tag: '투척',
+      from: '영화관 손님',
+      give: { kinds: ['cinema', 'mart'] },
+      line: '혼자 다 못 먹어요. 반 가져가요.',
+      use: '한 알 던져 입으로 받았다. 성공.' },
+
+    { id: 'laser', name: '장난감 레이저총', icon: 'device', tag: '도구',
+      from: '이상한 이야기를 하는 연구원',
+      give: { kinds: ['tower', 'factory', 'school'], regions: ['industrial'] },
+      line: '장난감이에요. …아마도.',
+      use: '벽에 초록 점이 생겼다. 점이 혼자 조금 움직인 것 같다.' },
+
+    { id: 'magnet', name: '커다란 자석', icon: 'metal', tag: '도구',
+      from: '과학 선생님',
+      give: { kinds: ['school', 'factory'] },
+      line: '수업에 쓰던 건데 요새 안 써요.',
+      use: '난간에 붙였다 뗐다. 소리가 좋다.' },
+
+    { id: 'battery', name: '건전지 한 팩', icon: 'metal', tag: '도구',
+      from: '전파사 주인',
+      give: { kinds: ['shop'] },
+      line: '이거 없으면 아무것도 안 돌아가요.',
+      use: '흔들어 봤다. 아직 안 쓴 것 같다.' },
+
+    { id: 'walkie', name: '무전기', icon: 'device', tag: '도구',
+      from: '경비 반장',
+      give: { kinds: ['factory', 'warehouse', 'public', 'tower'] },
+      line: '3번 채널이에요. 아무 말이나 하면 누가 받아요.',
+      use: '"…들리세요?" 잡음만 돌아왔다.' },
+
+    { id: 'papermap', name: '종이 지도', icon: 'paper', tag: '도구',
+      from: '안내소·민원실 직원',
+      give: { kinds: ['public', 'station'] },
+      line: '요새 아무도 안 가져가요. 한 장 드릴게요.',
+      use: '펴 보니 구래동은 아직 논으로 그려져 있다.' },
+
+    { id: 'shovel', name: '모종삽', icon: 'metal', tag: '도구',
+      from: '밭에서 일하는 사람',
+      give: { regions: ['field'], kinds: ['farmhouse'] },
+      line: '쓰고 아무 데나 꽂아 놔요.',
+      use: '흙을 한 번 떠 봤다. 아직 차다.' },
+
+    { id: 'seeds', name: '씨앗 봉지', icon: 'paper', tag: '투척',
+      from: '종묘상·농부',
+      give: { regions: ['field'], kinds: ['farmhouse', 'shop'] },
+      line: '작년 것이라 잘 나올지는 몰라요.',
+      use: '봉지를 흔들었다. 안에서 자잘한 소리가 난다.' },
+  ];
+
+  const ITEM_BY_ID = new Map(ITEMS.map((it) => [it.id, it]));
+
+  function itemName(id) {
+    const it = ITEM_BY_ID.get(id);
+    return it ? it.name : '';
+  }
+
+  // 이 자리(건물 종류 / 지역 성격)에서 줄 만한 아이템들
+  function itemsFor(kind, region) {
+    return ITEMS.filter((it) => (kind && it.give.kinds && it.give.kinds.includes(kind))
+      || (region && it.give.regions && it.give.regions.includes(region)));
+  }
+
+  __M.ITEMS = ITEMS; __M.ITEM_BY_ID = ITEM_BY_ID; __M.itemName = itemName; __M.itemsFor = itemsFor;
 })();
 
 // ── world/blocks.js ─────────────────────────────
@@ -3642,6 +3931,7 @@ const __M = Object.create(null);
   const { makeRng } = __M;
   const { INDOOR_ROLES } = __M;
   const { INDOOR_EVENTS } = __M;
+  const { itemsFor } = __M;
 
   // 이 건물, 이 층에 오늘 무슨 일이 있는가
   function pickIndoorEvent(b, floor) {
@@ -3706,9 +3996,15 @@ const __M = Object.create(null);
       if (event && event.lines.length && rng.chance(0.62)) {
         lines.unshift(rng.pick(event.lines));
       }
+      // 어떤 사람은 줄 것을 하나 들고 있다 (아이템은 사람에게서만 나온다)
+      let gift = null;
+      if (rng.chance(LIFE.giftChance)) {
+        const pool = itemsFor(b.kind, null);
+        if (pool.length) gift = rng.pick(pool).id;
+      }
       people.push({
         x: (spot.x + 0.5) * 16, y: (spot.y + 0.9) * 16,
-        tx: spot.x, ty: spot.y,
+        tx: spot.x, ty: spot.y, gift,
         role: role.name, lines, seed: rng.int(0, 9999),
         dir: rng.pick(['down', 'left', 'right', 'up']),
         anim: rng.range(0, 3), moving: false,
@@ -3772,6 +4068,7 @@ const __M = Object.create(null);
   const { SEED, NPC, TILE, GROUND, LIFE } = __M;
   const { OUTDOOR_ROLES } = __M;
   const { OUTDOOR_EVENTS } = __M;
+  const { itemsFor } = __M;
   const { makeRng } = __M;
 
   const CH = TILE.chunk;
@@ -3827,6 +4124,11 @@ const __M = Object.create(null);
         const role = rng.pick(roles);
         actor.role = role.name;
         actor.lines = role.lines.slice();
+        // 주머니에 뭔가 있는 사람 (아이템은 사람에게서만 나온다)
+        if (rng.chance(LIFE.giftChance)) {
+          const pool = itemsFor(null, kind);
+          if (pool.length) actor.gift = rng.pick(pool).id;
+        }
         out.push(actor);
       }
       if (rng.chance(CAT_CHANCE)) {
@@ -5209,6 +5511,90 @@ const __M = Object.create(null);
         px(ctx, 4, 10, 8, 2, '#b8923a');
         px(ctx, 7, 12, 2, 2, '#8a6a24');
         break;
+      // ── 사건 표시 ──────────────────────────────────────────────
+      case 'fire':
+        px(ctx, 6, 10, 4, 4, '#e2554a');
+        px(ctx, 5, 6, 6, 5, '#e2884a');
+        px(ctx, 7, 3, 3, 4, '#f2c14e');
+        break;
+      case 'ufo':
+        px(ctx, 5, 4, 6, 3, '#a8c8f0');
+        px(ctx, 2, 7, 12, 3, '#8a919c');
+        px(ctx, 4, 10, 2, 2, '#f2c14e');
+        px(ctx, 10, 10, 2, 2, '#f2c14e');
+        break;
+      case 'kaiju':
+        px(ctx, 4, 6, 8, 7, '#5a7a5e');
+        px(ctx, 6, 3, 4, 4, '#5a7a5e');
+        px(ctx, 6, 4, 1, 1, '#f2c14e');
+        px(ctx, 9, 4, 1, 1, '#f2c14e');
+        px(ctx, 3, 9, 2, 4, '#4a6a4e');
+        px(ctx, 11, 9, 2, 4, '#4a6a4e');
+        break;
+      case 'bug':
+        px(ctx, 6, 5, 4, 7, '#2f2a30');
+        px(ctx, 3, 6, 3, 2, '#4a4450');
+        px(ctx, 10, 6, 3, 2, '#4a4450');
+        px(ctx, 7, 3, 2, 2, '#c04a4a');
+        break;
+      case 'animal':
+        px(ctx, 4, 7, 9, 5, '#7a6a54');
+        px(ctx, 11, 5, 3, 3, '#7a6a54');
+        px(ctx, 3, 8, 1, 4, '#5a4a34');
+        px(ctx, 12, 6, 1, 1, '#20202a');
+        break;
+      case 'fish':
+        px(ctx, 4, 7, 8, 4, '#6a8faa');
+        px(ctx, 12, 6, 2, 6, '#4a6f8a');
+        px(ctx, 6, 8, 1, 1, '#20202a');
+        break;
+      case 'bird':
+        px(ctx, 6, 6, 5, 6, '#e8e4dc');
+        px(ctx, 8, 3, 2, 4, '#e8e4dc');
+        px(ctx, 10, 4, 2, 1, '#f2c14e');
+        px(ctx, 7, 12, 1, 2, '#8a8477');
+        break;
+      case 'circle':
+        px(ctx, 3, 7, 10, 1, '#b8a86a');
+        px(ctx, 5, 5, 6, 1, '#b8a86a');
+        px(ctx, 5, 10, 6, 1, '#b8a86a');
+        px(ctx, 3, 8, 1, 2, '#b8a86a');
+        px(ctx, 12, 8, 1, 2, '#b8a86a');
+        break;
+      case 'hole':
+        px(ctx, 3, 6, 10, 7, '#2a2620');
+        px(ctx, 4, 5, 8, 2, '#5a5044');
+        break;
+      case 'train':
+        px(ctx, 4, 3, 8, 9, '#8fa8c0');
+        px(ctx, 5, 5, 6, 3, '#2a3038');
+        px(ctx, 5, 12, 2, 2, '#3a3a44');
+        px(ctx, 9, 12, 2, 2, '#3a3a44');
+        break;
+      case 'screen':
+        px(ctx, 2, 4, 12, 8, '#e8e8ee');
+        px(ctx, 3, 5, 10, 6, '#7a90a8');
+        break;
+      case 'alarm':
+        px(ctx, 4, 6, 8, 6, '#e2554a');
+        px(ctx, 7, 3, 2, 3, '#8a919c');
+        px(ctx, 6, 8, 4, 2, '#f2eddc');
+        break;
+      case 'gate':
+        px(ctx, 2, 11, 12, 2, '#5a5f68');
+        px(ctx, 3, 4, 2, 8, '#8a919c');
+        px(ctx, 5, 6, 9, 2, '#e2554a');
+        break;
+      case 'boxes':
+        px(ctx, 3, 8, 6, 5, '#b08a5a');
+        px(ctx, 9, 6, 5, 7, '#c99a68');
+        px(ctx, 4, 5, 5, 3, '#c99a68');
+        break;
+      case 'door':
+        px(ctx, 4, 2, 9, 12, '#7a5f44');
+        px(ctx, 5, 3, 7, 10, '#a8825c');
+        px(ctx, 10, 8, 1, 2, '#f2c14e');
+        break;
       default:
         px(ctx, 4, 4, 8, 8, body);
         px(ctx, 6, 6, 4, 4, active ? '#8fc48a' : '#e2554a');
@@ -5218,15 +5604,80 @@ const __M = Object.create(null);
     return hit;
   }
 
+  // ── 아이템 그림 ─────────────────────────────────────────────────────────
+  // 종류(icon)별로 한 가지씩. 색만 아이템 이름 해시로 조금씩 달라진다.
+  const itemCache = new Map();
+  function itemSprite(icon, tint) {
+    const key = icon + '|' + tint;
+    let hit = itemCache.get(key);
+    if (hit) return hit;
+    const { canvas, ctx } = makeCanvas(S, S);
+    const c = tint || '#c8c4bc';
+    switch (icon) {
+      case 'cylinder':      // 소화기·보온병·캔
+        px(ctx, 5, 4, 6, 10, c);
+        px(ctx, 6, 2, 4, 2, '#8a919c');
+        px(ctx, 5, 7, 6, 2, '#00000033');
+        break;
+      case 'cloth':         // 장갑·안전모·장바구니
+        px(ctx, 3, 6, 10, 6, c);
+        px(ctx, 5, 4, 6, 2, c);
+        px(ctx, 3, 11, 10, 1, '#00000033');
+        break;
+      case 'stick':         // 우산·낚싯대·스틱·포충망
+        px(ctx, 7, 2, 2, 11, c);
+        px(ctx, 5, 12, 6, 2, '#5a5044');
+        px(ctx, 6, 2, 4, 2, '#8a919c');
+        break;
+      case 'device':        // 손전등·라디오·레이저·무전기
+        px(ctx, 4, 4, 8, 9, '#3d4450');
+        px(ctx, 5, 5, 6, 3, c);
+        px(ctx, 6, 10, 4, 1, '#8a919c');
+        break;
+      case 'food':          // 김밥·도토리·시식·팝콘
+        px(ctx, 4, 6, 8, 6, c);
+        px(ctx, 6, 8, 4, 2, '#f2eddc');
+        break;
+      case 'plant':         // 꽃·향
+        px(ctx, 7, 7, 2, 7, '#5a7a4e');
+        px(ctx, 5, 3, 6, 4, c);
+        px(ctx, 7, 4, 2, 2, '#f2eddc');
+        break;
+      case 'ball':          // 야구공·풍선
+        px(ctx, 5, 4, 6, 6, c);
+        px(ctx, 7, 10, 2, 4, '#8a8477');
+        break;
+      case 'paper':         // 부적·지도·표·씨앗봉지
+        px(ctx, 4, 3, 8, 11, '#f2eddc');
+        px(ctx, 6, 6, 4, 1, c);
+        px(ctx, 6, 8, 4, 1, c);
+        break;
+      case 'card':          // 출입카드
+        px(ctx, 3, 5, 10, 7, '#e8e8ee');
+        px(ctx, 4, 6, 4, 4, c);
+        px(ctx, 9, 7, 3, 1, '#8a919c');
+        break;
+      case 'metal':         // 열쇠·자석·건전지·삽
+        px(ctx, 5, 3, 6, 4, c);
+        px(ctx, 7, 7, 2, 7, '#8a919c');
+        break;
+      default:
+        px(ctx, 4, 4, 8, 8, c);
+    }
+    hit = canvas;
+    itemCache.set(key, hit);
+    return hit;
+  }
+
   // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
   function clearSpriteCaches() {
     groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
-    eventPropCache.clear();
+    eventPropCache.clear(); itemCache.clear();
     buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
     npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
   }
 
-  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.eventPropSprite = eventPropSprite; __M.carSprite = carSprite; __M.carDirIndex = carDirIndex; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
+  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.eventPropSprite = eventPropSprite; __M.carSprite = carSprite; __M.carDirIndex = carDirIndex; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.itemSprite = itemSprite; __M.clearSpriteCaches = clearSpriteCaches;
 })();
 
 // ── render/camera.js ─────────────────────────────
@@ -5793,8 +6244,9 @@ const __M = Object.create(null);
   // 화면 위에 얹히는 것들 — 시계, 안내문, 미니맵, 알림.
 
   const { TILE, UI, GAME, GEO } = __M;
+  const { ITEM_BY_ID } = __M;
   const { UI_COLOR, MAP_COLOR } = __M;
-  const { makeCanvas } = __M;
+  const { makeCanvas, itemSprite } = __M;
   const { drawText, textWidth, viewSize } = __M;
   const { WORLD_W, WORLD_H } = __M;
 
@@ -5856,6 +6308,9 @@ const __M = Object.create(null);
       drawText(ctx, text, W / 2, py + 22, { size: 14, align: 'center' });
     }
 
+    // ── 왼쪽 위: 들고 있는 것 ─────────────────────────────────
+    drawHeldItem(ctx, state, W, H);
+
     // ── 목적지 표시 ───────────────────────────────────────────
     drawWaypointMarker(ctx, state, W, H);
 
@@ -5880,6 +6335,31 @@ const __M = Object.create(null);
 
     if (state.showHelp) drawHelp(ctx, W, H, state.isTouch);
   }
+
+  // 손에 든 것 한 칸. 없으면 어디서 얻는지 알려 준다.
+  function drawHeldItem(ctx, state, W, H) {
+    const id = state.game.item;
+    const x = 12, y = 74;
+    const item = id ? ITEM_BY_ID.get(id) : null;
+    const label = item ? item.name : '맨손';
+    const w = Math.max(126, textWidth(ctx, label, 13) + 60);
+    panel(ctx, x, y, w, 38);
+    if (item) {
+      const sprite = itemSprite(item.icon, ITEM_TINT[item.icon] || '#c8c4bc');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sprite, x + 8, y + 8, 22, 22);
+    }
+    drawText(ctx, label, x + 36, y + 18, { size: 13, color: item ? UI_COLOR.text : UI_COLOR.textDim });
+    drawText(ctx, item ? `${item.tag} · ${state.isTouch ? '쓰기' : 'Q'}` : '사람에게 말을 걸어 보자',
+      x + 36, y + 32, { size: 10, color: UI_COLOR.textDim });
+  }
+
+  // 아이템 그림 색 (종류마다 하나씩)
+  const ITEM_TINT = {
+    cylinder: '#e2554a', cloth: '#d8c07a', stick: '#7a9fd0', device: '#8fc48a',
+    food: '#c9a06a', plant: '#e28aa8', ball: '#e8e4dc', paper: '#f2c14e',
+    card: '#a8c8f0', metal: '#b8bfc8',
+  };
 
   function drawMinimap(ctx, state, H, W) {
     const size = state.isTouch ? Math.round(UI.minimapSize * 0.8) : UI.minimapSize;
@@ -6103,6 +6583,7 @@ const __M = Object.create(null);
   // "무엇을 건드렸는가" 가 전부다. 엔딩은 이 상태만 보고 결정된다.
 
   const { GAME, SAVE } = __M;
+  const { withJosa } = __M;
 
   class GameState {
     constructor() {
@@ -6111,6 +6592,8 @@ const __M = Object.create(null);
       this.counters = {};               // 횟수를 세는 것들 (고양이 등)
       this.log = [];                    // 무엇을 언제 건드렸는지 (엔딩 화면에 보여 준다)
       this.used = new Set();            // 한 번만 되는 물건
+      this.item = null;                 // 지금 들고 있는 아이템 id (하나만)
+      this.gotItems = new Set();        // 오늘 받아 본 아이템들
       this.ending = null;               // 결말이 나면 채워진다
       this.startedAt = Date.now();
       this.found = loadFound();         // 지금까지 본 엔딩 (localStorage)
@@ -6132,6 +6615,16 @@ const __M = Object.create(null);
     }
 
     bump(key, n = 1) { this.counters[key] = (this.counters[key] || 0) + n; }
+
+    // 아이템은 하나만 든다. 새로 받으면 들고 있던 것은 그 자리에 놓고 온다.
+    takeItem(id, name) {
+      this.item = id;
+      this.gotItems.add(id);
+      this.bump('items');
+      this.set('item_' + id, `${withJosa(name, '을/를')} 받았다`);
+    }
+
+    dropItem() { this.item = null; }
 
     get late() { return this.clock > GAME.deadline; }
     get touched() { return this.flags.size; }
@@ -6168,8 +6661,813 @@ const __M = Object.create(null);
   __M.GameState = GameState;
 })();
 
+// ── game/data/encounters_city.js ─────────────────────────────
+(function () {
+  // 구래동 안에서 벌어지는 일들.
+  //
+  // 한 사건 앞에서 무엇을 들고 있느냐로 그날 하루가 갈린다.
+  // outcomes 의 item 이 null 이면 맨손(또는 해당되는 물건이 없을 때)이다.
+  // 여기 적힌 outcome 하나하나가 그대로 엔딩이 된다 (game/endings.js 가 모아 간다).
+
+  const ENCOUNTERS_CITY = [
+    {
+      id: 'bar', name: '아침부터 문을 연 술집', icon: 'door',
+      at: { lon: 126.6296, lat: 37.6447 },
+      intro: ['셔터가 반만 올라가 있다. 안에서 사람 소리가 난다.',
+        '"들어와요. 어차피 오늘 아무도 안 와."'],
+      outcomes: [
+        { item: null, title: '출근 대신 한 잔', tag: 'odd',
+          lines: ['앉자마자 잔이 앞에 놓였다.',
+            '해장국을 시켰는데 술이 먼저 나왔다.',
+            '열한 시쯤 사장이 물었다. "일 안 가요?" 안 간다고 했다.'] },
+        { item: 'thermos', title: '보리차로 버틴 아침', tag: 'good',
+          lines: ['보온병을 꺼내 잔에 따랐다.',
+            '"그걸 마시러 술집에 왔어요?" 사장이 웃었다.',
+            '한 시간 앉아 남 얘기만 듣다가 나왔다. 지각은 했지만 맑은 정신이었다.'] },
+        { item: 'kimbap', title: '안주만 놓고 나왔다', tag: 'odd',
+          lines: ['김밥 한 줄을 카운터에 올려놓았다.',
+            '"이건 뭐예요?" 안주요, 라고 대답했다.',
+            '술은 한 잔도 안 마셨는데 단골이 된 것 같다.'] },
+        { item: 'ticket', title: '조조와 낮술 사이', tag: 'odd',
+          lines: ['영화표를 만지작거리다 카운터에 두고 나왔다.',
+            '"여덟 시 사십 분 거네. 뛰면 되겠는데."',
+            '뛰지는 않았고, 극장 앞 벤치에서 상영 시각이 지나가는 걸 봤다.'] },
+        { item: 'coffee', title: '캔커피 교환권', tag: 'good',
+          lines: ['캔커피를 내밀자 사장이 냉장고에서 하나를 꺼내 바꿔 줬다.',
+            '"찬 거랑 안 찬 거 바꾼 거예요." 그런 셈이다.',
+            '문을 나서니 아직 여덟 시 반이었다.'] },
+        { item: 'talisman', title: '부적 붙은 셔터', tag: 'odd',
+          lines: ['부적을 내밀자 사장이 두 손으로 받았다.',
+            '"이거 어디서 났어요. 산에서? 산에서 받은 건 붙여야 돼."',
+            '셔터 안쪽에 부적이 붙었고, 그날 그 집은 종일 손님이 끊이지 않았다고 한다.'] },
+      ],
+    },
+    {
+      id: 'mart-thief', name: '계산대 앞의 소란', icon: 'alarm',
+      at: { place: '이마트 김포한강점', floor: 1, slot: 5 },
+      intro: ['한 사람이 카트를 밀고 계산대를 그냥 지나간다.',
+        '캐셔가 일어서다 말고 이쪽을 본다.'],
+      outcomes: [
+        { item: 'basket', title: '장바구니를 건넸다', tag: 'good',
+          lines: ['장바구니를 펼쳐 그 사람 앞에 놓았다.',
+            '카트 안의 것들이 하나씩 바구니로 옮겨졌고, 그 사람은 계산대로 돌아갔다.',
+            '캐셔가 고개를 숙였다. 아직 아홉 시 전이었다.'] },
+        { item: 'megaphone', title: '매장 방송', tag: 'odd',
+          lines: ['확성기를 켜고 "고객님" 하고 불렀다.',
+            '매장 전체가 멈췄고, 그 사람도 멈췄다.',
+            '점장이 달려와 확성기를 회수해 갔다. 이름과 연락처를 적고 나왔다.'] },
+        { item: 'sample', title: '시식 접시로 붙잡다', tag: 'good',
+          lines: ['시식 접시를 내밀었다. "이거 드셔 보셨어요?"',
+            '그 사람은 하나 집어 먹더니 카트를 두고 앉아 울었다.',
+            '경찰은 오지 않았고, 캐셔가 커피를 뽑아 왔다.'] },
+        { item: 'laser', title: '초록 점', tag: 'odd',
+          lines: ['레이저를 켜자 초록 점이 바닥을 지나갔다.',
+            '그 사람은 점을 따라 두 걸음 걷다가 자기가 뭘 하는지 깨달은 표정이 됐다.',
+            '카트는 그 자리에 남았고, 아무도 그 일을 설명하지 못했다.'] },
+        { item: 'balloon', title: '풍선을 놓쳤다', tag: 'odd',
+          lines: ['들고 있던 풍선을 놓쳤다. 천장까지 올라갔다.',
+            '모두 위를 봤고, 그 사이 그 사람은 나갔다.',
+            '풍선은 저녁까지 그 자리에 있었다고 한다.'] },
+        { item: null, title: '봤지만 아무 말도 못 했다', tag: 'bad',
+          lines: ['입이 떨어지지 않았다.',
+            '그 사람은 문을 지나 주차장 쪽으로 사라졌다.',
+            '남은 하루 내내 그 장면이 자꾸 되감겼다.'] },
+      ],
+    },
+    {
+      id: 'cinema', name: '아무도 없는 상영관', icon: 'screen',
+      at: { place: '두원타워', floor: 9, slot: 4 },
+      intro: ['조조 상영이 이미 시작돼 있다. 관객은 없다.',
+        '화면에는 구래동 골목이 나오고 있다. 오늘 아침의 골목이다.'],
+      outcomes: [
+        { item: 'ticket', title: '정식 관객', tag: 'true',
+          lines: ['표를 스크린 쪽으로 들어 보였다. 좌석 번호가 화면에 떴다.',
+            '그 자리에 앉자 화면 속 골목에도 앉은 사람이 하나 늘었다.',
+            '영화가 끝날 때까지 앉아 있었다. 자막에 내 이름은 없었다.'] },
+        { item: 'popcorn', title: '팝콘값', tag: 'odd',
+          lines: ['팝콘을 한 알 던지자 화면 속 골목에 눈처럼 떨어졌다.',
+            '화면 속 사람들이 하늘을 봤다.',
+            '남은 팝콘을 전부 던지고 나서야 상영이 끝났다.'] },
+        { item: 'laser', title: '화면에 뚫린 점', tag: 'odd',
+          lines: ['레이저를 화면에 비췄다. 초록 점이 스크린 안쪽으로 들어갔다.',
+            '화면 속 골목 벽에도 초록 점이 생겼고, 사람들이 그걸 피해 걸었다.',
+            '점은 아직도 그 골목 어딘가에 있다.'] },
+        { item: 'flashlight', title: '영사실', tag: 'true',
+          lines: ['손전등을 들고 뒤쪽 문을 열었다. 영사실에는 아무도 없었다.',
+            '필름은 돌아가고 있었고, 릴에는 오늘 날짜가 적혀 있었다.',
+            '전원을 내리자 화면 속 골목의 가로등도 같이 꺼졌다.'] },
+        { item: 'magnet', title: '자석을 댔다', tag: 'bad',
+          lines: ['영사기 옆 상자에 자석을 붙였다.',
+            '화면이 한 번 크게 흔들리더니 오늘 아침이 삼 분쯤 되감겼다.',
+            '극장을 나오니 시계가 삼 분 뒤로 가 있었다. 그만큼 늦었다.'] },
+        { item: null, title: '끝까지 봤다', tag: 'odd',
+          lines: ['그냥 앉아서 봤다.',
+            '화면 속 골목에서 누군가 이쪽을 보고 손을 흔들었다.',
+            '따라 흔들었다. 영화가 끝나고 불이 켜졌을 때는 열 시였다.'] },
+      ],
+    },
+    {
+      id: 'apart-elevator', name: '멈춘 엘리베이터', icon: 'alarm',
+      at: { lon: 126.6338, lat: 37.6462 },
+      intro: ['1층 홀에 사람들이 모여 있다. 엘리베이터가 층 사이에 섰다.',
+        '안에서 문 두드리는 소리가 난다.'],
+      outcomes: [
+        { item: 'keys', title: '관리사무소 열쇠', tag: 'good',
+          lines: ['열쇠 꾸러미에서 기계실 열쇠를 찾았다.',
+            '수동으로 내리는 데 십오 분이 걸렸고, 안에 있던 사람은 여덟 살이었다.',
+            '엄마가 뛰어 내려왔다. 이름을 묻길래 대충 얼버무리고 나왔다.'] },
+        { item: 'walkie', title: '3번 채널', tag: 'good',
+          lines: ['무전기로 3번 채널을 불렀다. 경비 반장이 바로 받았다.',
+            '오 분 만에 문이 열렸다.',
+            '"어디 소속이세요?" 아무 데도 아니라고 했다.'] },
+        { item: 'megaphone', title: '괜찮다고 말해 주기', tag: 'good',
+          lines: ['확성기를 문틈에 대고 "곧 열려요" 하고 말했다.',
+            '안에서 울음이 그쳤다.',
+            '기사가 도착할 때까지 계속 아무 말이나 했다. 라디오 사연 같았다.'] },
+        { item: 'radio', title: '문 앞의 라디오', tag: 'good',
+          lines: ['라디오를 켜서 문 앞에 두었다.',
+            '안에서 노래를 따라 부르는 소리가 났다.',
+            '구조되고 나서 그 아이가 물었다. "그 노래 뭐예요?"'] },
+        { item: 'tape', title: '틈을 쟀다', tag: 'odd',
+          lines: ['줄자로 문틈을 쟀다. 4센티.',
+            '숫자를 적어 관리사무소에 남기고 나왔다.',
+            '나중에 그 수치가 보고서에 그대로 들어갔다고 한다.'] },
+        { item: null, title: '기다렸다', tag: 'odd',
+          lines: ['할 수 있는 게 없어서 같이 기다렸다.',
+            '이십 분 뒤 기사가 왔고, 문이 열렸다.',
+            '엘리베이터에서 나온 사람이 제일 먼저 시계를 봤다. 나도 봤다.'] },
+      ],
+    },
+    {
+      id: 'fire', name: '상가 3층에서 나는 연기', icon: 'fire',
+      at: { lon: 126.6274, lat: 37.6428 },
+      intro: ['상가 3층 창문으로 흰 연기가 새어 나온다.',
+        '아래에서 사람들이 올려다보고만 있다.'],
+      outcomes: [
+        { item: 'extinguisher', title: '불을 껐다', tag: 'good',
+          lines: ['3층 계단을 뛰어 올라가 문을 열었다. 튀김솥이었다.',
+            '소화기 한 통을 다 썼다. 하얀 가루가 주방을 덮었다.',
+            '소방차가 도착했을 때는 이미 연기가 잦아든 뒤였다.'] },
+        { item: 'radio', title: '신고', tag: 'good',
+          lines: ['라디오를 끄고 119를 눌렀다. 주소를 두 번 불러 줬다.',
+            '삼 분 만에 도착했다. 아무도 다치지 않았다.',
+            '나중에 라디오 교통정보에 그 골목 이름이 나왔다.'] },
+        { item: 'megaphone', title: '대피 안내', tag: 'good',
+          lines: ['확성기로 2층과 4층 사람들을 불러 내렸다.',
+            '학원 아이들이 줄지어 나왔다.',
+            '소방관이 물었다. "관리인이세요?" 아니라고 했다.'] },
+        { item: 'umbrella', title: '우산을 펴고 올려다봤다', tag: 'odd',
+          lines: ['재가 떨어져서 우산을 폈다.',
+            '우산 위로 뭐가 톡톡 떨어지는 소리를 들으며 서 있었다.',
+            '불은 알아서 꺼졌고, 우산에는 검은 점이 남았다.'] },
+        { item: 'helmet', title: '안전모 쓴 구경꾼', tag: 'odd',
+          lines: ['안전모를 쓰고 서 있었더니 사람들이 길을 비켜 줬다.',
+            '아무 권한도 없었지만 계단 앞을 지켰다.',
+            '소방관에게 자리를 넘기고 조용히 빠져나왔다.'] },
+        { item: null, title: '보고만 있었다', tag: 'bad',
+          lines: ['올려다보는 사람들 사이에 섰다.',
+            '누군가 신고했겠거니 했고, 실제로 누군가 했다.',
+            '그 골목을 지날 때마다 3층 창문을 보게 됐다.'] },
+      ],
+    },
+    {
+      id: 'school-roof', name: '옥상 난간 위의 아이들', icon: 'alarm',
+      at: { place: '김포한가람중학교', floor: 4, slot: 3 },
+      intro: ['옥상 문이 열려 있다. 아이 둘이 난간에 앉아 발을 흔들고 있다.',
+        '"저희 안 떨어져요. 여기 자주 와요."'],
+      outcomes: [
+        { item: 'baseball', title: '공 돌려주기', tag: 'good',
+          lines: ['담 넘어간 공이라며 받은 공을 꺼내 보였다.',
+            '"어 그거 제 건데요!" 둘이 난간에서 내려왔다.',
+            '셋이 운동장까지 내려가는 동안 아무도 그 얘기를 하지 않았다.'] },
+        { item: 'balloon', title: '풍선 하나', tag: 'odd',
+          lines: ['풍선을 하나 건넸다.',
+            '아이 하나가 그걸 놓았고, 풍선은 구래동 위로 올라갔다.',
+            '둘 다 그걸 보느라 난간에서 내려왔다.'] },
+        { item: 'megaphone', title: '수위 아저씨 흉내', tag: 'odd',
+          lines: ['확성기를 켜고 "거기 학생" 하고 말했다.',
+            '둘이 동시에 뛰어 내려갔다. 계단에서 웃는 소리가 났다.',
+            '옥상 문을 닫고 내려왔다. 잠글 열쇠는 없었다.'] },
+        { item: 'loupe', title: '난간의 이름들', tag: 'true',
+          lines: ['확대경으로 난간을 봤다. 긁어 쓴 이름이 열 몇 개 있었다.',
+            '"이거 다 졸업했어요." 아이가 말했다.',
+            '셋이 이름을 하나씩 읽었다. 종이 쳤다.'] },
+        { item: null, title: '옆에 앉았다', tag: 'good',
+          lines: ['난간 옆 바닥에 앉았다. 아무 말도 안 했다.',
+            '십 분쯤 뒤 아이들이 먼저 내려갔다.',
+            '옥상에서 보니 양촌 쪽 굴뚝이 다 보였다.'] },
+      ],
+    },
+    {
+      id: 'metro-ghost', name: '시간표에 없는 열차', icon: 'train',
+      at: { place: '구래역', floor: -2, slot: 9 },
+      intro: ['안내판에 없는 열차가 들어온다. 행선지가 비어 있다.',
+        '문이 열렸고, 안은 비어 있지 않다.'],
+      outcomes: [
+        { item: 'ticket', title: '표가 있었다', tag: 'true',
+          lines: ['영화표를 내밀자 문 옆 기계가 그걸 받아 삼켰다.',
+            '열차는 두 정거장을 갔고, 내린 곳은 지도에 없는 승강장이었다.',
+            '계단을 올라오니 양촌 들판 한가운데였다. 출근은 했다.'] },
+        { item: 'flashlight', title: '터널을 봤다', tag: 'odd',
+          lines: ['열차를 보내고 손전등으로 터널을 비췄다.',
+            '레일이 두 갈래였다. 한쪽은 지도에 없다.',
+            '역무원에게 말했더니 "아, 그거요" 하고는 아무 설명도 하지 않았다.'] },
+        { item: 'talisman', title: '부적을 붙였다', tag: 'odd',
+          lines: ['스크린도어에 부적을 붙였다.',
+            '열차는 문을 닫지 않고 한참 서 있다가 그냥 갔다.',
+            '다음 열차는 시간표대로 왔다.'] },
+        { item: 'radio', title: '잡음 속의 안내방송', tag: 'odd',
+          lines: ['라디오에서 이 역 안내방송이 나왔다. 아직 하지도 않은 방송이었다.',
+            '삼십 초 뒤 그 방송이 실제로 나왔다.',
+            '라디오를 끄고 계단을 올라갔다.'] },
+        { item: 'papermap', title: '지도에 없는 역', tag: 'true',
+          lines: ['종이 지도를 펴 노선을 짚었다. 이 방향에는 역이 없다.',
+            '역무원에게 보여 주자 지도를 한참 보다가 접어서 돌려줬다.',
+            '"이건 오래된 거네요." 그 말만 했다.'] },
+        { item: null, title: '타지 않았다', tag: 'good',
+          lines: ['한 발 물러섰다. 문이 닫혔다.',
+            '열차가 지나간 뒤 승강장에는 아무 표시도 남지 않았다.',
+            '다음 열차를 타고 평범하게 출근했다.'] },
+      ],
+    },
+    {
+      id: 'sinkhole', name: '공터에 생긴 구멍', icon: 'hole',
+      at: { lon: 126.6244, lat: 37.6414 },
+      intro: ['공터 한가운데 지름 2미터쯤 되는 구멍이 있다.',
+        '어제까지는 없던 것이다. 안은 보이지 않는다.'],
+      outcomes: [
+        { item: 'tape', title: '깊이를 쟀다', tag: 'good',
+          lines: ['줄자를 늘어뜨렸다. 7미터에서 멈췄다.',
+            '숫자를 적어 행정복지센터에 신고했다.',
+            '오후에 그 자리에 삼각뿔 표지가 세워졌다고 한다.'] },
+        { item: 'rod', title: '낚싯대를 내렸다', tag: 'odd',
+          lines: ['낚싯줄을 내려 보냈다. 뭔가 걸렸다.',
+            '올려 보니 오래된 열쇠였다. 어느 문 것인지는 알 수 없다.',
+            '주머니에 넣고 공터를 나왔다.'] },
+        { item: 'shovel', title: '더 팠다', tag: 'bad',
+          lines: ['가장자리를 조금 팠다. 흙이 안쪽으로 무너졌다.',
+            '구멍이 두 배가 됐고, 급히 물러섰다.',
+            '그날 오후 그 공터는 통째로 막혔다. 내 삽자국도 같이 묻혔다.'] },
+        { item: 'flashlight', title: '아래를 비췄다', tag: 'true',
+          lines: ['손전등을 비추자 바닥에 콘크리트 천장이 보였다.',
+            '구래동 아래에 무언가 있다. 지하주차장은 아니었다.',
+            '그 자리를 지도에 표시해 두고 자리를 떴다.'] },
+        { item: 'pole', title: '가장자리를 짚었다', tag: 'good',
+          lines: ['등산 스틱으로 가장자리를 두드려 단단한 데를 찾았다.',
+            '거기까지만 다가가 사진 대신 눈으로 봤다.',
+            '지나가던 사람이 물었다. "이거 언제 생겼어요?" 나도 모른다.'] },
+        { item: null, title: '피해 갔다', tag: 'good',
+          lines: ['멀찍이 돌아서 갔다.',
+            '몇 걸음 가다 돌아봤더니 구멍이 조금 더 커져 있었다.',
+            '뛰었다.'] },
+      ],
+    },
+  ];
+
+  __M.ENCOUNTERS_CITY = ENCOUNTERS_CITY;
+})();
+
+// ── game/data/encounters_nature.js ─────────────────────────────
+(function () {
+  // 산·논·강가에서 벌어지는 일들.
+  // 형식은 encounters_city.js 와 같다.
+
+  const ENCOUNTERS_NATURE = [
+    {
+      id: 'ritual', name: '가현산 중턱의 사람들', icon: 'fire',
+      at: { lon: 126.6172, lat: 37.6206 },
+      intro: ['흰옷 입은 사람 예닐곱이 둥글게 서서 같은 말을 반복하고 있다.',
+        '가운데에 돌무더기가 있고, 그 위에 아무것도 없다.',
+        '한 사람이 눈을 뜨고 이쪽을 본다. "왔네."'],
+      outcomes: [
+        { item: 'talisman', title: '자리 하나', tag: 'true',
+          lines: ['부적을 꺼내자 사람들이 자리를 한 칸 벌렸다.',
+            '무슨 뜻인지 모르는 말을 따라 했고, 어느 순간부터 뜻이 있는 것 같았다.',
+            '해가 나무 위로 올라올 때 의식이 끝났다. 산을 내려오는 길이 아주 짧게 느껴졌다.'] },
+        { item: 'incense', title: '향을 올렸다', tag: 'good',
+          lines: ['향에 불을 붙여 돌무더기 위에 꽂았다.',
+            '연기가 곧게 올라갔다. 바람이 없는 날이었다.',
+            '한 사람이 말했다. "오늘은 잘될 거예요." 무엇이 잘되는지는 묻지 않았다.'] },
+        { item: 'acorn', title: '도토리를 올렸다', tag: 'odd',
+          lines: ['도토리를 한 줌 돌무더기에 올렸다.',
+            '사람들이 웃었다. "산이 좋아하겠네."',
+            '내려오는 길에 다람쥐가 세 번 앞을 가로질렀다.'] },
+        { item: 'pole', title: '기둥 노릇', tag: 'odd',
+          lines: ['등산 스틱을 세워 달라기에 가운데에 꽂았다.',
+            '사람들이 그것을 중심으로 돌기 시작했다.',
+            '삼십 분 뒤 스틱을 뽑아 돌려받았다. 손잡이가 따뜻했다.'] },
+        { item: 'laser', title: '초록 빛을 쐈다', tag: 'bad',
+          lines: ['장난 삼아 레이저를 돌무더기에 비췄다.',
+            '사람들이 전부 눈을 떴고, 아무도 화를 내지 않았다. 그게 더 무서웠다.',
+            '산을 뛰어 내려왔다. 회사에는 산에서 길을 잃었다고 했다.'] },
+        { item: null, title: '멀리서 봤다', tag: 'good',
+          lines: ['나무 뒤에서 십 분쯤 봤다.',
+            '의식은 조용히 끝났고, 사람들은 각자 다른 길로 내려갔다.',
+            '돌무더기에는 아무것도 없었다. 처음부터 그랬을지도 모른다.'] },
+      ],
+    },
+    {
+      id: 'boar', name: '길을 막은 멧돼지', icon: 'animal',
+      at: { lon: 126.6158, lat: 37.6252 },
+      intro: ['등산로 한가운데 멧돼지 한 마리가 서 있다.',
+        '이쪽을 보고 있지만 달려오지는 않는다.'],
+      outcomes: [
+        { item: 'megaphone', title: '큰 소리', tag: 'good',
+          lines: ['확성기를 켜고 낮은 소리를 냈다.',
+            '멧돼지가 두 걸음 물러서더니 숲으로 들어갔다.',
+            '심장이 한참 뛰었다. 그 길로 계속 걸었다.'] },
+        { item: 'pole', title: '스틱을 넓게 폈다', tag: 'good',
+          lines: ['스틱을 옆으로 들어 몸을 크게 보이게 했다.',
+            '멧돼지는 옆길로 비켰다. 배운 대로 됐다.',
+            '지나간 뒤에도 한참 뒤를 돌아봤다.'] },
+        { item: 'acorn', title: '도토리를 굴렸다', tag: 'odd',
+          lines: ['도토리를 길 옆으로 굴렸다.',
+            '멧돼지가 그쪽으로 코를 박았다.',
+            '그 사이에 지나갔다. 도토리는 원래 저쪽 몫이었다.'] },
+        { item: 'seeds', title: '씨앗을 뿌렸다', tag: 'odd',
+          lines: ['씨앗 봉지를 열어 길 밖으로 뿌렸다.',
+            '멧돼지가 흙을 뒤집기 시작했다.',
+            '가을에 그 자리에 뭐가 났는지는 아무도 모른다.'] },
+        { item: 'radio', title: '라디오를 켰다', tag: 'good',
+          lines: ['라디오 소리를 키웠다. 아침 방송 진행자가 웃고 있었다.',
+            '멧돼지는 사람 소리를 싫어한다더니 정말 그랬다.',
+            '방송을 들으며 산을 내려왔다.'] },
+        { item: null, title: '뒷걸음질', tag: 'odd',
+          lines: ['눈을 마주친 채로 천천히 뒤로 걸었다.',
+            '모퉁이를 돌자마자 뛰었다.',
+            '한참 뒤 돌아보니 아무것도 없었다. 옷에 흙만 잔뜩 묻었다.'] },
+      ],
+    },
+    {
+      id: 'bugs', name: '벌레 떼', icon: 'bug',
+      at: { lon: 126.6204, lat: 37.6338 },
+      intro: ['공기 중에 검은 점이 가득하다. 붙었다 떨어졌다 한다.',
+        '지나가던 사람이 손을 휘저으며 뛰어간다.'],
+      outcomes: [
+        { item: 'spray', title: '길 하나를 텄다', tag: 'good',
+          lines: ['스프레이를 반원으로 뿌렸다. 그만큼이 비었다.',
+            '뒤에 오던 사람들이 그 길로 지나갔다.',
+            '통 하나를 다 썼다. 오늘 하루치 인심이었다.'] },
+        { item: 'net', title: '한 무리를 담았다', tag: 'odd',
+          lines: ['포충망을 한 번 저었다. 안이 새까매졌다.',
+            '한참 보다가 논 쪽으로 놓아 줬다.',
+            '"그거 왜 잡아요?" 누가 물었다. 그러게, 왜 잡았을까.'] },
+        { item: 'loupe', title: '가까이서 봤다', tag: 'true',
+          lines: ['소매에 붙은 놈을 확대경으로 봤다.',
+            '날개에 무늬가 있었다. 아무도 안 보는 무늬다.',
+            '털어내는 대신 날아갈 때까지 기다렸다.'] },
+        { item: 'umbrella', title: '우산을 쓰고 통과', tag: 'good',
+          lines: ['우산을 펴고 앞으로 기울여 밀고 갔다.',
+            '우산 겉면이 새까매졌지만 얼굴은 멀쩡했다.',
+            '건널목에서 우산을 털었다. 사람들이 한 걸음씩 물러섰다.'] },
+        { item: 'balloon', title: '풍선에 붙었다', tag: 'odd',
+          lines: ['풍선을 들자 벌레가 거기로 몰렸다.',
+            '풍선을 놓아 주자 검은 점이 뭉쳐 하늘로 올라갔다.',
+            '그게 어디까지 갔는지는 모른다.'] },
+        { item: null, title: '입 다물고 지나갔다', tag: 'odd',
+          lines: ['눈만 반쯤 뜨고 빠르게 걸었다.',
+            '옷에 붙은 것을 골목 끝에서 하나씩 떼어냈다.',
+            '한 마리는 회사까지 같이 갔다.'] },
+      ],
+    },
+    {
+      id: 'dog', name: '목줄 없는 개', icon: 'animal',
+      at: { lon: 126.6222, lat: 37.6382 },
+      intro: ['논둑에 개 한 마리가 앉아 있다. 목에 줄자국이 있다.',
+        '도망가지도, 다가오지도 않는다.'],
+      outcomes: [
+        { item: 'catsnack', title: '간식 한 알', tag: 'good',
+          lines: ['고양이 간식이지만 상관없었다.',
+            '한 알을 놓고 물러서자 다가와 먹었다.',
+            '동물보호센터에 전화하는 동안 옆에 앉아 있었다. 차가 올 때까지 안 갔다.'] },
+        { item: 'kimbap', title: '김밥을 나눴다', tag: 'good',
+          lines: ['김밥을 반 줄 놓아 줬다. 단무지는 빼고.',
+            '다 먹고 나서 앞발을 무릎에 올렸다.',
+            '전단을 붙이러 가는 길에 계속 따라왔다. 이름은 아직 없다.'] },
+        { item: 'rod', title: '줄을 만들었다', tag: 'odd',
+          lines: ['낚싯줄로 임시 목줄을 만들었다.',
+            '개는 순순히 목을 내밀었다. 어딘가에서 그렇게 배운 것이다.',
+            '행정복지센터까지 같이 걸었다. 낚싯대는 거기 두고 왔다.'] },
+        { item: 'flower', title: '꽃을 내려놨다', tag: 'odd',
+          lines: ['줄 게 그것밖에 없어서 꽃을 놓았다.',
+            '개는 냄새를 맡고 재채기를 했다.',
+            '나중에 보니 꽃은 물어다 논둑 끝에 옮겨 놨더라.'] },
+        { item: null, title: '지나쳤다', tag: 'bad',
+          lines: ['해 줄 게 없어서 그냥 걸었다.',
+            '한참 뒤에 돌아보니 그 자리에 그대로 앉아 있었다.',
+            '퇴근길에 다시 가 봤지만 없었다.'] },
+      ],
+    },
+    {
+      id: 'fish', name: '낚시터의 커다란 것', icon: 'fish',
+      at: { lon: 126.6130, lat: 37.6294 },
+      intro: ['수면이 한 번 크게 부풀었다 가라앉는다.',
+        '낚시터 주인이 담배를 끄며 말한다. "저거 십 년째 못 잡았어요."'],
+      outcomes: [
+        { item: 'rod', title: '십 년 만의 입질', tag: 'true',
+          lines: ['빌린 낚싯대를 던졌다. 삼 분 만에 줄이 팽팽해졌다.',
+            '십 분을 버텼고, 수면 위로 등이 한 번 보였다가 줄이 끊어졌다.',
+            '주인이 말했다. "봤죠? 봤으면 된 거예요."'] },
+        { item: 'net', title: '포충망으로', tag: 'odd',
+          lines: ['포충망을 물에 넣었다. 뭔가 스치고 지나갔다.',
+            '망은 찢어졌고 손잡이만 남았다.',
+            '주인이 배를 잡고 웃었다. 손잡이는 기념으로 벽에 걸렸다.'] },
+        { item: 'kimbap', title: '밥알을 던졌다', tag: 'good',
+          lines: ['김밥을 뜯어 밥알을 던졌다.',
+            '작은 것들이 먼저 왔고, 그 뒤에 큰 그림자가 지나갔다.',
+            '아무것도 잡지 않았다. 그게 오늘 제일 잘한 일 같았다.'] },
+        { item: 'catsnack', title: '고양이가 먼저 왔다', tag: 'odd',
+          lines: ['간식 봉지를 뜯자 관리동 밑에서 고양이 셋이 나왔다.',
+            '물속의 것은 그날 다시 나타나지 않았다.',
+            '고양이 셋과 삼십 분을 보내고 일어섰다.'] },
+        { item: null, title: '물만 봤다', tag: 'good',
+          lines: ['난간에 팔을 걸치고 물을 봤다.',
+            '수면이 한 번 더 부풀었고, 그게 다였다.',
+            '"오늘은 인사만 한 거예요." 주인이 말했다.'] },
+      ],
+    },
+    {
+      id: 'crop-circle', name: '논에 눌린 무늬', icon: 'circle',
+      at: { lon: 126.6086, lat: 37.6350 },
+      intro: ['벼가 원 모양으로 눕혀져 있다. 지름이 이십 미터쯤 된다.',
+        '가장자리는 자로 그은 것처럼 반듯하다.'],
+      outcomes: [
+        { item: 'binoculars', title: '둑 위에서', tag: 'true',
+          lines: ['논둑에 올라가 쌍안경으로 봤다. 무늬가 하나가 아니었다.',
+            '작은 원이 큰 원 안에 셋. 셋의 간격이 똑같다.',
+            '누구에게도 말하지 않았다. 말할 방법이 없었다.'] },
+        { item: 'papermap', title: '지도에 옮겼다', tag: 'true',
+          lines: ['종이 지도 위에 무늬 자리를 표시했다.',
+            '지난달에 표시해 둔 다른 두 곳과 삼각형이 됐다.',
+            '삼각형 가운데에는 양촌산단이 있었다.'] },
+        { item: 'shovel', title: '흙을 파 봤다', tag: 'odd',
+          lines: ['무늬 가운데를 조금 팠다. 흙이 유리처럼 굳어 있었다.',
+            '한 조각을 주머니에 넣었다.',
+            '점심때 꺼내 보니 그냥 흙덩이였다.'] },
+        { item: 'seeds', title: '가운데에 심었다', tag: 'good',
+          lines: ['무늬 한가운데에 씨앗을 한 줌 뿌리고 발로 덮었다.',
+            '주인 없는 밭도 아닌데 그렇게 했다.',
+            '가을에 그 자리에만 다른 게 자랐다는 이야기를 들었다.'] },
+        { item: 'acorn', title: '도토리를 놓았다', tag: 'odd',
+          lines: ['가운데에 도토리를 하나 세워 놓고 나왔다.',
+            '오후에 다시 갔을 때 도토리는 없었다.',
+            '무늬도 반쯤 지워져 있었다.'] },
+        { item: null, title: '한 바퀴 돌았다', tag: 'good',
+          lines: ['무늬를 따라 한 바퀴 걸었다. 정확히 백열두 걸음.',
+            '들어가지는 않았다.',
+            '농협 앞에서 그 얘기를 했더니 "고라니야, 고라니" 했다.'] },
+      ],
+    },
+    {
+      id: 'heron', name: '한강 하구의 새 떼', icon: 'bird',
+      at: { lon: 126.5962, lat: 37.6486 },
+      intro: ['둑 너머 갯벌에 큰 새들이 내려앉아 있다.',
+        '한 사람이 삼각대를 세워 두고 숨죽이고 있다.'],
+      outcomes: [
+        { item: 'binoculars', title: '재두루미', tag: 'true',
+          lines: ['쌍안경을 들자 목에 회색 띠가 보였다.',
+            '"재두루미예요. 여기까지 오는 건 드물어요." 옆 사람이 속삭였다.',
+            '이십 분을 그렇게 서 있었다. 회사에는 늦었다.'] },
+        { item: 'tripod', title: '삼각대를 빌려줬다', tag: 'good',
+          lines: ['들고 있던 삼각대를 옆 사람에게 넘겼다.',
+            '그 사람은 사진 한 장을 찍고 오래 아무 말도 안 했다.',
+            '연락처를 받았다. 사진은 아직 안 왔다.'] },
+        { item: 'net', title: '망을 들었더니', tag: 'bad',
+          lines: ['포충망을 들고 둑에 올라섰다.',
+            '새들이 한꺼번에 날았다. 소리가 바람 같았다.',
+            '옆 사람이 삼각대를 접으며 말했다. "…축하해요."'] },
+        { item: 'seeds', title: '씨앗을 뿌렸다', tag: 'odd',
+          lines: ['둑 아래로 씨앗을 조금 뿌렸다.',
+            '새들은 쳐다보지도 않았다. 먹는 게 아니었다.',
+            '대신 참새가 왔다. 그것도 나쁘지 않았다.'] },
+        { item: null, title: '숨을 죽였다', tag: 'good',
+          lines: ['가만히 섰다. 새 한 마리가 날개를 폈다가 접었다.',
+            '아무 일도 일어나지 않는 십 분이 지나갔다.',
+            '돌아서는데 뒤에서 한꺼번에 날아오르는 소리가 났다. 돌아보지 않았다.'] },
+      ],
+    },
+  ];
+
+  __M.ENCOUNTERS_NATURE = ENCOUNTERS_NATURE;
+})();
+
+// ── game/data/encounters_deep.js ─────────────────────────────
+(function () {
+  // 공단·지하·하늘에서 벌어지는, 조금 더 이상한 일들.
+  // 형식은 encounters_city.js 와 같다.
+
+  const ENCOUNTERS_DEEP = [
+    {
+      id: 'alien', name: '들판에 내려앉은 것', icon: 'ufo',
+      at: { lon: 126.6042, lat: 37.6386 },
+      intro: ['논 가운데에 사람 키만 한 것이 서 있다. 사람은 아니다.',
+        '이쪽을 향해 팔 같은 것을 천천히 들어 보인다.',
+        '기다리는 것 같다.'],
+      outcomes: [
+        { item: 'flower', title: '꽃을 건넸다', tag: 'true',
+          lines: ['꽃다발을 내밀었다. 그것은 오래 들여다보다가 받았다.',
+            '꽃이 그 손 안에서 한 번 더 피었다. 그렇게 보였다.',
+            '들판 위로 올라가는 것을 다 보고 나서야 출근길로 돌아왔다. 아무한테도 말하지 않았다.'] },
+        { item: 'laser', title: '레이저총', tag: 'odd',
+          lines: ['장난감 레이저를 겨눴다. 초록 점이 가슴께에 닿았다.',
+            '그것은 놀란 듯 뒤로 넘어졌고, 잠시 뒤 일어나 아주 빠르게 사라졌다.',
+            '장난감이 왜 통했는지는 끝내 알 수 없었다. 논에는 탄 자국 하나가 남았다.'] },
+        { item: 'extinguisher', title: '하얗게 덮었다', tag: 'bad',
+          lines: ['소화기를 뿌렸다. 흰 가루가 그것을 덮었다.',
+            '그것은 가루를 털며 아주 사람 같은 몸짓을 했다. 실망한 것 같았다.',
+            '돌아서서 걸어갔고, 뒤따라오는 빛은 없었다.'] },
+        { item: 'radio', title: '주파수가 맞았다', tag: 'true',
+          lines: ['라디오를 켜자 잡음 사이에서 규칙적인 소리가 났다.',
+            '그것이 다가와 라디오에 손을 댔다. 소리가 말이 됐다. 뜻은 몰랐지만 인사인 건 알았다.',
+            '라디오는 두고 왔다. 아침 방송을 다시는 못 들었다.'] },
+        { item: 'acorn', title: '도토리 한 줌', tag: 'odd',
+          lines: ['도토리를 내밀었다. 그것은 하나를 집어 하늘에 비춰 봤다.',
+            '나머지를 자기 발 밑에 묻었다.',
+            '가을에 그 자리에 나무가 있었다. 그 논에는 원래 나무가 없다.'] },
+        { item: 'kimbap', title: '아침을 나눴다', tag: 'good',
+          lines: ['김밥을 반 줄 내밀었다. 받아서 한참 들고 있었다.',
+            '먹지는 않았다. 대신 자기 쪽에서 뭔가 내밀었는데, 손에 닿자 사라졌다.',
+            '그날 하루 종일 배가 고프지 않았다.'] },
+        { item: null, title: '마주 서 있었다', tag: 'good',
+          lines: ['줄 것도 쏠 것도 없어서 그냥 서 있었다.',
+            '그것도 서 있었다. 오 분쯤 그랬다.',
+            '먼저 고개를 숙인 건 이쪽이었다. 고개를 들었을 때는 없었다.'] },
+      ],
+    },
+    {
+      id: 'kaiju', name: '갯벌에서 올라온 것', icon: 'kaiju',
+      at: { lon: 126.5934, lat: 37.6418 },
+      intro: ['둑 너머에서 뭔가 아주 큰 것이 몸을 일으킨다.',
+        '물이 한꺼번에 밀려 둑을 때린다.',
+        '사이렌은 아직 울리지 않는다.'],
+      outcomes: [
+        { item: 'megaphone', title: '먼저 소리쳤다', tag: 'good',
+          lines: ['확성기를 켜고 둑길 사람들에게 뒤로 물러서라고 외쳤다.',
+            '십 분 뒤 진짜 사이렌이 울렸고, 그때는 이미 다들 도로 위였다.',
+            '뉴스에는 "인근 주민의 신속한 대피"라고만 나왔다.'] },
+        { item: 'laser', title: '눈에 점을 찍었다', tag: 'odd',
+          lines: ['초록 점을 그 큰 눈에 맞췄다.',
+            '그것은 점을 따라 고개를 돌리다가, 점을 따라 강 쪽으로 몸을 돌렸다.',
+            '물로 돌아가는 데 십오 분이 걸렸다. 손이 계속 떨렸다.'] },
+        { item: 'kimbap', title: '김밥 한 줄', tag: 'odd',
+          lines: ['김밥을 둑 아래로 던졌다. 크기를 생각하면 우스운 양이었다.',
+            '그것은 그걸 정확히 집어 먹었다. 그리고 더 달라는 듯 기다렸다.',
+            '없다고 손을 저었다. 알아들은 것 같았다.'] },
+        { item: 'flower', title: '꽃을 놓았다', tag: 'true',
+          lines: ['꽃다발을 둑 위에 놓고 물러섰다.',
+            '그것은 꽃을 오래 봤다. 물이 잦아들었다.',
+            '다음 날 그 자리에 조개껍데기가 둥글게 놓여 있었다는 이야기를 들었다.'] },
+        { item: 'helmet', title: '안전모 하나로', tag: 'bad',
+          lines: ['안전모 끈을 조이고 둑에 올라섰다. 아무 소용 없는 준비였다.',
+            '물이 한 번 덮쳤고, 정신을 차려 보니 도로 위였다.',
+            '안전모는 찌그러졌다. 그게 아니었으면 머리가 그랬을 것이다.'] },
+        { item: null, title: '뛰었다', tag: 'good',
+          lines: ['판단할 것도 없이 반대로 뛰었다.',
+            '뒤에서 물이 둑을 넘는 소리가 났다.',
+            '양촌 정문에 도착했을 때 신발은 젖어 있었고, 아무도 그 이유를 묻지 않았다.'] },
+      ],
+    },
+    {
+      id: 'bunker', name: '지하 통로 끝의 문', icon: 'door',
+      at: { place: '학운2일반산업단지 폐수처리장', floor: 1, slot: 8 },
+      intro: ['처리조 뒤로 아래로 내려가는 계단이 있다. 도면에는 없는 층이다.',
+        '끝에 두꺼운 문이 있고, 옆에 카드 리더와 손잡이가 있다.',
+        '문 너머에서 아주 낮은 소리가 계속 난다.'],
+      outcomes: [
+        { item: 'badge', title: '문이 열렸다', tag: 'true',
+          lines: ['출입카드를 댔다. 삑, 하고 열렸다.',
+            '안에는 계기판과 의자 하나가 있었다. 계기판에는 이 동네 지명이 전부 적혀 있었다.',
+            '아무것도 만지지 않고 나왔다. 문은 뒤에서 저절로 닫혔다.'] },
+        { item: 'keys', title: '열쇠 열한 개 중 하나', tag: 'true',
+          lines: ['열쇠를 하나씩 넣어 봤다. 아홉 번째가 맞았다.',
+            '관리사무소 직원은 이 문의 존재를 몰랐을 것이다. 아마도.',
+            '안쪽 벽에 1978년 도면이 붙어 있었다. 구래동은 아직 없었다.'] },
+        { item: 'flashlight', title: '불빛에 드러난 것', tag: 'odd',
+          lines: ['손전등으로 문 옆을 비추자 페인트로 덮인 표지판이 보였다.',
+            '"대피" 두 글자만 남아 있었다.',
+            '문은 열지 않았다. 올라오는 계단이 아주 길게 느껴졌다.'] },
+        { item: 'magnet', title: '자석을 붙였다', tag: 'bad',
+          lines: ['카드 리더에 자석을 붙였다. 문이 열렸고, 동시에 안쪽 계기판이 전부 켜졌다.',
+            '숫자가 내려가기 시작했다. 멈추는 법은 어디에도 적혀 있지 않았다.',
+            '지상으로 뛰어 올라오는 동안 땅이 한 번 울렸다. 그게 마지막 출근길이었다.'] },
+        { item: 'laser', title: '지구 멸망', tag: 'bad',
+          lines: ['재미 삼아 계기판 센서에 초록 점을 비췄다. 센서가 그걸 신호로 읽었다.',
+            '벽 너머에서 아주 큰 것이 깨어나는 소리가 났다. 카운트다운은 십 분이었다.',
+            '구래동 사람들은 아무것도 모른 채 출근하고 있었다. 십 분은 짧았다.',
+            '그날 김포 위의 하늘은 두 번 밝았고, 두 번째는 아주 오래갔다.'] },
+        { item: 'battery', title: '전원을 갈았다', tag: 'odd',
+          lines: ['리더 아래 건전지 칸이 열려 있길래 새 걸로 갈아 끼웠다.',
+            '문이 조용히 열렸고, 안에서 누군가 "고맙습니다" 하고 말했다.',
+            '사람은 없었다. 그냥 인사만 있었다.'] },
+        { item: null, title: '올라왔다', tag: 'good',
+          lines: ['손잡이를 잡았다가 놓았다.',
+            '이건 오늘의 일이 아니라고 생각하기로 했다.',
+            '계단을 올라와 정문을 지나 출근했다. 그 소리는 아직도 가끔 들린다.'] },
+      ],
+    },
+    {
+      id: 'army', name: '갑자기 생긴 검문소', icon: 'gate',
+      at: { lon: 126.6086, lat: 37.6428 },
+      intro: ['산단 진입로에 어제 없던 초소와 차단기가 있다.',
+        '군복 입은 사람들이 신분증을 확인하고 있다.',
+        '"오늘 이 구간은 통제입니다."'],
+      outcomes: [
+        { item: 'badge', title: '통과', tag: 'good',
+          lines: ['출입카드를 보였다. 잠깐 무전이 오가더니 차단기가 올라갔다.',
+            '지나가면서 보니 뒤쪽 공터에 천막이 스무 동쯤 서 있었다.',
+            '"오늘 본 건 말 안 하시는 게 좋아요." 알겠다고 했다.'] },
+        { item: 'helmet', title: '오해', tag: 'odd',
+          lines: ['안전모를 쓴 채 다가가자 다들 작업자로 알았다.',
+            '차단기가 그냥 올라갔고, 심지어 인사도 받았다.',
+            '공단 정문까지 안전모를 벗지 못했다.'] },
+        { item: 'papermap', title: '옛 지도', tag: 'true',
+          lines: ['종이 지도를 펴서 우회로를 물었다.',
+            '병사가 지도를 한참 보더니 "여기 길 없어진 지 오래됐는데요" 했다.',
+            '그 없어진 길로 갔다. 길은 아직 있었다.'] },
+        { item: 'megaphone', title: '확성기는 두 배로 수상하다', tag: 'bad',
+          lines: ['확성기를 들고 다가간 게 잘못이었다.',
+            '가방을 다 열었고, 이름과 주소를 적었고, 사진도 찍혔다.',
+            '한 시간 뒤에 풀려났다. 첫 출근은 두 시간 늦었다.'] },
+        { item: 'walkie', title: '3번 채널이 잡혔다', tag: 'odd',
+          lines: ['무전기가 저절로 켜지며 그쪽 교신을 잡았다.',
+            '"민간 무전 감청 중" 이라는 말이 들렸고, 곧 이쪽으로 사람이 왔다.',
+            '무전기는 압수됐다. 영수증 같은 걸 받았는데 도장이 없었다.'] },
+        { item: null, title: '줄을 섰다', tag: 'good',
+          lines: ['앞사람 뒤에 섰다. 이십 분 걸렸다.',
+            '신분증을 보이고 이름을 말하고 지나갔다.',
+            '뒤를 돌아보니 초소는 그대로 있었다. 다음 날에는 없었다.'] },
+      ],
+    },
+    {
+      id: 'agent', name: '수첩을 든 사람', icon: 'note',
+      at: { lon: 126.6152, lat: 37.6366 },
+      intro: ['정장 차림 한 사람이 논둑에 서서 수첩에 뭔가 적고 있다.',
+        '"혹시 오늘 아침에 이상한 거 보셨어요?"',
+        '어디 소속인지는 말하지 않는다.'],
+      outcomes: [
+        { item: 'papermap', title: '지도를 맞춰 봤다', tag: 'true',
+          lines: ['종이 지도를 펴자 그 사람이 처음으로 눈을 크게 떴다.',
+            '수첩의 표시와 지도의 표시가 세 군데 겹쳤다.',
+            '"이거 어디서 났어요?" 안내소에서요. 그 사람은 그 말을 두 번 적었다.'] },
+        { item: 'badge', title: '같은 편으로 봤다', tag: 'odd',
+          lines: ['출입카드를 목에 건 걸 보고는 말투가 바뀌었다.',
+            '오늘 아침 관측된 것들에 대해 십 분을 설명해 줬다. 절반은 못 알아들었다.',
+            '헤어질 때 명함을 줬는데, 이름 자리가 비어 있었다.'] },
+        { item: 'radio', title: '같은 잡음', tag: 'true',
+          lines: ['라디오를 켜자 그 사람이 손을 들어 조용히 시켰다.',
+            '둘이서 같은 잡음을 삼 분 동안 들었다.',
+            '"이거 오늘로 나흘째예요." 그 말만 하고 갔다.'] },
+        { item: 'talisman', title: '부적을 보였다', tag: 'odd',
+          lines: ['안주머니의 부적을 꺼내 보였다.',
+            '그 사람은 수첩을 덮고 한숨을 쉬었다. "산에도 다녀오셨네요."',
+            '그날 이후 그 사람은 논둑에 나타나지 않았다.'] },
+        { item: 'magnet', title: '수첩이 지워졌다', tag: 'bad',
+          lines: ['자석을 꺼내 들자 그 사람 주머니의 무언가가 딸깍 소리를 냈다.',
+            '"…아." 그 사람은 아주 조용히 화를 냈다.',
+            '오늘 아침 기록은 전부 날아갔다고 한다. 사과했지만 소용없었다.'] },
+        { item: null, title: '못 봤다고 했다', tag: 'good',
+          lines: ['아무것도 못 봤다고 했다. 사실이기도 했다.',
+            '그 사람은 고맙다고 하고 다음 사람에게 갔다.',
+            '한참 걷다 돌아보니 논둑에 아무도 없었다.'] },
+      ],
+    },
+    {
+      id: 'balloon-sky', name: '하늘에 걸린 것', icon: 'ufo',
+      at: { lon: 126.6206, lat: 37.6528 },
+      intro: ['하늘 높이 흰 것이 하나 떠 있다. 구름은 아니다.',
+        '몇 시간째 같은 자리에 있다.'],
+      outcomes: [
+        { item: 'binoculars', title: '관측 기구였다', tag: 'true',
+          lines: ['쌍안경으로 보니 아래에 작은 상자가 매달려 있었다.',
+            '기상 관측 기구다. 옆면에 기관 이름 같은 글자가 있었지만 읽히지 않았다.',
+            '이십 분 뒤 서쪽으로 천천히 흘러갔다.'] },
+        { item: 'tripod', title: '삼각대를 세웠다', tag: 'good',
+          lines: ['삼각대를 세우고 그 위에 팔을 올려 오래 봤다.',
+            '지나가던 사람 셋이 같이 봤다.',
+            '넷이서 각자 다른 답을 말하고 헤어졌다.'] },
+        { item: 'balloon', title: '풍선을 놓았다', tag: 'odd',
+          lines: ['들고 있던 풍선을 놓았다.',
+            '두 개가 같은 하늘에 있는 걸 잠깐 봤다.',
+            '풍선이 훨씬 빨리 작아졌다.'] },
+        { item: 'laser', title: '초록 점을 올렸다', tag: 'bad',
+          lines: ['하늘을 향해 레이저를 쐈다. 점은 닿지 않았다.',
+            '대신 저 멀리서 헬기 소리가 들렸다.',
+            '주머니에 손을 넣고 아주 자연스럽게 걸었다. 심장은 그렇지 않았다.'] },
+        { item: null, title: '목이 아팠다', tag: 'good',
+          lines: ['한참 올려다봤다. 목이 아팠다.',
+            '고개를 내리자 눈앞에 검은 점이 떠다녔다.',
+            '그 점들은 걸어가는 내내 같이 갔다.'] },
+      ],
+    },
+    {
+      id: 'factory-line', name: '멈춘 라인과 쏟아진 화물', icon: 'boxes',
+      at: { place: '학운5일반산업단지 공동물류창고', floor: 1, slot: 6 },
+      intro: ['컨베이어가 멈춰 있고 상자가 통로를 덮었다.',
+        '한 사람이 그 앞에 주저앉아 있다. 다친 데는 없어 보인다.'],
+      outcomes: [
+        { item: 'gloves', title: '같이 주웠다', tag: 'good',
+          lines: ['목장갑을 끼고 상자를 같이 쌓았다.',
+            '이십 분 만에 통로가 열렸다.',
+            '그 사람이 말했다. "여기 사람 아니시죠? 고맙습니다."'] },
+        { item: 'helmet', title: '위쪽이 문제였다', tag: 'true',
+          lines: ['안전모를 쓰고 위를 봤다. 상단 레일 고정핀이 빠져 있었다.',
+            '그걸 알리자 사람들이 전부 통로에서 물러섰다.',
+            '삼십 분 뒤 나머지 한 줄이 무너졌다. 아래에는 아무도 없었다.'] },
+        { item: 'extinguisher', title: '탄내를 찾아서', tag: 'good',
+          lines: ['어디선가 탄내가 났다. 모터함이 뜨거웠다.',
+            '소화기를 한 번 짧게 뿌리고 차단기를 내렸다.',
+            '"이거 안 껐으면 큰일 났어요." 반장이 세 번 말했다.'] },
+        { item: 'walkie', title: '반장을 불렀다', tag: 'good',
+          lines: ['무전기로 3번 채널을 불렀다. 반장이 바로 왔다.',
+            '지게차가 와서 십 분 만에 정리됐다.',
+            '커피 한 잔을 얻어 마셨다. 종이컵이 뜨거웠다.'] },
+        { item: 'spray', title: '엉뚱한 도움', tag: 'odd',
+          lines: ['상자 사이에서 뭔가 기어 나오길래 스프레이를 뿌렸다.',
+            '그건 벌레가 아니라 청소용 로봇이었다.',
+            '로봇은 그날 하루 종일 같은 자리를 돌았다.'] },
+        { item: null, title: '손으로 옮겼다', tag: 'good',
+          lines: ['맨손으로 상자를 옮겼다. 모서리에 손바닥이 쓸렸다.',
+            '통로가 열렸을 때 손이 빨갰다.',
+            '그 사람이 자기 장갑을 벗어 줬다. 이제 장갑이 생겼다.'] },
+      ],
+    },
+  ];
+
+  __M.ENCOUNTERS_DEEP = ENCOUNTERS_DEEP;
+})();
+
+// ── game/encounters.js ─────────────────────────────
+(function () {
+  // 사건(encounter) — 무엇을 들고 마주쳤느냐로 하루가 갈리는 자리들.
+  //
+  // 내용은 data/encounters_*.js 에 있다. 여기서는 세 묶음을 합치고,
+  // 지도 위에 놓을 수 있는 형태로 바꾸고, 결과를 고르는 일만 한다.
+  //
+  // 사건 하나의 결과(outcome) 하나가 그대로 엔딩 하나가 된다.
+
+  const { ENCOUNTERS_CITY } = __M;
+  const { ENCOUNTERS_NATURE } = __M;
+  const { ENCOUNTERS_DEEP } = __M;
+  const { ITEM_BY_ID } = __M;
+
+  const ENCOUNTERS = [
+    ...ENCOUNTERS_CITY, ...ENCOUNTERS_NATURE, ...ENCOUNTERS_DEEP,
+  ];
+
+  // 사건에 붙는 플래그 이름 — 엔딩 판정이 이 값을 본다
+  function encounterFlag(encId, itemId) {
+    return `enc:${encId}:${itemId || 'none'}`;
+  }
+
+  // 들고 있는 것에 맞는 결과. 맞는 게 없으면 맨손 결과.
+  function pickOutcome(enc, itemId) {
+    return enc.outcomes.find((o) => o.item === itemId)
+      || enc.outcomes.find((o) => o.item === null || o.item === undefined)
+      || enc.outcomes[enc.outcomes.length - 1];
+  }
+
+  // 사건을 만질 수 있는 물건처럼 만들어 준다 (game/gizmos.js 와 같은 모양)
+  function encounterGizmos() {
+    return ENCOUNTERS.map((enc) => ({
+      id: `enc-${enc.id}`,
+      icon: enc.icon,
+      at: enc.at,
+      name: enc.name,
+      once: false,          // 결과가 곧 엔딩이라 어차피 한 번이다
+      encounter: enc,
+    }));
+  }
+
+  // 사건 하나가 만들어 내는 엔딩들
+  function encounterEndings() {
+    const out = [];
+    for (const enc of ENCOUNTERS) {
+      for (const o of enc.outcomes) {
+        const item = o.item ? ITEM_BY_ID.get(o.item) : null;
+        out.push({
+          id: `X-${enc.id}-${o.item || 'none'}`,
+          title: o.title,
+          tag: o.tag || 'odd',
+          when: 'any',
+          group: enc.name,
+          hint: item
+            ? `${enc.name} 앞에서 ${item.name}을(를) 쓰면 (${item.from}에게 받는다)`
+            : `${enc.name}을(를) 맨손으로 마주하면`,
+          test: (s) => s.has(encounterFlag(enc.id, o.item)),
+          lines: o.lines,
+        });
+      }
+    }
+    return out;
+  }
+
+  __M.ENCOUNTERS = ENCOUNTERS; __M.encounterFlag = encounterFlag; __M.pickOutcome = pickOutcome; __M.encounterGizmos = encounterGizmos; __M.encounterEndings = encounterEndings;
+})();
+
 // ── game/endings.js ─────────────────────────────
 (function () {
+  const { encounterEndings } = __M;
+
   // 결말. 위에 있는 것부터 검사해서 처음 맞는 하나가 그 판의 결말이 된다.
   //
   // when: 'any'  건드린 순간 바로 끝난다
@@ -6423,16 +7721,22 @@ const __M = Object.create(null);
     },
   ];
 
+  // 사건에서 나오는 결말들을 앞에 붙인다.
+  // (사건 결말은 그 자리에서 바로 끝나므로 먼저 본다)
+  const ALL_ENDINGS = encounterEndings().concat(ENDINGS);
+
+  const ENDING_LIST = ALL_ENDINGS;
+
   // 상태에 맞는 결말 하나 (없으면 null)
   function evaluateEnding(state, where) {
-    for (const e of ENDINGS) {
+    for (const e of ALL_ENDINGS) {
       if (where !== 'goal' && e.when !== 'any') continue; // 도착 전에는 즉시 결말만 본다
       if (e.test(state)) return e;
     }
     return null;
   }
 
-  const ENDING_COUNT = ENDINGS.length;
+  const ENDING_COUNT = ALL_ENDINGS.length;
 
   // 태그별 색 (엔딩 화면·목록에서 쓴다)
   const TAG_COLOR = {
@@ -6442,7 +7746,7 @@ const __M = Object.create(null);
     good: '무사히', bad: '사고', odd: '이상하게', true: '숨은',
   };
 
-  __M.ENDINGS = ENDINGS; __M.evaluateEnding = evaluateEnding; __M.ENDING_COUNT = ENDING_COUNT; __M.TAG_COLOR = TAG_COLOR; __M.TAG_LABEL = TAG_LABEL;
+  __M.ENDINGS = ENDINGS; __M.ENDING_LIST = ENDING_LIST; __M.evaluateEnding = evaluateEnding; __M.ENDING_COUNT = ENDING_COUNT; __M.TAG_COLOR = TAG_COLOR; __M.TAG_LABEL = TAG_LABEL;
 })();
 
 // ── game/gizmos.js ─────────────────────────────
@@ -6453,6 +7757,8 @@ const __M = Object.create(null);
   //   { place: '건물 이름', floor: 층, slot: 실내 자리 번호 }  실내 (실제 건물 이름을 쓴다)
   //   { lon, lat }                                            길 위
   // effect 에서 상태에 플래그를 남기고, 그 조합이 endings.js 에서 결말이 된다.
+
+  const { encounterGizmos } = __M;
 
   const GIZMOS = [
     // ── 길 위 ──────────────────────────────────────────────────────
@@ -6641,7 +7947,7 @@ const __M = Object.create(null);
   // 실내 물건을 건물 이름으로 묶어 둔다 (건물에 들어갈 때 꺼내 쓴다)
   function indexIndoorGizmos() {
     const byPlace = new Map();
-    for (const g of GIZMOS) {
+    for (const g of GIZMOS.concat(encounterGizmos())) {
       if (!g.at.place) continue;
       const key = `${g.at.place}|${g.at.floor}`;
       let list = byPlace.get(key);
@@ -6652,7 +7958,7 @@ const __M = Object.create(null);
   }
 
   function outdoorGizmos() {
-    return GIZMOS.filter((g) => g.at.lon !== undefined);
+    return GIZMOS.concat(encounterGizmos()).filter((g) => g.at.lon !== undefined);
   }
 
   __M.GIZMOS = GIZMOS; __M.indexIndoorGizmos = indexIndoorGizmos; __M.outdoorGizmos = outdoorGizmos;
@@ -6664,7 +7970,7 @@ const __M = Object.create(null);
 
   const { UI } = __M;
   const { UI_COLOR } = __M;
-  const { ENDINGS, ENDING_COUNT, TAG_COLOR, TAG_LABEL } = __M;
+  const { ENDING_LIST, ENDING_COUNT, TAG_COLOR, TAG_LABEL } = __M;
   const { drawText, textWidth, viewSize } = __M;
   const { panel } = __M;
 
@@ -6716,47 +8022,61 @@ const __M = Object.create(null);
       { size: 13, align: 'center', color: UI_COLOR.textDim });
   }
 
-  // 지금까지 본 결말 목록
+  // 지금까지 본 결말 목록. 결말이 많아 쪽으로 나눠 보여 준다.
   function drawGallery(ctx, state) {
     const { w: W, h: H } = viewSize(ctx);
     const found = state.game.found;
 
     ctx.fillStyle = 'rgba(10, 9, 13, 0.94)';
     ctx.fillRect(0, 0, W, H);
-    drawText(ctx, `엔딩 ${found.size} / ${ENDING_COUNT}`, W / 2, 46,
-      { size: 22, align: 'center', bold: true });
-    drawText(ctx, '못 본 결말에는 힌트가 붙어 있다', W / 2, 68,
-      { size: 12, align: 'center', color: UI_COLOR.textDim });
 
     const cols = W >= 1000 ? 3 : W >= 680 ? 2 : 1;
-    const cardW = Math.min(320, (W - 60) / cols - 12);
-    const cardH = 54;
+    const cardW = Math.min(340, (W - 60) / cols - 12);
+    const cardH = 52;
     const startX = (W - (cardW * cols + 12 * (cols - 1))) / 2;
-    let top = 92;
-    const rows = Math.ceil(ENDINGS.length / cols);
-    const maxRows = Math.floor((H - top - 60) / (cardH + 8));
-    const scale = rows > maxRows ? (H - top - 60) / (rows * (cardH + 8)) : 1;
+    const top = 96;
+    const rowsPerPage = Math.max(1, Math.floor((H - top - 56) / (cardH + 8)));
+    const perPage = rowsPerPage * cols;
+    const pages = Math.max(1, Math.ceil(ENDING_LIST.length / perPage));
+    const page = Math.max(0, Math.min(pages - 1, state.galleryPage || 0));
+    state.galleryPage = page;
+    state.galleryPages = pages;
 
-    ENDINGS.forEach((e, i) => {
+    drawText(ctx, `엔딩 ${found.size} / ${ENDING_COUNT}`, W / 2, 46,
+      { size: 22, align: 'center', bold: true });
+    drawText(ctx, `${page + 1} / ${pages} 쪽 · 못 본 결말에는 어디서 무엇을 써야 하는지 적혀 있다`,
+      W / 2, 70, { size: 12, align: 'center', color: UI_COLOR.textDim });
+
+    const slice = ENDING_LIST.slice(page * perPage, (page + 1) * perPage);
+    slice.forEach((e, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const x = startX + col * (cardW + 12);
-      const y = top + row * (cardH + 8) * scale;
-      const h = cardH * scale;
+      const y = top + row * (cardH + 8);
       const got = found.has(e.id);
       ctx.fillStyle = got ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
-      ctx.fillRect(x, y, cardW, h);
+      ctx.fillRect(x, y, cardW, cardH);
       ctx.fillStyle = got ? TAG_COLOR[e.tag] : 'rgba(255,255,255,0.12)';
-      ctx.fillRect(x, y, 3, h);
-      drawText(ctx, e.id, x + 12, y + 20 * scale,
-        { size: 11 * scale, color: UI_COLOR.textDim, shadow: false });
-      drawText(ctx, got ? e.title : '？？？', x + 44, y + 21 * scale,
-        { size: 14 * scale, color: got ? UI_COLOR.text : UI_COLOR.textDim, shadow: false });
-      drawText(ctx, got ? e.lines[0] : e.hint, x + 12, y + 40 * scale,
-        { size: 11 * scale, color: got ? UI_COLOR.textDim : 'rgba(255,255,255,0.32)', shadow: false });
+      ctx.fillRect(x, y, 3, cardH);
+      drawText(ctx, fit(ctx, got ? e.title : '？？？', cardW - 20, 13), x + 12, y + 20,
+        { size: 13, color: got ? UI_COLOR.text : UI_COLOR.textDim, shadow: false });
+      drawText(ctx, fit(ctx, got ? e.lines[0] : e.hint, cardW - 20, 10), x + 12, y + 40,
+        { size: 10, color: got ? UI_COLOR.textDim : 'rgba(255,255,255,0.32)', shadow: false });
     });
 
-    drawText(ctx, 'L 로 닫기', W / 2, H - 24,
-      { size: 12, align: 'center', color: UI_COLOR.textDim });
+    drawText(ctx, state.isTouch ? '좌우를 눌러 쪽 넘기기 · 가운데를 눌러 닫기'
+      : '← → 쪽 넘기기 · L 로 닫기',
+      W / 2, H - 22, { size: 12, align: 'center', color: UI_COLOR.textDim });
+  }
+
+  // 칸 너비에 맞춰 자른다
+  function fit(ctx, text, maxW, size) {
+    if (textWidth(ctx, text, size) <= maxW) return text;
+    let cur = '';
+    for (const ch of text) {
+      if (textWidth(ctx, cur + ch + '…', size) > maxW) break;
+      cur += ch;
+    }
+    return cur + '…';
   }
 
   __M.drawEnding = drawEnding; __M.drawGallery = drawGallery;
@@ -6973,7 +8293,10 @@ const __M = Object.create(null);
     const boxW = Math.min(560, W - 40);
     const boxH = 96;
     const x = (W - boxW) / 2;
-    const y = H - boxH - (state.isTouch ? 120 : 60);
+    // 고를 게 있으면 그 높이만큼 위로 올린다 (화면 밖으로 나가지 않게)
+    const last = d.index >= d.lines.length - 1;
+    const extra = (d.choices && last) ? d.choices.length * 30 + 10 : 0;
+    const y = H - boxH - extra - (state.isTouch ? 150 : 60);
 
     panel(ctx, x, y, boxW, boxH);
     // 말하는 사람
@@ -6989,9 +8312,55 @@ const __M = Object.create(null);
       drawText(ctx, row, x + 16, y + 52 + i * 20, { size: 14 });
     });
 
-    const more = d.index < d.lines.length - 1;
+    const more = !last;
+
+    // 마지막 줄에서 고를 것이 있으면 아래에 붙여 보여 준다
+    if (!more && d.choices) {
+      const rowH = 26;
+      const cy = y + boxH + 6;
+      d.rects = [];
+      d.choices.forEach((c, i) => {
+        const ry = cy + i * (rowH + 4);
+        const on = i === d.choice;
+        ctx.fillStyle = on ? 'rgba(242, 193, 78, 0.18)' : UI_COLOR.panel;
+        ctx.fillRect(x, ry, boxW, rowH);
+        ctx.strokeStyle = on ? UI_COLOR.accent : UI_COLOR.panelEdge;
+        ctx.strokeRect(x + 0.5, ry + 0.5, boxW - 1, rowH - 1);
+        drawText(ctx, `${on ? '▶ ' : '   '}${c.label}`, x + 14, ry + 18,
+          { size: 13, color: on ? UI_COLOR.accent : UI_COLOR.text });
+        d.rects.push({ x, y: ry, w: boxW, h: rowH });
+      });
+      drawText(ctx, state.isTouch ? '눌러서 고르기' : '↑↓ 고르고 Space',
+        x + boxW - 16, y + boxH - 12, { size: 11, align: 'right', color: UI_COLOR.textDim });
+      return;
+    }
+
     drawText(ctx, more ? (state.isTouch ? '탭 ▶' : 'Space ▶') : (state.isTouch ? '탭 닫기' : 'Space 닫기'),
       x + boxW - 16, y + boxH - 12, { size: 11, align: 'right', color: UI_COLOR.textDim });
+  }
+
+  // 화면에서 고른 줄 번호 (없으면 -1)
+  function choiceRowAt(state, sx, sy) {
+    const d = state.dialogue;
+    if (!d || !d.rects) return -1;
+    return d.rects.findIndex((r) => sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h);
+  }
+
+  // 선택지 위아래로 옮기기
+  function moveChoice(state, delta) {
+    const d = state.dialogue;
+    if (!d || !d.choices) return;
+    d.choice = Math.max(0, Math.min(d.choices.length - 1, d.choice + delta));
+  }
+
+  // 지금 고른 것을 고른다
+  function pickChoice(state, index) {
+    const d = state.dialogue;
+    if (!d || !d.choices) return false;
+    const c = d.choices[index === undefined ? d.choice : index];
+    state.dialogue = null;
+    if (c && c.run) c.run();
+    return true;
   }
 
   // 글자 폭에 맞춰 줄바꿈
@@ -7007,24 +8376,35 @@ const __M = Object.create(null);
     return rows;
   }
 
-  // 대화 시작
-  function startDialogue(state, name, lines) {
+  // 대화 시작.
+  // opts.choices  [{ label, run }]  마지막 줄에서 고르게 한다
+  // opts.onEnd    선택지 없이 끝났을 때 부를 것
+  function startDialogue(state, name, lines, opts) {
     const list = (lines && lines.length) ? lines : ['...'];
-    state.dialogue = { name, lines: list, index: 0 };
+    state.dialogue = {
+      name, lines: list, index: 0,
+      choices: (opts && opts.choices) || null,
+      choice: 0,
+      onEnd: (opts && opts.onEnd) || null,
+      rects: null,
+    };
   }
 
-  // 다음 줄로. 끝이면 닫는다.
+  // 다음 줄로. 끝이면 닫는다 (고를 게 있으면 고르는 것으로).
   function advanceDialogue(state) {
-    if (!state.dialogue) return false;
-    if (state.dialogue.index < state.dialogue.lines.length - 1) {
-      state.dialogue.index++;
+    const d = state.dialogue;
+    if (!d) return false;
+    if (d.index < d.lines.length - 1) {
+      d.index++;
       return true;
     }
+    if (d.choices) return pickChoice(state);
     state.dialogue = null;
+    if (d.onEnd) d.onEnd();
     return false;
   }
 
-  __M.drawDialogue = drawDialogue; __M.startDialogue = startDialogue; __M.advanceDialogue = advanceDialogue;
+  __M.drawDialogue = drawDialogue; __M.choiceRowAt = choiceRowAt; __M.moveChoice = moveChoice; __M.pickChoice = pickChoice; __M.startDialogue = startDialogue; __M.advanceDialogue = advanceDialogue;
 })();
 
 // ── ui/fullscreen.js ─────────────────────────────
@@ -7080,7 +8460,7 @@ const __M = Object.create(null);
 
   class TouchControls {
     constructor(hooks) {
-      this.hooks = hooks;            // { interact, worldmap, help, minimap }
+      this.hooks = hooks;            // { interact, worldmap, help, useItem, fullscreen }
       this.stick = null;             // { id, ox, oy, x, y }
       this.axis = { x: 0, y: 0 };
       this.pushed = 0;               // 0~1, 얼마나 밀었나
@@ -7096,15 +8476,21 @@ const __M = Object.create(null);
     layout(W, H) {
       const m = 20, gap = 14;
       const rBig = BUTTON * 0.78;      // 만지기
-      const rSmall = BUTTON * 0.52;    // 달리기 · 지도
+      const rSmall = BUTTON * 0.5;     // 달리기 · 지도 · 쓰기
       const cx = W - m - rBig;         // 만지기 버튼 중심
       const cy = H - m - rBig - 8;
-      // 작은 버튼은 만지기 왼쪽 위에 사선으로 — 큰 버튼과 겹치지 않는 거리
+      // 작은 버튼은 만지기를 중심으로 부채꼴로 — 서로도, 큰 버튼과도 겹치지 않는다
       const d = rBig + rSmall + gap;
+      const arc = (deg) => ({
+        x: cx + Math.cos(deg * Math.PI / 180) * d,
+        y: cy + Math.sin(deg * Math.PI / 180) * d,
+      });
+      const run = arc(-72), map = arc(-126), use = arc(-180);
       this.buttons = [
         { id: 'interact', label: '만지기', x: cx, y: cy, r: rBig },
-        { id: 'run', label: '달리기', x: cx - d * 0.42, y: cy - d * 0.9, r: rSmall },
-        { id: 'worldmap', label: '지도', x: cx - d * 0.96, y: cy - d * 0.28, r: rSmall },
+        { id: 'run', label: '달리기', x: run.x, y: run.y, r: rSmall },
+        { id: 'worldmap', label: '지도', x: map.x, y: map.y, r: rSmall },
+        { id: 'useItem', label: '쓰기', x: use.x, y: use.y, r: rSmall },
         // 도움말은 왼쪽 위 시계판(높이 54) 아래에 둔다
         { id: 'help', label: '?', x: m + 22, y: 12 + 54 + 12 + 22, r: 24 },
         // 전체화면은 오른쪽, 미니맵 아래 (DOM 버튼은 터치에서 감춘다 — 만지기와 겹쳤다)
@@ -7129,6 +8515,7 @@ const __M = Object.create(null);
         else if (button.id === 'worldmap') this.hooks.worldmap();
         else if (button.id === 'help') this.hooks.help();
         else if (button.id === 'fs') this.hooks.fullscreen();
+        else if (button.id === 'useItem') this.hooks.useItem();
         return true;
       }
       if (x < W * 0.55 && !this.stick) {
@@ -7232,6 +8619,7 @@ const __M = Object.create(null);
     TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE, PATHING,
   } = __M;
   const { WORLD_PX_W, WORLD_PX_H, project, pathBounds } = __M;
+  const { withJosa } = __M;
   const { buildBuildings, doorOutside, floorLabel, floorUse } = __M;
   const { WorldMap, buildOverview } = __M;
   const { makeInterior, floorList } = __M;
@@ -7246,11 +8634,13 @@ const __M = Object.create(null);
   const { drawHud, bakeOverview, panel } = __M;
   const { drawEnding, drawGallery } = __M;
   const { drawWorldMap, buildMapMarks, pickOnMap } = __M;
-  const { drawDialogue, startDialogue, advanceDialogue } = __M;
+  const { drawDialogue, startDialogue, advanceDialogue, moveChoice, pickChoice, choiceRowAt } = __M;
   const { toggleFullscreen, onFullscreenChange } = __M;
   const { TouchControls, isTouchDevice } = __M;
   const { GameState } = __M;
   const { GIZMOS, indexIndoorGizmos, outdoorGizmos } = __M;
+  const { ITEM_BY_ID, itemName } = __M;
+  const { pickOutcome, encounterFlag } = __M;
   const { evaluateEnding } = __M;
 
   const S = TILE.size;
@@ -7350,6 +8740,7 @@ const __M = Object.create(null);
       touch = new TouchControls({
         interact: () => { if (state.dialogue) advanceDialogue(state); else interact(); },
         worldmap: () => { state.showWorldMap = !state.showWorldMap; },
+        useItem: () => useItem(),
         help: () => { state.showHelp = !state.showHelp; },
         fullscreen: () => toggleFullscreen(document.documentElement),
       });
@@ -7437,10 +8828,28 @@ const __M = Object.create(null);
   // 열려 있는 화면(도움말·지도·층 선택·결말)에서의 클릭·터치 처리.
   // 처리했으면 true — 그러면 이동 조작으로 넘어가지 않는다.
   function handleUiPointer(x, y) {
-    if (state.dialogue) { advanceDialogue(state); return true; }
+    if (state.dialogue) {
+      // 고를 게 있으면 누른 줄을 고른다
+      if (state.dialogue.choices) {
+        const row = choiceRowAt(state, x, y);
+        if (row >= 0) pickChoice(state, row);
+        else advanceDialogue(state);
+        return true;
+      }
+      advanceDialogue(state);
+      return true;
+    }
     if (state.showHelp) { state.showHelp = false; return true; }
     if (state.game.ending) { restart(); return true; }
-    if (state.showGallery) { state.showGallery = false; return true; }
+    if (state.showGallery) {
+      // 좌우를 누르면 쪽을 넘기고, 가운데를 누르면 닫는다
+      const { w: W } = { w: window.innerWidth };
+      if (x < W * 0.25) state.galleryPage = Math.max(0, (state.galleryPage || 0) - 1);
+      else if (x > W * 0.75) {
+        state.galleryPage = Math.min((state.galleryPages || 1) - 1, (state.galleryPage || 0) + 1);
+      } else state.showGallery = false;
+      return true;
+    }
     if (state.showWorldMap) {
       const hit = pickOnMap(state, x, y);
       if (hit) {
@@ -7491,7 +8900,7 @@ const __M = Object.create(null);
       return;
     }
     if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
-    if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+    if (e.code === 'KeyL') { state.showGallery = !state.showGallery; state.galleryPage = 0; return; }
     if (e.code === 'KeyG') {
       // 목적지를 오늘의 목표로 되돌린다
       state.waypoint = { tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName };
@@ -7512,6 +8921,14 @@ const __M = Object.create(null);
       if (e.code === 'KeyR') restart();
       return;
     }
+    // 엔딩 목록은 쪽으로 넘긴다
+    if (state.showGallery) {
+      if (KEYS.left.includes(e.code)) { state.galleryPage = Math.max(0, (state.galleryPage || 0) - 1); return; }
+      if (KEYS.right.includes(e.code)) {
+        state.galleryPage = Math.min((state.galleryPages || 1) - 1, (state.galleryPage || 0) + 1);
+        return;
+      }
+    }
     if (state.showHelp) { state.showHelp = false; return; }
 
     if (state.picker) {
@@ -7524,6 +8941,14 @@ const __M = Object.create(null);
       }
       e.preventDefault();
       return;
+    }
+
+    if (KEYS.useItem.includes(e.code)) { useItem(); e.preventDefault(); return; }
+
+    // 선택지가 떠 있으면 위아래로 고른다
+    if (state.dialogue && state.dialogue.choices) {
+      if (KEYS.up.includes(e.code)) { moveChoice(state, -1); e.preventDefault(); return; }
+      if (KEYS.down.includes(e.code)) { moveChoice(state, 1); e.preventDefault(); return; }
     }
 
     if (KEYS.interact.includes(e.code)) {
@@ -7605,7 +9030,7 @@ const __M = Object.create(null);
       label: target.label || '표시한 곳',
       tiles: [], index: 0, age: PATHING.replanSeconds, still: 0, retries: 0,
     };
-    toast(`${state.autoPath.label}(으)로 자동 이동 — 움직이면 멈춘다`);
+    toast(`${withJosa(state.autoPath.label, '으로/로')} 자동 이동 — 움직이면 멈춘다`);
   }
 
   function stopAutoWalk(reason) {
@@ -7874,10 +9299,87 @@ const __M = Object.create(null);
     }
   }
 
-  // 사람에게 말 걸기
+  // 사람에게 말 걸기.
+  // 줄 것을 들고 있는 사람이면 마지막에 물어본다 — 손은 하나뿐이다.
   function talkTo(person) {
-    startDialogue(state, person.role || '주민', person.lines);
     state.game.bump('talked');
+    const item = person.gift && !person.gave ? ITEM_BY_ID.get(person.gift) : null;
+    if (!item) {
+      startDialogue(state, person.role || '주민', person.lines);
+      return;
+    }
+    const held = state.game.item ? ITEM_BY_ID.get(state.game.item) : null;
+    const lines = person.lines.concat([item.line]);
+    const choices = held
+      ? [
+        { label: `${withJosa(held.name, '을/를')} 놓고 ${item.name} 받기`,
+          run: () => { person.gave = true; swapItem(item, held); } },
+        { label: `${withJosa(held.name, '을/를')} 계속 든다`,
+          run: () => toast(`${withJosa(item.name, '은/는')} 그 자리에 두었다.`) },
+      ]
+      : [
+        { label: `${item.name} 받기`, run: () => { person.gave = true; swapItem(item, null); } },
+        { label: '괜찮다고 한다', run: () => toast('그냥 고맙다고만 했다.') },
+      ];
+    startDialogue(state, person.role || '주민', lines, { choices });
+  }
+
+  // 아이템 교체 — 하나만 들 수 있다
+  function swapItem(item, held) {
+    state.game.takeItem(item.id, item.name);
+    toast(held ? `${withJosa(held.name, '을/를')} 놓고 ${withJosa(item.name, '을/를')} 들었다.`
+      : `${withJosa(item.name, '을/를')} 받았다.`);
+  }
+
+  // ── 아이템 쓰기 ─────────────────────────────────────────────────────────
+  // 사건 앞에서 쓰면 그날 하루가 그걸로 정해진다.
+  // 그냥 쓰면 물건마다 정해진 한 줄이 나온다.
+  function useItem() {
+    if (state.dialogue || state.picker || state.game.ending) return;
+    const id = state.game.item;
+    if (!id) { toast('든 것이 없다. 사람에게 말을 걸어 보자.'); return; }
+    const item = ITEM_BY_ID.get(id);
+
+    // 가까이에 사건이 있으면 그쪽이 먼저다
+    const enc = nearestEncounter();
+    if (enc) { triggerEncounter(enc, id); return; }
+
+    // 아니면 지금 있는 자리에 맞는 한 줄
+    toast(`${item.name} — ${item.use}`);
+    state.game.bump('used_item');
+    state.game.set('use_' + id, `${item.name}을(를) 써 봤다`);
+  }
+
+  // 만질 수 있는 것 중 사건인 것 (실내·바깥 모두)
+  function nearestEncounter() {
+    const p = state.player;
+    const list = state.mode === 'outdoor' ? state.outdoorGizmos : state.interiorGizmos;
+    let best = null, bestD = LIFE.encounterRadius;
+    for (const g of list) {
+      if (!g.encounter) continue;
+      const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    return best;
+  }
+
+  // 사건 하나를 마주한다. 들고 있는 것에 따라 결과가 갈린다.
+  function triggerEncounter(g, itemId) {
+    const enc = g.encounter;
+    const outcome = pickOutcome(enc, itemId || null);
+    const used = outcome.item || null;
+    startDialogue(state, enc.name, enc.intro, {
+      onEnd: () => {
+        const item = used ? ITEM_BY_ID.get(used) : null;
+        state.game.set(encounterFlag(enc.id, used),
+          item ? `${enc.name} 앞에서 ${withJosa(item.name, '을/를')} 썼다`
+            : `${withJosa(enc.name, '을/를')} 맨손으로 마주했다`);
+        state.game.bump('encounter');
+        // 던지는 물건은 여기서 없어진다
+        if (item && item.tag === '투척') state.game.dropItem();
+        checkImmediateEnding();
+      },
+    });
   }
 
   // 문을 열면 그 방이 보인다
@@ -7900,6 +9402,7 @@ const __M = Object.create(null);
   }
 
   function useGizmo(g) {
+    if (g.encounter) return triggerEncounter(g, state.game.item);
     const ctxObj = {
       toast,
       rideTo: (stationName) => rideTo(stationName),
@@ -8184,6 +9687,14 @@ const __M = Object.create(null);
         return true;
       },
       interact,
+      useItem,
+      // 사건 앞으로 (검증용)
+      encounter(id) {
+        const g = state.outdoorGizmos.find((x) => x.encounter && x.encounter.id === id);
+        if (!g) return false;
+        window.__gurae.tp(g.tx, g.ty + 1);
+        return true;
+      },
     };
   }
 

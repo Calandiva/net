@@ -7,6 +7,7 @@ import { SEED, LIFE, IN, KIND } from '../config.js';
 import { makeRng } from '../util/rng.js';
 import { INDOOR_ROLES } from './data/npcs.js';
 import { INDOOR_EVENTS } from './data/events.js';
+import { itemsFor } from '../game/data/items.js';
 
 // 이 건물, 이 층에 오늘 무슨 일이 있는가
 export function pickIndoorEvent(b, floor) {
@@ -71,9 +72,15 @@ export function makeIndoorPeople(b, floor, interior, event) {
     if (event && event.lines.length && rng.chance(0.62)) {
       lines.unshift(rng.pick(event.lines));
     }
+    // 어떤 사람은 줄 것을 하나 들고 있다 (아이템은 사람에게서만 나온다)
+    let gift = null;
+    if (rng.chance(LIFE.giftChance)) {
+      const pool = itemsFor(b.kind, null);
+      if (pool.length) gift = rng.pick(pool).id;
+    }
     people.push({
       x: (spot.x + 0.5) * 16, y: (spot.y + 0.9) * 16,
-      tx: spot.x, ty: spot.y,
+      tx: spot.x, ty: spot.y, gift,
       role: role.name, lines, seed: rng.int(0, 9999),
       dir: rng.pick(['down', 'left', 'right', 'up']),
       anim: rng.range(0, 3), moving: false,

@@ -20,7 +20,7 @@ const BUTTON = 58;
 
 export class TouchControls {
   constructor(hooks) {
-    this.hooks = hooks;            // { interact, worldmap, help, minimap }
+    this.hooks = hooks;            // { interact, worldmap, help, useItem, fullscreen }
     this.stick = null;             // { id, ox, oy, x, y }
     this.axis = { x: 0, y: 0 };
     this.pushed = 0;               // 0~1, 얼마나 밀었나
@@ -36,15 +36,21 @@ export class TouchControls {
   layout(W, H) {
     const m = 20, gap = 14;
     const rBig = BUTTON * 0.78;      // 만지기
-    const rSmall = BUTTON * 0.52;    // 달리기 · 지도
+    const rSmall = BUTTON * 0.5;     // 달리기 · 지도 · 쓰기
     const cx = W - m - rBig;         // 만지기 버튼 중심
     const cy = H - m - rBig - 8;
-    // 작은 버튼은 만지기 왼쪽 위에 사선으로 — 큰 버튼과 겹치지 않는 거리
+    // 작은 버튼은 만지기를 중심으로 부채꼴로 — 서로도, 큰 버튼과도 겹치지 않는다
     const d = rBig + rSmall + gap;
+    const arc = (deg) => ({
+      x: cx + Math.cos(deg * Math.PI / 180) * d,
+      y: cy + Math.sin(deg * Math.PI / 180) * d,
+    });
+    const run = arc(-72), map = arc(-126), use = arc(-180);
     this.buttons = [
       { id: 'interact', label: '만지기', x: cx, y: cy, r: rBig },
-      { id: 'run', label: '달리기', x: cx - d * 0.42, y: cy - d * 0.9, r: rSmall },
-      { id: 'worldmap', label: '지도', x: cx - d * 0.96, y: cy - d * 0.28, r: rSmall },
+      { id: 'run', label: '달리기', x: run.x, y: run.y, r: rSmall },
+      { id: 'worldmap', label: '지도', x: map.x, y: map.y, r: rSmall },
+      { id: 'useItem', label: '쓰기', x: use.x, y: use.y, r: rSmall },
       // 도움말은 왼쪽 위 시계판(높이 54) 아래에 둔다
       { id: 'help', label: '?', x: m + 22, y: 12 + 54 + 12 + 22, r: 24 },
       // 전체화면은 오른쪽, 미니맵 아래 (DOM 버튼은 터치에서 감춘다 — 만지기와 겹쳤다)
@@ -69,6 +75,7 @@ export class TouchControls {
       else if (button.id === 'worldmap') this.hooks.worldmap();
       else if (button.id === 'help') this.hooks.help();
       else if (button.id === 'fs') this.hooks.fullscreen();
+      else if (button.id === 'useItem') this.hooks.useItem();
       return true;
     }
     if (x < W * 0.55 && !this.stick) {

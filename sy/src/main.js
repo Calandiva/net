@@ -5,6 +5,7 @@ import {
   TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE, PATHING,
 } from './config.js';
 import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
+import { withJosa } from './util/hangul.js';
 import { buildBuildings, doorOutside, floorLabel, floorUse } from './world/buildings.js';
 import { WorldMap, buildOverview } from './world/map.js';
 import { makeInterior, floorList } from './world/interior.js';
@@ -19,11 +20,14 @@ import { drawBuildingLabels, drawRoomLabels, drawText } from './ui/labels.js';
 import { drawHud, bakeOverview, panel } from './ui/hud.js';
 import { drawEnding, drawGallery } from './ui/ending.js';
 import { drawWorldMap, buildMapMarks, pickOnMap } from './ui/worldmap.js';
-import { drawDialogue, startDialogue, advanceDialogue } from './ui/dialogue.js';
+import { drawDialogue, startDialogue, advanceDialogue, moveChoice, pickChoice, choiceRowAt }
+  from './ui/dialogue.js';
 import { toggleFullscreen, onFullscreenChange } from './ui/fullscreen.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { GameState } from './game/state.js';
 import { GIZMOS, indexIndoorGizmos, outdoorGizmos } from './game/gizmos.js';
+import { ITEM_BY_ID, itemName } from './game/data/items.js';
+import { pickOutcome, encounterFlag } from './game/encounters.js';
 import { evaluateEnding } from './game/endings.js';
 
 const S = TILE.size;
@@ -123,6 +127,7 @@ function init() {
     touch = new TouchControls({
       interact: () => { if (state.dialogue) advanceDialogue(state); else interact(); },
       worldmap: () => { state.showWorldMap = !state.showWorldMap; },
+      useItem: () => useItem(),
       help: () => { state.showHelp = !state.showHelp; },
       fullscreen: () => toggleFullscreen(document.documentElement),
     });
@@ -210,10 +215,28 @@ function onPointerDown(e) {
 // 열려 있는 화면(도움말·지도·층 선택·결말)에서의 클릭·터치 처리.
 // 처리했으면 true — 그러면 이동 조작으로 넘어가지 않는다.
 function handleUiPointer(x, y) {
-  if (state.dialogue) { advanceDialogue(state); return true; }
+  if (state.dialogue) {
+    // 고를 게 있으면 누른 줄을 고른다
+    if (state.dialogue.choices) {
+      const row = choiceRowAt(state, x, y);
+      if (row >= 0) pickChoice(state, row);
+      else advanceDialogue(state);
+      return true;
+    }
+    advanceDialogue(state);
+    return true;
+  }
   if (state.showHelp) { state.showHelp = false; return true; }
   if (state.game.ending) { restart(); return true; }
-  if (state.showGallery) { state.showGallery = false; return true; }
+  if (state.showGallery) {
+    // 좌우를 누르면 쪽을 넘기고, 가운데를 누르면 닫는다
+    const { w: W } = { w: window.innerWidth };
+    if (x < W * 0.25) state.galleryPage = Math.max(0, (state.galleryPage || 0) - 1);
+    else if (x > W * 0.75) {
+      state.galleryPage = Math.min((state.galleryPages || 1) - 1, (state.galleryPage || 0) + 1);
+    } else state.showGallery = false;
+    return true;
+  }
   if (state.showWorldMap) {
     const hit = pickOnMap(state, x, y);
     if (hit) {
@@ -264,7 +287,7 @@ function onKeyDown(e) {
     return;
   }
   if (KEYS.help.includes(e.code)) { state.showHelp = !state.showHelp; return; }
-  if (e.code === 'KeyL') { state.showGallery = !state.showGallery; return; }
+  if (e.code === 'KeyL') { state.showGallery = !state.showGallery; state.galleryPage = 0; return; }
   if (e.code === 'KeyG') {
     // 목적지를 오늘의 목표로 되돌린다
     state.waypoint = { tx: state.goalPoint.x / S, ty: state.goalPoint.y / S, label: GAME.goalName };
@@ -285,6 +308,14 @@ function onKeyDown(e) {
     if (e.code === 'KeyR') restart();
     return;
   }
+  // 엔딩 목록은 쪽으로 넘긴다
+  if (state.showGallery) {
+    if (KEYS.left.includes(e.code)) { state.galleryPage = Math.max(0, (state.galleryPage || 0) - 1); return; }
+    if (KEYS.right.includes(e.code)) {
+      state.galleryPage = Math.min((state.galleryPages || 1) - 1, (state.galleryPage || 0) + 1);
+      return;
+    }
+  }
   if (state.showHelp) { state.showHelp = false; return; }
 
   if (state.picker) {
@@ -297,6 +328,14 @@ function onKeyDown(e) {
     }
     e.preventDefault();
     return;
+  }
+
+  if (KEYS.useItem.includes(e.code)) { useItem(); e.preventDefault(); return; }
+
+  // 선택지가 떠 있으면 위아래로 고른다
+  if (state.dialogue && state.dialogue.choices) {
+    if (KEYS.up.includes(e.code)) { moveChoice(state, -1); e.preventDefault(); return; }
+    if (KEYS.down.includes(e.code)) { moveChoice(state, 1); e.preventDefault(); return; }
   }
 
   if (KEYS.interact.includes(e.code)) {
@@ -378,7 +417,7 @@ function startAutoWalk(target) {
     label: target.label || '표시한 곳',
     tiles: [], index: 0, age: PATHING.replanSeconds, still: 0, retries: 0,
   };
-  toast(`${state.autoPath.label}(으)로 자동 이동 — 움직이면 멈춘다`);
+  toast(`${withJosa(state.autoPath.label, '으로/로')} 자동 이동 — 움직이면 멈춘다`);
 }
 
 function stopAutoWalk(reason) {
@@ -647,10 +686,87 @@ function interact() {
   }
 }
 
-// 사람에게 말 걸기
+// 사람에게 말 걸기.
+// 줄 것을 들고 있는 사람이면 마지막에 물어본다 — 손은 하나뿐이다.
 function talkTo(person) {
-  startDialogue(state, person.role || '주민', person.lines);
   state.game.bump('talked');
+  const item = person.gift && !person.gave ? ITEM_BY_ID.get(person.gift) : null;
+  if (!item) {
+    startDialogue(state, person.role || '주민', person.lines);
+    return;
+  }
+  const held = state.game.item ? ITEM_BY_ID.get(state.game.item) : null;
+  const lines = person.lines.concat([item.line]);
+  const choices = held
+    ? [
+      { label: `${withJosa(held.name, '을/를')} 놓고 ${item.name} 받기`,
+        run: () => { person.gave = true; swapItem(item, held); } },
+      { label: `${withJosa(held.name, '을/를')} 계속 든다`,
+        run: () => toast(`${withJosa(item.name, '은/는')} 그 자리에 두었다.`) },
+    ]
+    : [
+      { label: `${item.name} 받기`, run: () => { person.gave = true; swapItem(item, null); } },
+      { label: '괜찮다고 한다', run: () => toast('그냥 고맙다고만 했다.') },
+    ];
+  startDialogue(state, person.role || '주민', lines, { choices });
+}
+
+// 아이템 교체 — 하나만 들 수 있다
+function swapItem(item, held) {
+  state.game.takeItem(item.id, item.name);
+  toast(held ? `${withJosa(held.name, '을/를')} 놓고 ${withJosa(item.name, '을/를')} 들었다.`
+    : `${withJosa(item.name, '을/를')} 받았다.`);
+}
+
+// ── 아이템 쓰기 ─────────────────────────────────────────────────────────
+// 사건 앞에서 쓰면 그날 하루가 그걸로 정해진다.
+// 그냥 쓰면 물건마다 정해진 한 줄이 나온다.
+function useItem() {
+  if (state.dialogue || state.picker || state.game.ending) return;
+  const id = state.game.item;
+  if (!id) { toast('든 것이 없다. 사람에게 말을 걸어 보자.'); return; }
+  const item = ITEM_BY_ID.get(id);
+
+  // 가까이에 사건이 있으면 그쪽이 먼저다
+  const enc = nearestEncounter();
+  if (enc) { triggerEncounter(enc, id); return; }
+
+  // 아니면 지금 있는 자리에 맞는 한 줄
+  toast(`${item.name} — ${item.use}`);
+  state.game.bump('used_item');
+  state.game.set('use_' + id, `${item.name}을(를) 써 봤다`);
+}
+
+// 만질 수 있는 것 중 사건인 것 (실내·바깥 모두)
+function nearestEncounter() {
+  const p = state.player;
+  const list = state.mode === 'outdoor' ? state.outdoorGizmos : state.interiorGizmos;
+  let best = null, bestD = LIFE.encounterRadius;
+  for (const g of list) {
+    if (!g.encounter) continue;
+    const d = Math.hypot((g.tx + 0.5) * S - p.x, (g.ty + 0.5) * S - p.y);
+    if (d < bestD) { bestD = d; best = g; }
+  }
+  return best;
+}
+
+// 사건 하나를 마주한다. 들고 있는 것에 따라 결과가 갈린다.
+function triggerEncounter(g, itemId) {
+  const enc = g.encounter;
+  const outcome = pickOutcome(enc, itemId || null);
+  const used = outcome.item || null;
+  startDialogue(state, enc.name, enc.intro, {
+    onEnd: () => {
+      const item = used ? ITEM_BY_ID.get(used) : null;
+      state.game.set(encounterFlag(enc.id, used),
+        item ? `${enc.name} 앞에서 ${withJosa(item.name, '을/를')} 썼다`
+          : `${withJosa(enc.name, '을/를')} 맨손으로 마주했다`);
+      state.game.bump('encounter');
+      // 던지는 물건은 여기서 없어진다
+      if (item && item.tag === '투척') state.game.dropItem();
+      checkImmediateEnding();
+    },
+  });
 }
 
 // 문을 열면 그 방이 보인다
@@ -673,6 +789,7 @@ function petCat(cat) {
 }
 
 function useGizmo(g) {
+  if (g.encounter) return triggerEncounter(g, state.game.item);
   const ctxObj = {
     toast,
     rideTo: (stationName) => rideTo(stationName),
@@ -957,6 +1074,14 @@ function exposeDebugHandle() {
       return true;
     },
     interact,
+    useItem,
+    // 사건 앞으로 (검증용)
+    encounter(id) {
+      const g = state.outdoorGizmos.find((x) => x.encounter && x.encounter.id === id);
+      if (!g) return false;
+      window.__gurae.tp(g.tx, g.ty + 1);
+      return true;
+    },
   };
 }
 

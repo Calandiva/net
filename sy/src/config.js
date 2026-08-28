@@ -193,6 +193,8 @@ export const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital']
 
 // ── 사람과 사건 ─────────────────────────────────────────────────────────
 export const LIFE = {
+  giftChance: 0.34,        // 사람이 아이템을 하나 들고 있을 확률
+  encounterRadius: 46,     // 사건에 이만큼(픽셀) 다가가면 마주친다
   indoorPerRoom: 0.42,     // 방 하나에 사람이 있을 확률
   indoorMax: 10,           // 한 층에 최대 몇 명
   eventChance: 0.78,       // 건물 한 층에 사건이 있을 확률 (없으면 '평소와 같음')
@@ -264,6 +266,7 @@ export const KEYS = {
   help: ['KeyH', 'Slash'],
   zoomIn: ['Equal', 'NumpadAdd'],
   zoomOut: ['Minus', 'NumpadSubtract'],
+  useItem: ['KeyQ'],                        // 들고 있는 것을 쓴다
   minimapIn: ['BracketRight', 'Period'],    // 미니맵 축척 — 가깝게
   minimapOut: ['BracketLeft', 'Comma'],     // 미니맵 축척 — 멀리
 };

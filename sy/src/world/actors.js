@@ -4,6 +4,7 @@
 import { SEED, NPC, TILE, GROUND, LIFE } from '../config.js';
 import { OUTDOOR_ROLES } from './data/npcs.js';
 import { OUTDOOR_EVENTS } from './data/events.js';
+import { itemsFor } from '../game/data/items.js';
 import { makeRng } from '../util/rng.js';
 
 const CH = TILE.chunk;
@@ -59,6 +60,11 @@ export class Actors {
       const role = rng.pick(roles);
       actor.role = role.name;
       actor.lines = role.lines.slice();
+      // 주머니에 뭔가 있는 사람 (아이템은 사람에게서만 나온다)
+      if (rng.chance(LIFE.giftChance)) {
+        const pool = itemsFor(null, kind);
+        if (pool.length) actor.gift = rng.pick(pool).id;
+      }
       out.push(actor);
     }
     if (rng.chance(CAT_CHANCE)) {
