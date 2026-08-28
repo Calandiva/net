@@ -6,18 +6,9 @@ import { SEED, KIND, ROAD_CLASS } from '../config.js';
 import { projectPath, pathBounds, pointInPath, metersToTiles } from './geo.js';
 import { makeRng } from '../util/rng.js';
 import { DISTRICTS } from './data/districts.js';
-import {
-  SHOP_PREFIX, SHOP_SUFFIX, SHOP_MIX, BUILDING_SUFFIX,
-  FACTORY_PREFIX, FACTORY_SUFFIX, FACTORY_TAIL, RURAL_NAME,
-} from './data/names.js';
+import { RURAL_NAME, HOUSE_SUFFIX } from './data/names.js';
 
 const T = metersToTiles; // 미터 → 타일
-
-// 상호 하나 짓기
-export function makeShopName(rng, category) {
-  const cat = category || rng.pick(SHOP_MIX);
-  return rng.pick(SHOP_PREFIX) + rng.pick(SHOP_SUFFIX[cat]);
-}
 
 // 폴리곤 안쪽을 따라 도로 선을 잘라 낸다.
 // 밖으로 삐져나온 부분은 버리고 안쪽 구간만 폴리라인으로 남긴다.
@@ -42,11 +33,17 @@ function clipLineToPath(fixed, from, to, path, horizontal, step = 3) {
 // 블록 한 칸을 건물로 채운다. 종류별로 규칙이 다르다.
 function fillBlock(district, rect, rng, out) {
   const f = district.fill;
-  // 블록 바닥 — 아파트 단지 마당과 상가 뒷마당은 포장되어 있다
+  // 블록 바닥. 아파트 단지는 조경 녹지가 넓고 주차는 동 앞 한 줄,
+  // 상가 블록은 포장 마당에 뒤쪽 주차장이 붙는다.
+  const parkingDepth = 6; // 타일
   if (district.kind === 'apartment') {
-    out.areas.push({ ...rect, ground: 'parking' });
+    out.areas.push({ ...rect, ground: 'lawn' });
+    out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
+      w: rect.w, h: parkingDepth, ground: 'parking' });
   } else if (district.kind === 'commercial') {
     out.areas.push({ ...rect, ground: 'plaza' });
+    out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
+      w: rect.w, h: parkingDepth, ground: 'parking' });
   }
   switch (district.kind) {
     case 'apartment': return fillApartment(district, rect, rng, out, f);
@@ -121,12 +118,9 @@ function fillCommercial(d, rect, rng, out, f) {
 
 function pushShop(d, rng, out, x, y, w, h, f) {
   const floors = rng.int(f.floors[0], f.floors[1]);
-  // 층이 있으면 건물 이름, 단층이면 가게 이름이 곧 건물 이름
-  const name = floors >= 3
-    ? rng.pick(SHOP_PREFIX) + rng.pick(BUILDING_SUFFIX)
-    : makeShopName(rng);
+  // 이름은 나중에 도로명주소로 붙인다 (world/buildings.js)
   out.buildings.push({
-    name, kind: KIND.SHOP, x, y, w, h,
+    address: true, suffix: '', kind: KIND.SHOP, x, y, w, h,
     floors, basement: floors >= 5 ? 1 : 0, districtId: d.id,
   });
 }
@@ -142,7 +136,7 @@ function fillHouse(d, rect, rng, out, f) {
       const w = size + rng.int(-1, 2), h = size + rng.int(-1, 1);
       const floors = rng.int(f.floors[0], f.floors[1]);
       out.buildings.push({
-        name: rng.pick(SHOP_PREFIX) + (floors >= 3 ? '빌라' : '주택'),
+        address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '',
         kind: KIND.HOUSE, x, y, w: Math.max(3, w), h: Math.max(3, h),
         floors, basement: 0, districtId: d.id,
       });
@@ -161,7 +155,7 @@ function fillIndustrial(d, rect, rng, out, f) {
     const x = rect.x + rng.int(2, Math.max(2, rect.w - w - 2));
     const warehouse = rng.chance(0.3);
     out.buildings.push({
-      name: rng.pick(FACTORY_PREFIX) + rng.pick(FACTORY_SUFFIX) + ' ' + rng.pick(FACTORY_TAIL),
+      address: true, suffix: warehouse ? '물류창고' : '공장',
       kind: warehouse ? KIND.WAREHOUSE : KIND.FACTORY,
       x, y: cursorY, w, h,
       floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -178,7 +172,7 @@ function fillRural(d, rect, rng, out, f) {
     for (let x = rect.x + 2; x + size <= rect.x + rect.w - 2; x += pitch) {
       if (!rng.chance(f.rate)) continue;
       out.buildings.push({
-        name: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
+        address: true, suffix: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
         x: x + rng.int(0, 3), y: y + rng.int(0, 3),
         w: size + rng.int(-1, 3), h: size + rng.int(-1, 1),
         floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,

@@ -4,7 +4,6 @@
 import { SEED, INTERIOR, IN, IN_SOLID, KIND } from '../config.js';
 import { makeRng } from '../util/rng.js';
 import { ROOM_NAMES } from './data/names.js';
-import { makeShopName } from './blocks.js';
 
 const solidSet = new Set(IN_SOLID);
 
@@ -202,6 +201,10 @@ function roomNamer(b, floor, rng, layout) {
     const pool = rng.shuffle(ROOM_NAMES.station);
     return (i) => pool[i % pool.length];
   }
+  if (b.name && b.name.includes('도서관')) {
+    const pool = rng.shuffle(ROOM_NAMES.library);
+    return (i) => pool[i % pool.length];
+  }
   if (b.kind === KIND.PUBLIC) {
     const pool = rng.shuffle(ROOM_NAMES.public);
     return (i) => pool[i % pool.length];
@@ -214,8 +217,13 @@ function roomNamer(b, floor, rng, layout) {
     const pool = rng.shuffle(ROOM_NAMES.factory);
     return (i) => pool[i % pool.length];
   }
-  if (b.kind === KIND.SHOP || b.kind === KIND.TOWER || b.kind === KIND.MART) {
-    return () => makeShopName(rng);
+  if (b.kind === KIND.MART) {
+    const pool = rng.shuffle(ROOM_NAMES.mart);
+    return (i) => pool[i % pool.length];
+  }
+  if (b.kind === KIND.SHOP || b.kind === KIND.TOWER) {
+    // 상가는 호실 번호로 부른다 (301호, 302호 …)
+    return (i) => `${Math.max(1, floor)}${String(i + 1).padStart(2, '0')}호`;
   }
   if (b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE) {
     return (i) => ['거실', '안방', '작은방', '주방', '창고'][i % 5];

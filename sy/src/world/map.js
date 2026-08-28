@@ -43,7 +43,8 @@ export class WorldMap {
 
     // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
     this.areaIndex = new GridIndex(CH);
-    const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA, yard: GROUND.YARD };
+    const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA,
+      yard: GROUND.YARD, lawn: GROUND.GRASS };
     for (const a of buildings.areas || []) {
       const area = { ...a, kind: areaGround[a.ground] };
       this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
@@ -115,7 +116,7 @@ export class WorldMap {
           ground[i] = r.ground;
           regionRate[i] = r.propRate || 0;
           // 도시 바닥은 잔디와 포장이 얼룩덜룩 섞인다 (주차장·광장 자리)
-          if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.63) {
+          if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.74) {
             ground[i] = GROUND.PLAZA;
           }
         }
@@ -129,8 +130,10 @@ export class WorldMap {
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const i = y * CH + x;
-          ground[i] = a.kind;
-          regionRate[i] = 0;
+          // 포장 바닥에도 화단이 조금씩 섞인다
+          const green = a.kind !== GROUND.GRASS && fbm(S_CITY, ox + x, oy + y, 7, 2) > 0.78;
+          ground[i] = green ? GROUND.GRASS : a.kind;
+          regionRate[i] = a.kind === GROUND.GRASS ? 0.05 : green ? 0.02 : 0;
         }
       }
     }

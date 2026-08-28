@@ -3,7 +3,7 @@
 // 랜드마크(places.js)를 먼저 놓고, 절차 생성 건물은 이미 놓인 건물이나
 // 도로와 겹치면 버린다. 그래서 데이터에 손을 대도 지도가 깨지지 않는다.
 
-import { SEED, BUILDING, KIND, TILE } from '../config.js';
+import { SEED, BUILDING, KIND, TILE, GEO } from '../config.js';
 import { project, projectPath, metersToTiles } from './geo.js';
 import { GridIndex, rectsOverlap } from './spatial.js';
 import { makeRng } from '../util/rng.js';
@@ -104,6 +104,34 @@ export function doorOutside(b) {
   }
 }
 
+// 도로명주소를 만든다.
+// 실제 규칙: 도로 시작점부터 20m 마다 번호가 1씩 오르고, 왼쪽이 홀수 오른쪽이 짝수.
+// 이름을 알 수 없는 건물에는 지어낸 상호 대신 이 주소를 붙인다.
+export function buildingAddress(rect, roads) {
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  const r = BUILDING.doorProbeRadius;
+  let best = null, bestD = Infinity;
+  for (const seg of roads.index.query(cx - r, cy - r, cx + r, cy + r)) {
+    if (!seg.name) continue;                 // 이름 있는 도로만 주소가 된다
+    const dx = seg.bx - seg.ax, dy = seg.by - seg.ay;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((cx - seg.ax) * dx + (cy - seg.ay) * dy) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const px = seg.ax + t * dx, py = seg.ay + t * dy;
+    const d = Math.hypot(px - cx, py - cy);
+    if (d < bestD) {
+      bestD = d;
+      // 진행 방향 기준 왼쪽인지 오른쪽인지 (외적 부호)
+      const side = dx * (cy - seg.ay) - dy * (cx - seg.ax);
+      best = { seg, along: seg.dist0 + t * Math.sqrt(len2), left: side < 0 };
+    }
+  }
+  if (!best) return null;
+  const meters = best.along * GEO.metersPerTile;
+  const number = Math.max(1, Math.floor(meters / 20) * 2 + (best.left ? 1 : 2));
+  return `${best.seg.name} ${number}`;
+}
+
 let nextId = 1;
 
 function makeBuilding(spec, roads, index, placed) {
@@ -123,10 +151,18 @@ function makeBuilding(spec, roads, index, placed) {
     }
   }
 
-  const rng = makeRng(SEED, 'building', spec.name, rect.x, rect.y);
+  // 이름이 없는 건물은 도로명주소로 부른다
+  let name = spec.name;
+  if (!name && spec.address) {
+    const addr = buildingAddress(rect, roads);
+    name = addr ? (spec.suffix ? `${addr} ${spec.suffix}` : addr)
+      : (spec.suffix || '이름 없는 건물');
+  }
+
+  const rng = makeRng(SEED, 'building', name, rect.x, rect.y);
   const b = {
     id: nextId++,
-    name: spec.name, kind: spec.kind,
+    name, kind: spec.kind,
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,
     floors: Math.max(1, spec.floors | 0),
     basement: spec.basement | 0,

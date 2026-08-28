@@ -5,20 +5,22 @@ import { GROUND, PROP, KIND, IN } from '../config.js';
 
 // ── 지면 ────────────────────────────────────────────────────────────────
 export const GROUND_COLOR = {
-  [GROUND.FIELD]: '#c3cf85',
-  [GROUND.GRASS]: '#8cc069',
-  [GROUND.DIRT]: '#c0a578',
-  [GROUND.ROAD]: '#6d6f78',
-  [GROUND.SIDEWALK]: '#c7c1b3',
-  [GROUND.CROSSWALK]: '#d8d4c8',
-  [GROUND.PLAZA]: '#d9d1bf',
-  [GROUND.WATER]: '#6cb2d6',
-  [GROUND.SAND]: '#e0d3a4',
-  [GROUND.PARKING]: '#87878f',
-  [GROUND.YARD]: '#a6a29a',
-  [GROUND.FLOOR]: '#b9b2a6',
-  [GROUND.TRACK]: '#cfa47f',
-  [GROUND.ROAD_LINE]: '#6d6f78',
+  // 실제 항공사진 톤에 맞춘 값들. 김포 들녘은 여름에 녹색이고,
+  // 도로는 진회색, 공단 마당은 콘크리트 회색, 수로는 탁한 청록이다.
+  [GROUND.FIELD]: '#a6bc6c',      // 논
+  [GROUND.GRASS]: '#7fa85a',
+  [GROUND.DIRT]: '#b79f74',
+  [GROUND.ROAD]: '#5a5c62',       // 아스팔트
+  [GROUND.SIDEWALK]: '#c2bcb2',   // 보도블럭
+  [GROUND.CROSSWALK]: '#d6d2c8',
+  [GROUND.PLAZA]: '#cdc6b9',
+  [GROUND.WATER]: '#5a8ea0',      // 수로 · 낚시터
+  [GROUND.SAND]: '#d6c9a2',
+  [GROUND.PARKING]: '#8f9098',
+  [GROUND.YARD]: '#a8a49e',       // 공단 포장 마당
+  [GROUND.FLOOR]: '#b0aaa0',
+  [GROUND.TRACK]: '#c49a72',      // 산책로 · 등산로
+  [GROUND.ROAD_LINE]: '#5a5c62',
 };
 
 // 타일마다 살짝 흔들 밝기 폭 (0 이면 단색)
@@ -57,20 +59,23 @@ export const PROP_COLOR = {
 // ── 건물 ────────────────────────────────────────────────────────────────
 // wall 옆벽 · roof 옥상 · trim 테두리 · accent 간판/창문
 export const BUILDING_COLOR = {
-  [KIND.APARTMENT]: { wall: '#e9e1d3', roof: '#b7c2ce', trim: '#9aa4b0', accent: '#8fb8d8' },
-  [KIND.HOUSE]: { wall: '#efe4d2', roof: '#d0806a', trim: '#a8624f', accent: '#8fb8d8' },
-  [KIND.SHOP]: { wall: '#f0e6d6', roof: '#dcb05f', trim: '#b58840', accent: '#e2705f' },
-  [KIND.TOWER]: { wall: '#dfe6ec', roof: '#93a9bd', trim: '#7c93a8', accent: '#6fa8d8' },
-  [KIND.MART]: { wall: '#f2e2dc', roof: '#d1756c', trim: '#a95a52', accent: '#f2c14e' },
-  [KIND.SCHOOL]: { wall: '#f0e6c8', roof: '#c9b071', trim: '#a08c50', accent: '#7fb87f' },
-  [KIND.PUBLIC]: { wall: '#e4ecf2', roof: '#9ebbd2', trim: '#7d9cb5', accent: '#5f8fc0' },
-  [KIND.STATION]: { wall: '#dfe9f2', roof: '#7fa5c6', trim: '#5f85a8', accent: '#f2c14e' },
-  [KIND.FACTORY]: { wall: '#d8dade', roof: '#a9b1b8', trim: '#8b939a', accent: '#6f8fa8' },
-  [KIND.WAREHOUSE]: { wall: '#d2d6d8', roof: '#98a2a8', trim: '#7c868c', accent: '#8a949a' },
-  [KIND.CHURCH]: { wall: '#efe8f2', roof: '#b2a4c4', trim: '#8e80a2', accent: '#d8c46a' },
-  [KIND.HOSPITAL]: { wall: '#f2f2f0', roof: '#cfd6da', trim: '#a8b0b4', accent: '#e2655c' },
-  [KIND.PARK_FACILITY]: { wall: '#e8d9bd', roof: '#b57f4e', trim: '#8a5f39', accent: '#5aa055' },
-  [KIND.FARMHOUSE]: { wall: '#e4dcc6', roof: '#9aa88c', trim: '#7d8a72', accent: '#c9d8e0' },
+  // 한국 도시 항공사진의 색을 따라간다.
+  // 아파트는 베이지 벽에 녹회색 옥상 방수, 공장은 파란 샌드위치 패널 지붕,
+  // 상가는 회색 옥상에 색색의 간판띠.
+  [KIND.APARTMENT]: { wall: '#eae4d8', roof: '#9aa79b', trim: '#8a978c', accent: '#9fc0dd' },
+  [KIND.HOUSE]: { wall: '#ece3d2', roof: '#b0705c', trim: '#8f5a49', accent: '#9fc0dd' },
+  [KIND.SHOP]: { wall: '#e8e2d6', roof: '#b5b1a8', trim: '#8f8b83', accent: '#d4574a' },
+  [KIND.TOWER]: { wall: '#dfe5ea', roof: '#9aa4ac', trim: '#7d868e', accent: '#7fb0d8' },
+  [KIND.MART]: { wall: '#f0e6e0', roof: '#b8b4ac', trim: '#94908a', accent: '#e2b93b' },
+  [KIND.SCHOOL]: { wall: '#efe6cd', roof: '#b2ab97', trim: '#8f8a78', accent: '#8fb87f' },
+  [KIND.PUBLIC]: { wall: '#e6ecf0', roof: '#9fb0bd', trim: '#7f8f9c', accent: '#5f8fc0' },
+  [KIND.STATION]: { wall: '#e2eaf0', roof: '#8fa8bd', trim: '#6f8798', accent: '#e2b93b' },
+  [KIND.FACTORY]: { wall: '#d6d9dc', roof: '#4f76a8', trim: '#3f5f8a', accent: '#c8ccd0' },
+  [KIND.WAREHOUSE]: { wall: '#d2d6d8', roof: '#8fa8b8', trim: '#6f8797', accent: '#b8c4cc' },
+  [KIND.CHURCH]: { wall: '#efe8f2', roof: '#a89fb8', trim: '#8a809c', accent: '#d8c46a' },
+  [KIND.HOSPITAL]: { wall: '#f2f2f0', roof: '#c4ccd0', trim: '#a0a8ac', accent: '#e2655c' },
+  [KIND.PARK_FACILITY]: { wall: '#e4d6bc', roof: '#a8763f', trim: '#7f5730', accent: '#5aa055' },
+  [KIND.FARMHOUSE]: { wall: '#ded6c2', roof: '#7f9a86', trim: '#63796b', accent: '#c8d8e0' },
 };
 
 // ── 실내 ────────────────────────────────────────────────────────────────

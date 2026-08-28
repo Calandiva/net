@@ -9,8 +9,8 @@ export const SEED = 'gurae-2026';
 // 실제 위경도(WGS84)를 타일 좌표로 옮기는 기준. 지도 데이터를 갈아끼울 때 여기만 바꾼다.
 export const GEO = {
   // 김포시 구래동 ~ 양촌읍(양곡·학운산업단지)을 감싸는 영역
-  south: 37.6150,
-  north: 37.6700,
+  south: 37.6120,
+  north: 37.6660,
   west: 126.5820,
   east: 126.6560,
   // 타일 하나가 실제 몇 미터인가
@@ -71,7 +71,7 @@ export const PROP_SOLID = [PROP.TREE, PROP.LAMP, PROP.BENCH, PROP.SIGN,
 
 // 지면별 소품 등장 확률과 후보 (절차적 채움)
 export const PROP_RULES = {
-  [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.ROCK] },
+  [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
   [GROUND.FIELD]: { rate: 0.004, pick: [PROP.ROCK, PROP.BUSH] },
   [GROUND.SIDEWALK]: { rate: 0.03, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
   [GROUND.PLAZA]: { rate: 0.02, pick: [PROP.BENCH, PROP.PLANTER, PROP.LAMP] },
@@ -83,11 +83,12 @@ export const PROP_RULES = {
 // ── 도로 ────────────────────────────────────────────────────────────────
 // 등급별 차도 폭(타일)과 양쪽 보도 폭(타일)
 export const ROAD_CLASS = {
-  expressway: { width: 7, sidewalk: 0, crossing: false },  // 자동차전용도로
-  arterial:   { width: 6, sidewalk: 2, crossing: true },   // 대로
-  main:       { width: 4, sidewalk: 2, crossing: true },   // 간선
-  local:      { width: 3, sidewalk: 1, crossing: true },   // 이면도로
-  alley:      { width: 2, sidewalk: 0, crossing: false },  // 골목
+  // width 는 차도 폭(타일). 타일 하나가 2.5m 이므로 8칸이면 20m — 왕복 6차선 정도다.
+  expressway: { width: 10, sidewalk: 0, crossing: false },  // 자동차전용도로 (김포한강로)
+  arterial:   { width: 8, sidewalk: 2, crossing: true },    // 6~8차선 (김포한강7로 등)
+  main:       { width: 6, sidewalk: 2, crossing: true },    // 4차선
+  local:      { width: 4, sidewalk: 1, crossing: true },    // 2차선 이면도로
+  alley:      { width: 3, sidewalk: 0, crossing: false },   // 골목
   path:       { width: 2, sidewalk: 0, crossing: false, ground: GROUND.TRACK }, // 산책로
 };
 
@@ -209,8 +210,9 @@ export const GAME = {
   startClock: 8 * 3600 + 10 * 60,  // 시작 시각 08:10
   deadline: 9 * 3600,              // 이 시각을 넘기면 지각
   timeScale: 6,                    // 실제 1초 = 게임 6초
-  goalRegions: ['yangchon-ind', 'hagun-ind'], // 여기에 발을 들이면 도착
-  goalName: '양촌공단',
+  // 여기에 발을 들이면 도착. 학운 단지들은 가는 길에 있으므로 목적지가 아니다.
+  goalRegions: ['yangchon-ind'],
+  goalName: '양촌산단',
   interactRadius: 27,              // 물건에 이만큼(픽셀) 다가가면 만질 수 있다
   petRadius: 28,                   // 고양이
 };

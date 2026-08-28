@@ -385,6 +385,13 @@ function changeFloor(floor) {
 }
 
 function openPicker() {
+  // 전기를 끊어 놓고 엘리베이터를 타면 갇힌다
+  if (state.game.has('blackout')) {
+    state.game.set('stuck', '정전 중에 엘리베이터를 탔다');
+    toast('버튼을 누르자 안내판이 꺼졌다.');
+    checkImmediateEnding();
+    return;
+  }
   const floors = floorList(state.interiorBuilding);
   state.picker = { floors, index: Math.max(0, floors.indexOf(state.floor)) };
 }

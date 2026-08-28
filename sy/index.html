@@ -55,8 +55,8 @@ const __M = Object.create(null);
   // 실제 위경도(WGS84)를 타일 좌표로 옮기는 기준. 지도 데이터를 갈아끼울 때 여기만 바꾼다.
   const GEO = {
     // 김포시 구래동 ~ 양촌읍(양곡·학운산업단지)을 감싸는 영역
-    south: 37.6150,
-    north: 37.6700,
+    south: 37.6120,
+    north: 37.6660,
     west: 126.5820,
     east: 126.6560,
     // 타일 하나가 실제 몇 미터인가
@@ -117,7 +117,7 @@ const __M = Object.create(null);
 
   // 지면별 소품 등장 확률과 후보 (절차적 채움)
   const PROP_RULES = {
-    [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.ROCK] },
+    [GROUND.GRASS]: { rate: 0.05, pick: [PROP.TREE, PROP.BUSH, PROP.FLOWER, PROP.BUSH] },
     [GROUND.FIELD]: { rate: 0.004, pick: [PROP.ROCK, PROP.BUSH] },
     [GROUND.SIDEWALK]: { rate: 0.03, pick: [PROP.TREE, PROP.LAMP, PROP.PLANTER, PROP.SIGN, PROP.VENDING] },
     [GROUND.PLAZA]: { rate: 0.02, pick: [PROP.BENCH, PROP.PLANTER, PROP.LAMP] },
@@ -129,11 +129,12 @@ const __M = Object.create(null);
   // ── 도로 ────────────────────────────────────────────────────────────────
   // 등급별 차도 폭(타일)과 양쪽 보도 폭(타일)
   const ROAD_CLASS = {
-    expressway: { width: 7, sidewalk: 0, crossing: false },  // 자동차전용도로
-    arterial:   { width: 6, sidewalk: 2, crossing: true },   // 대로
-    main:       { width: 4, sidewalk: 2, crossing: true },   // 간선
-    local:      { width: 3, sidewalk: 1, crossing: true },   // 이면도로
-    alley:      { width: 2, sidewalk: 0, crossing: false },  // 골목
+    // width 는 차도 폭(타일). 타일 하나가 2.5m 이므로 8칸이면 20m — 왕복 6차선 정도다.
+    expressway: { width: 10, sidewalk: 0, crossing: false },  // 자동차전용도로 (김포한강로)
+    arterial:   { width: 8, sidewalk: 2, crossing: true },    // 6~8차선 (김포한강7로 등)
+    main:       { width: 6, sidewalk: 2, crossing: true },    // 4차선
+    local:      { width: 4, sidewalk: 1, crossing: true },    // 2차선 이면도로
+    alley:      { width: 3, sidewalk: 0, crossing: false },   // 골목
     path:       { width: 2, sidewalk: 0, crossing: false, ground: GROUND.TRACK }, // 산책로
   };
 
@@ -255,8 +256,9 @@ const __M = Object.create(null);
     startClock: 8 * 3600 + 10 * 60,  // 시작 시각 08:10
     deadline: 9 * 3600,              // 이 시각을 넘기면 지각
     timeScale: 6,                    // 실제 1초 = 게임 6초
-    goalRegions: ['yangchon-ind', 'hagun-ind'], // 여기에 발을 들이면 도착
-    goalName: '양촌공단',
+    // 여기에 발을 들이면 도착. 학운 단지들은 가는 길에 있으므로 목적지가 아니다.
+    goalRegions: ['yangchon-ind'],
+    goalName: '양촌산단',
     interactRadius: 27,              // 물건에 이만큼(픽셀) 다가가면 만질 수 있다
     petRadius: 28,                   // 고양이
   };
@@ -451,20 +453,22 @@ const __M = Object.create(null);
 
   // ── 지면 ────────────────────────────────────────────────────────────────
   const GROUND_COLOR = {
-    [GROUND.FIELD]: '#c3cf85',
-    [GROUND.GRASS]: '#8cc069',
-    [GROUND.DIRT]: '#c0a578',
-    [GROUND.ROAD]: '#6d6f78',
-    [GROUND.SIDEWALK]: '#c7c1b3',
-    [GROUND.CROSSWALK]: '#d8d4c8',
-    [GROUND.PLAZA]: '#d9d1bf',
-    [GROUND.WATER]: '#6cb2d6',
-    [GROUND.SAND]: '#e0d3a4',
-    [GROUND.PARKING]: '#87878f',
-    [GROUND.YARD]: '#a6a29a',
-    [GROUND.FLOOR]: '#b9b2a6',
-    [GROUND.TRACK]: '#cfa47f',
-    [GROUND.ROAD_LINE]: '#6d6f78',
+    // 실제 항공사진 톤에 맞춘 값들. 김포 들녘은 여름에 녹색이고,
+    // 도로는 진회색, 공단 마당은 콘크리트 회색, 수로는 탁한 청록이다.
+    [GROUND.FIELD]: '#a6bc6c',      // 논
+    [GROUND.GRASS]: '#7fa85a',
+    [GROUND.DIRT]: '#b79f74',
+    [GROUND.ROAD]: '#5a5c62',       // 아스팔트
+    [GROUND.SIDEWALK]: '#c2bcb2',   // 보도블럭
+    [GROUND.CROSSWALK]: '#d6d2c8',
+    [GROUND.PLAZA]: '#cdc6b9',
+    [GROUND.WATER]: '#5a8ea0',      // 수로 · 낚시터
+    [GROUND.SAND]: '#d6c9a2',
+    [GROUND.PARKING]: '#8f9098',
+    [GROUND.YARD]: '#a8a49e',       // 공단 포장 마당
+    [GROUND.FLOOR]: '#b0aaa0',
+    [GROUND.TRACK]: '#c49a72',      // 산책로 · 등산로
+    [GROUND.ROAD_LINE]: '#5a5c62',
   };
 
   // 타일마다 살짝 흔들 밝기 폭 (0 이면 단색)
@@ -503,20 +507,23 @@ const __M = Object.create(null);
   // ── 건물 ────────────────────────────────────────────────────────────────
   // wall 옆벽 · roof 옥상 · trim 테두리 · accent 간판/창문
   const BUILDING_COLOR = {
-    [KIND.APARTMENT]: { wall: '#e9e1d3', roof: '#b7c2ce', trim: '#9aa4b0', accent: '#8fb8d8' },
-    [KIND.HOUSE]: { wall: '#efe4d2', roof: '#d0806a', trim: '#a8624f', accent: '#8fb8d8' },
-    [KIND.SHOP]: { wall: '#f0e6d6', roof: '#dcb05f', trim: '#b58840', accent: '#e2705f' },
-    [KIND.TOWER]: { wall: '#dfe6ec', roof: '#93a9bd', trim: '#7c93a8', accent: '#6fa8d8' },
-    [KIND.MART]: { wall: '#f2e2dc', roof: '#d1756c', trim: '#a95a52', accent: '#f2c14e' },
-    [KIND.SCHOOL]: { wall: '#f0e6c8', roof: '#c9b071', trim: '#a08c50', accent: '#7fb87f' },
-    [KIND.PUBLIC]: { wall: '#e4ecf2', roof: '#9ebbd2', trim: '#7d9cb5', accent: '#5f8fc0' },
-    [KIND.STATION]: { wall: '#dfe9f2', roof: '#7fa5c6', trim: '#5f85a8', accent: '#f2c14e' },
-    [KIND.FACTORY]: { wall: '#d8dade', roof: '#a9b1b8', trim: '#8b939a', accent: '#6f8fa8' },
-    [KIND.WAREHOUSE]: { wall: '#d2d6d8', roof: '#98a2a8', trim: '#7c868c', accent: '#8a949a' },
-    [KIND.CHURCH]: { wall: '#efe8f2', roof: '#b2a4c4', trim: '#8e80a2', accent: '#d8c46a' },
-    [KIND.HOSPITAL]: { wall: '#f2f2f0', roof: '#cfd6da', trim: '#a8b0b4', accent: '#e2655c' },
-    [KIND.PARK_FACILITY]: { wall: '#e8d9bd', roof: '#b57f4e', trim: '#8a5f39', accent: '#5aa055' },
-    [KIND.FARMHOUSE]: { wall: '#e4dcc6', roof: '#9aa88c', trim: '#7d8a72', accent: '#c9d8e0' },
+    // 한국 도시 항공사진의 색을 따라간다.
+    // 아파트는 베이지 벽에 녹회색 옥상 방수, 공장은 파란 샌드위치 패널 지붕,
+    // 상가는 회색 옥상에 색색의 간판띠.
+    [KIND.APARTMENT]: { wall: '#eae4d8', roof: '#9aa79b', trim: '#8a978c', accent: '#9fc0dd' },
+    [KIND.HOUSE]: { wall: '#ece3d2', roof: '#b0705c', trim: '#8f5a49', accent: '#9fc0dd' },
+    [KIND.SHOP]: { wall: '#e8e2d6', roof: '#b5b1a8', trim: '#8f8b83', accent: '#d4574a' },
+    [KIND.TOWER]: { wall: '#dfe5ea', roof: '#9aa4ac', trim: '#7d868e', accent: '#7fb0d8' },
+    [KIND.MART]: { wall: '#f0e6e0', roof: '#b8b4ac', trim: '#94908a', accent: '#e2b93b' },
+    [KIND.SCHOOL]: { wall: '#efe6cd', roof: '#b2ab97', trim: '#8f8a78', accent: '#8fb87f' },
+    [KIND.PUBLIC]: { wall: '#e6ecf0', roof: '#9fb0bd', trim: '#7f8f9c', accent: '#5f8fc0' },
+    [KIND.STATION]: { wall: '#e2eaf0', roof: '#8fa8bd', trim: '#6f8798', accent: '#e2b93b' },
+    [KIND.FACTORY]: { wall: '#d6d9dc', roof: '#4f76a8', trim: '#3f5f8a', accent: '#c8ccd0' },
+    [KIND.WAREHOUSE]: { wall: '#d2d6d8', roof: '#8fa8b8', trim: '#6f8797', accent: '#b8c4cc' },
+    [KIND.CHURCH]: { wall: '#efe8f2', roof: '#a89fb8', trim: '#8a809c', accent: '#d8c46a' },
+    [KIND.HOSPITAL]: { wall: '#f2f2f0', roof: '#c4ccd0', trim: '#a0a8ac', accent: '#e2655c' },
+    [KIND.PARK_FACILITY]: { wall: '#e4d6bc', roof: '#a8763f', trim: '#7f5730', accent: '#5aa055' },
+    [KIND.FARMHOUSE]: { wall: '#ded6c2', roof: '#7f9a86', trim: '#63796b', accent: '#c8d8e0' },
   };
 
   // ── 실내 ────────────────────────────────────────────────────────────────
@@ -657,40 +664,17 @@ const __M = Object.create(null);
 
 // ── world/data/names.js ─────────────────────────────
 (function () {
-  // 절차적으로 만들어지는 상호·건물 이름 재료.
-  // 실제 상호가 아니라 김포 신도시 상가 간판에서 흔한 낱말을 조합한 것이다.
+  // 절차 생성 건물에 붙일 이름 재료.
+  //
+  // 지어낸 상호나 회사 이름은 쓰지 않는다. 실제로 알 수 없는 건물에는
+  // 도로명주소(도로명 + 건물번호)를 붙인다 — world/buildings.js 의 buildingAddress().
+  // 여기 남은 것은 건물 종류를 가리키는 일반 명사뿐이다.
 
-  const SHOP_PREFIX = [
-    '한강', '구래', '금빛', '해든', '온담', '푸른', '들꽃', '나루', '햇살', '솔뫼',
-    '가온', '너울', '별빛', '단비', '하람', '초록', '바람', '아침', '달빛', '이레',
-  ];
+  // 농촌 건물 종류
+  const RURAL_NAME = ['농막', '비닐하우스', '창고', '축사', '농기계 보관동', '정미소'];
 
-  const SHOP_SUFFIX = {
-    food: ['분식', '김밥', '칼국수', '순대국', '치킨', '족발', '떡볶이', '만두', '국수', '고깃집'],
-    cafe: ['커피', '베이커리', '카페', '디저트', '빙수', '토스트'],
-    life: ['편의점', '세탁소', '문구', '철물', '미용실', '약국', '안경', '반찬가게', '꽃집', '떡집'],
-    study: ['학원', '수학교습소', '영어교실', '피아노', '태권도', '미술학원', '독서실'],
-    care: ['의원', '치과', '한의원', '동물병원', '피부과'],
-    office: ['부동산', '공인중개사', '세무회계', '법무사', '스튜디오', '디자인'],
-  };
-
-  const SHOP_MIX = ['food', 'food', 'cafe', 'life', 'life', 'study', 'care', 'office'];
-
-  // 층수가 있는 상가 건물 이름
-  const BUILDING_SUFFIX = ['프라자', '타워', '스퀘어', '빌딩', '센터', '아케이드'];
-
-  // 아파트 마을 이름 뒤에 붙는 것
-  const APT_UNIT = '동';
-
-  // 공장 이름 재료
-  const FACTORY_PREFIX = ['대한', '한성', '금강', '태영', '신흥', '동보', '삼정',
-    '우신', '평화', '광명', '유일', '성진'];
-  const FACTORY_SUFFIX = ['정밀', '금속', '산업', '테크', '기계', '물류', '화학',
-    '전자', '포장', '플라스틱'];
-  const FACTORY_TAIL = ['공장', '제1공장', '제2공장', '물류센터', '자재창고'];
-
-  // 농가·창고
-  const RURAL_NAME = ['농막', '비닐하우스 관리동', '창고', '축사', '농기계 보관동', '정미소'];
+  // 주택 종류 (도로명주소 뒤에 붙는다)
+  const HOUSE_SUFFIX = ['단독주택', '다세대주택', '연립주택'];
 
   // 실내 방 이름
   const ROOM_NAMES = {
@@ -698,108 +682,139 @@ const __M = Object.create(null);
     public: ['민원실', '총무팀', '주민자치', '상담실', '회의실', '문서고', '숙직실'],
     office: ['사무실', '회의실', '탕비실', '자료실', '대표실'],
     factory: ['조립1라인', '조립2라인', '도장실', '검사실', '자재창고', '탈의실', '식당'],
-    hospital: ['접수', '진료실', '처치실', '주사실', '물리치료실', '검사실'],
     station: ['대합실', '매표소', '역무실', '유실물센터', '편의점', '화장실'],
-    apartment: ['호'],
+    library: ['열람실', '어린이자료실', '종합자료실', '디지털실', '사무실'],
+    mart: ['식품매장', '생활용품', '가전매장', '푸드코트', '고객센터'],
   };
 
-  __M.SHOP_PREFIX = SHOP_PREFIX; __M.SHOP_SUFFIX = SHOP_SUFFIX; __M.SHOP_MIX = SHOP_MIX; __M.BUILDING_SUFFIX = BUILDING_SUFFIX; __M.APT_UNIT = APT_UNIT; __M.FACTORY_PREFIX = FACTORY_PREFIX; __M.FACTORY_SUFFIX = FACTORY_SUFFIX; __M.FACTORY_TAIL = FACTORY_TAIL; __M.RURAL_NAME = RURAL_NAME; __M.ROOM_NAMES = ROOM_NAMES;
+  __M.RURAL_NAME = RURAL_NAME; __M.HOUSE_SUFFIX = HOUSE_SUFFIX; __M.ROOM_NAMES = ROOM_NAMES;
 })();
 
 // ── world/data/regions.js ─────────────────────────────
 (function () {
   // 지면 구역. 좌표는 [경도, 위도], 배열 뒤쪽이 앞쪽을 덮어쓴다.
+  // 이름은 전부 실제 지명이다 (법정동·리, 산업단지 고시명, 산 이름).
   // kind 는 render/palette.js 와 world/map.js 가 함께 해석한다.
-  //   city 시가지 · field 논밭 · industrial 공단 · park 공원 · forest 산 · water 물 · sand 하천변
+  //   city 시가지 · field 논밭 · industrial 공단 · park 공원 · forest 산 · water 물
 
   const { GROUND } = __M;
 
   const REGIONS = [
+    // ── 산 ─────────────────────────────────────────────────────────
     {
-      id: 'gahyeon', name: '가현산', kind: 'forest', ground: GROUND.GRASS,
-      propRate: 0.42, label: true,
-      path: [[126.6130, 37.6700], [126.6560, 37.6700], [126.6540, 37.6600],
-        [126.6350, 37.6558], [126.6180, 37.6600], [126.6120, 37.6655]],
+      // 해발 215m. 김포 양촌읍과 인천 서구에 걸쳐 있고 구래동 남서쪽이다.
+      id: 'gahyeonsan', name: '가현산', kind: 'forest', ground: GROUND.GRASS,
+      propRate: 0.44, label: true,
+      path: [[126.6050, 37.6284], [126.6205, 37.6292], [126.6285, 37.6232],
+        [126.6220, 37.6136], [126.6060, 37.6146], [126.5998, 37.6220]],
     },
+
+    // ── 시가지 ─────────────────────────────────────────────────────
     {
       id: 'gurae', name: '구래동', kind: 'city', ground: GROUND.GRASS, label: true,
-      path: [[126.6180, 37.6545], [126.6360, 37.6558], [126.6430, 37.6500],
-        [126.6395, 37.6400], [126.6255, 37.6355], [126.6155, 37.6415],
-        [126.6150, 37.6500]],
+      path: [[126.6180, 37.6522], [126.6322, 37.6514], [126.6392, 37.6442],
+        [126.6330, 37.6366], [126.6205, 37.6388], [126.6154, 37.6456]],
     },
     {
       id: 'masan', name: '마산동', kind: 'city', ground: GROUND.GRASS, label: true,
-      path: [[126.6360, 37.6472], [126.6512, 37.6455], [126.6520, 37.6350],
-        [126.6390, 37.6318], [126.6318, 37.6392]],
+      path: [[126.6330, 37.6456], [126.6472, 37.6442], [126.6504, 37.6350],
+        [126.6392, 37.6316], [126.6320, 37.6380]],
+    },
+    {
+      id: 'yuhyeon', name: '양촌읍 유현리', kind: 'city', ground: GROUND.GRASS, label: true,
+      path: [[126.6058, 37.6542], [126.6182, 37.6522], [126.6172, 37.6438],
+        [126.6058, 37.6454]],
     },
     {
       id: 'yanggok', name: '양촌읍 양곡', kind: 'city', ground: GROUND.GRASS, label: true,
-      path: [[126.5980, 37.6622], [126.6122, 37.6610], [126.6168, 37.6520],
-        [126.6150, 37.6455], [126.5985, 37.6470]],
+      path: [[126.5948, 37.6642], [126.6122, 37.6620], [126.6132, 37.6518],
+        [126.5958, 37.6534]],
     },
+
+    // ── 산업단지 (김포시 고시 면적에 맞춘 크기) ──────────────────────
     {
-      id: 'yangchon-ind', name: '김포양촌일반산업단지', kind: 'industrial',
+      // 학운리 2693 일원 · 1,686,493㎡
+      id: 'yangchon-ind', name: '양촌일반산업단지', kind: 'industrial',
       ground: GROUND.YARD, label: true,
-      path: [[126.5860, 37.6472], [126.6092, 37.6456], [126.6096, 37.6330],
-        [126.5865, 37.6344]],
+      path: [[126.5865, 37.6453], [126.6042, 37.6453], [126.6042, 37.6355],
+        [126.5865, 37.6355]],
     },
     {
-      id: 'hagun-ind', name: '학운산업단지', kind: 'industrial',
+      // 학운리 3211 일원 · 634,028㎡
+      id: 'hagun2-ind', name: '학운2일반산업단지', kind: 'industrial',
       ground: GROUND.YARD, label: true,
-      path: [[126.5990, 37.6312], [126.6202, 37.6300], [126.6192, 37.6200],
-        [126.5980, 37.6212]],
+      path: [[126.6050, 37.6423], [126.6152, 37.6423], [126.6152, 37.6360],
+        [126.6050, 37.6360]],
     },
     {
+      // 학운리 1169 일원 · 893,364㎡
+      id: 'hagun5-ind', name: '학운5일반산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.6050, 37.6331], [126.6169, 37.6331], [126.6169, 37.6255],
+        [126.6050, 37.6255]],
+    },
+    {
+      // 학운리 3656 일원 · 958,131㎡
+      id: 'hagun3-ind', name: '학운3일반산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.5910, 37.6330], [126.6035, 37.6330], [126.6035, 37.6252],
+        [126.5910, 37.6252]],
+    },
+    {
+      // 학운리 735 일원 · 186,749㎡
+      id: 'hagun7-ind', name: '학운7일반산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.5865, 37.6495], [126.5922, 37.6495], [126.5922, 37.6462],
+        [126.5865, 37.6462]],
+    },
+    {
+      // 학운리 881 일원 · 55,628㎡ (가장 작은 단지)
+      id: 'hagun1-ind', name: '학운일반산업단지', kind: 'industrial',
+      ground: GROUND.YARD, label: true,
+      path: [[126.5948, 37.6512], [126.5980, 37.6512], [126.5980, 37.6492],
+        [126.5948, 37.6492]],
+    },
+
+    // ── 공원 ───────────────────────────────────────────────────────
+    {
+      // 구래역 북쪽 문화의 거리 축을 따라 난 근린공원
       id: 'gurae-park', name: '구래근린공원', kind: 'park', ground: GROUND.GRASS,
       propRate: 0.16, label: true,
-      path: [[126.6252, 37.6486], [126.6312, 37.6482], [126.6314, 37.6438],
-        [126.6254, 37.6442]],
-    },
-    {
-      id: 'hosu-park', name: '한강신도시 호수공원', kind: 'park', ground: GROUND.GRASS,
-      propRate: 0.14, label: true,
-      path: [[126.6318, 37.6458], [126.6428, 37.6450], [126.6432, 37.6400],
-        [126.6322, 37.6408]],
+      path: [[126.6248, 37.6492], [126.6316, 37.6486], [126.6312, 37.6456],
+        [126.6244, 37.6462]],
     },
     {
       id: 'masan-park', name: '마산근린공원', kind: 'park', ground: GROUND.GRASS,
       propRate: 0.18, label: true,
-      path: [[126.6432, 37.6392], [126.6492, 37.6388], [126.6490, 37.6350],
-        [126.6430, 37.6354]],
+      path: [[126.6438, 37.6398], [126.6498, 37.6392], [126.6494, 37.6356],
+        [126.6434, 37.6362]],
     },
+
+    // ── 물 ─────────────────────────────────────────────────────────
     {
-      id: 'hosu', name: '호수', kind: 'water', ground: GROUND.WATER, label: true,
-      path: [[126.6344, 37.6442], [126.6406, 37.6436], [126.6409, 37.6414],
-        [126.6347, 37.6420]],
-    },
-    {
-      id: 'yangchon-res', name: '양촌저수지', kind: 'water', ground: GROUND.WATER,
+      // 가현산 김포 방면 등산로 들머리에 있는 낚시터
+      id: 'gurae-fishing', name: '구래낚시터', kind: 'water', ground: GROUND.WATER,
       label: true,
-      path: [[126.6038, 37.6392], [126.6092, 37.6388], [126.6090, 37.6358],
-        [126.6036, 37.6362]],
+      path: [[126.6118, 37.6282], [126.6168, 37.6278], [126.6166, 37.6250],
+        [126.6116, 37.6254]],
     },
   ];
 
-  // 하천·수로. 폴리라인 + 폭(미터). 양쪽에 모래톱이 생긴다.
+  // 하천·수로. 폴리라인 + 폭(미터).
   const WATERWAYS = [
     {
-      name: '나진포천', width: 26,
-      path: [[126.5820, 37.6268], [126.6050, 37.6238], [126.6250, 37.6218],
-        [126.6450, 37.6232], [126.6560, 37.6252]],
+      // 양촌읍 양곡리 봉성포천과 고촌읍 신곡리 서부간선수로를 잇는 인공 수로.
+      // 한강신도시 구간은 금빛수로라고 부른다.
+      name: '김포대수로', width: 30,
+      path: [[126.5900, 37.6528], [126.6060, 37.6436], [126.6205, 37.6372],
+        [126.6362, 37.6332], [126.6560, 37.6322]],
     },
-    {
-      name: '용수로', width: 8,
-      path: [[126.6100, 37.6330], [126.6120, 37.6270], [126.6180, 37.6230]],
-    },
-    {
-      name: '용수로', width: 8,
-      path: [[126.6250, 37.6350], [126.6270, 37.6280], [126.6300, 37.6230]],
-    },
-    {
-      name: '양촌천', width: 12,
-      path: [[126.6060, 37.6480], [126.6040, 37.6400], [126.6060, 37.6330],
-        [126.6110, 37.6270]],
-    },
+    { name: '농수로', width: 8,
+      path: [[126.6210, 37.6350], [126.6240, 37.6300], [126.6280, 37.6250]] },
+    { name: '농수로', width: 8,
+      path: [[126.6420, 37.6300], [126.6450, 37.6240], [126.6470, 37.6180]] },
+    { name: '농수로', width: 8,
+      path: [[126.5960, 37.6240], [126.6060, 37.6200], [126.6180, 37.6180]] },
   ];
 
   __M.REGIONS = REGIONS; __M.WATERWAYS = WATERWAYS;
@@ -807,90 +822,95 @@ const __M = Object.create(null);
 
 // ── world/data/roads.js ─────────────────────────────
 (function () {
-  // 이름 있는 도로. cls 는 config.js 의 ROAD_CLASS 키.
-  // 이면도로·골목은 districts.js 규칙으로 절차 생성되므로 여기에 적지 않는다.
+  // 이름 있는 도로. 전부 실제 도로명이다.
+  // cls 는 config.js 의 ROAD_CLASS 키. 이면도로·골목은 districts.js 가 만든다.
+  //
+  // 확인한 것들
+  //   김포한강7로  구래삼거리 ↔ 오라니마을 교차로, 1.53km, 6~8차선. 구래역이 이 길에 있다.
+  //   김포한강8로  마산동 구래골입구 교차로 ↔ 구래동 나비마을 교차로
+  //   김포한강9로  구래동 변전소 교차로 ↔ 한가람초등학교 교차로
+  //   김포한강3로  마산역이 이 길 지하에 있다
+  //   김포한강5로  한가람마을 우미린(417)이 이 길에 있다
 
   const ROADS = [
     {
       name: '김포한강로', cls: 'expressway',
-      path: [[126.5820, 37.6332], [126.6000, 37.6318], [126.6250, 37.6300],
-        [126.6450, 37.6306], [126.6560, 37.6322]],
+      path: [[126.5820, 37.6362], [126.6040, 37.6350], [126.6250, 37.6334],
+        [126.6450, 37.6328], [126.6560, 37.6338]],
     },
     {
-      name: '김포대로', cls: 'arterial',
-      path: [[126.5880, 37.6612], [126.6050, 37.6562], [126.6200, 37.6524],
-        [126.6382, 37.6522], [126.6520, 37.6482], [126.6560, 37.6456]],
+      name: '김포대로', cls: 'arterial',   // 48번 국도
+      path: [[126.5880, 37.6624], [126.6042, 37.6586], [126.6182, 37.6542],
+        [126.6332, 37.6522], [126.6482, 37.6482], [126.6560, 37.6456]],
     },
     {
-      name: '한강신도시로', cls: 'arterial',
-      path: [[126.6148, 37.6472], [126.6280, 37.6464], [126.6400, 37.6442],
-        [126.6504, 37.6400]],
+      name: '김포한강7로', cls: 'arterial',
+      path: [[126.6250, 37.6374], [126.6285, 37.6437], [126.6318, 37.6502]],
     },
     {
-      name: '구래로', cls: 'main',
-      path: [[126.6284, 37.6546], [126.6285, 37.6440], [126.6292, 37.6358]],
+      name: '김포한강8로', cls: 'arterial',
+      path: [[126.6198, 37.6486], [126.6280, 37.6458], [126.6362, 37.6422],
+        [126.6446, 37.6390]],
     },
     {
-      name: '마산로', cls: 'main',
-      path: [[126.6398, 37.6474], [126.6410, 37.6390], [126.6422, 37.6326]],
+      name: '김포한강9로', cls: 'arterial',
+      path: [[126.6192, 37.6416], [126.6242, 37.6464], [126.6302, 37.6508]],
     },
     {
-      name: '양촌로', cls: 'main',
-      path: [[126.6032, 37.6584], [126.6118, 37.6542], [126.6182, 37.6502],
-        [126.6252, 37.6480]],
+      name: '김포한강5로', cls: 'main',
+      path: [[126.6298, 37.6348], [126.6338, 37.6420], [126.6376, 37.6484]],
     },
     {
-      name: '학운로', cls: 'main',
-      path: [[126.5896, 37.6424], [126.6020, 37.6410], [126.6092, 37.6390],
-        [126.6124, 37.6330], [126.6104, 37.6262], [126.6062, 37.6228]],
+      name: '김포한강3로', cls: 'main',
+      path: [[126.6358, 37.6326], [126.6395, 37.6392], [126.6432, 37.6458]],
+    },
+    {
+      name: '김포한강11로', cls: 'main',
+      path: [[126.6146, 37.6412], [126.6186, 37.6478], [126.6224, 37.6540]],
+    },
+    {
+      name: '양촌역길', cls: 'main',
+      path: [[126.6062, 37.6524], [126.6120, 37.6478], [126.6168, 37.6440]],
     },
     {
       name: '양곡로', cls: 'main',
-      path: [[126.6004, 37.6604], [126.6046, 37.6540], [126.6082, 37.6494],
-        [126.6096, 37.6456]],
+      path: [[126.5946, 37.6606], [126.6040, 37.6572], [126.6114, 37.6546],
+        [126.6160, 37.6518]],
+    },
+    {
+      name: '양곡1로', cls: 'local',
+      path: [[126.6014, 37.6612], [126.6046, 37.6536]],
+    },
+    {
+      name: '양곡4로', cls: 'local',
+      path: [[126.6062, 37.6626], [126.6092, 37.6552]],
+    },
+    {
+      name: '황금로', cls: 'main',   // 학운리 산업단지를 관통한다
+      path: [[126.5876, 37.6444], [126.5990, 37.6402], [126.6096, 37.6352],
+        [126.6156, 37.6296], [126.6180, 37.6240]],
+    },
+    {
+      name: '학운로', cls: 'local',
+      path: [[126.5880, 37.6396], [126.6040, 37.6382], [126.6150, 37.6368]],
+    },
+    {
+      name: '학운2로', cls: 'local',
+      path: [[126.6052, 37.6300], [126.6168, 37.6292]],
     },
     {
       name: '누산로', cls: 'local',
-      path: [[126.6196, 37.6352], [126.6300, 37.6324], [126.6424, 37.6302]],
-    },
-    {
-      name: '대포로', cls: 'local',
-      path: [[126.5942, 37.6302], [126.6052, 37.6282], [126.6156, 37.6262],
-        [126.6260, 37.6252]],
-    },
-    {
-      name: '김포한강8로', cls: 'local',
-      path: [[126.6160, 37.6504], [126.6300, 37.6508], [126.6402, 37.6482]],
-    },
-    {
-      name: '김포한강9로', cls: 'local',
-      path: [[126.6198, 37.6422], [126.6330, 37.6416], [126.6424, 37.6396]],
-    },
-    {
-      name: '구래역로', cls: 'local',
-      path: [[126.6236, 37.6452], [126.6286, 37.6448], [126.6340, 37.6452]],
-    },
-    {
-      name: '산단1로', cls: 'local',
-      path: [[126.5880, 37.6448], [126.6080, 37.6436]],
-    },
-    {
-      name: '산단2로', cls: 'local',
-      path: [[126.5884, 37.6376], [126.6086, 37.6362]],
-    },
-    {
-      name: '학운1로', cls: 'local',
-      path: [[126.5992, 37.6272], [126.6194, 37.6258]],
-    },
-    {
-      name: '호수공원 산책로', cls: 'path',
-      path: [[126.6326, 37.6452], [126.6420, 37.6444], [126.6424, 37.6406],
-        [126.6330, 37.6412], [126.6326, 37.6452]],
+      path: [[126.6200, 37.6362], [126.6320, 37.6330], [126.6440, 37.6308]],
     },
     {
       name: '구래근린공원 산책로', cls: 'path',
-      path: [[126.6258, 37.6480], [126.6306, 37.6477], [126.6308, 37.6446],
-        [126.6260, 37.6448], [126.6258, 37.6480]],
+      path: [[126.6252, 37.6488], [126.6310, 37.6482], [126.6308, 37.6460],
+        [126.6250, 37.6466], [126.6252, 37.6488]],
+    },
+    {
+      name: '가현산 등산로', cls: 'path',
+      path: [[126.6150, 37.6272], [126.6168, 37.6238], [126.6190, 37.6208],
+        [126.6180, 37.6176]],
     },
   ];
 
@@ -902,6 +922,9 @@ const __M = Object.create(null);
   // 블록 채움 규칙. 폴리곤 하나가 "이 구역은 이런 식으로 채워진다"를 뜻한다.
   // world/blocks.js 가 이 규칙을 읽어 이면도로 격자와 건물을 결정적으로 만들어 낸다.
   //
+  // 이름은 전부 실제 단지·상권·산업단지 이름이다. 아파트 동 번호는 101동부터 매긴다.
+  // 폴리곤은 실제 위치에 맞춘 근사치이고, 단지 경계선까지 같지는 않다.
+  //
   // 스키마
   //   kind    apartment 아파트단지 · commercial 상가 · house 단독/빌라
   //           · industrial 공장 · rural 농가
@@ -911,71 +934,116 @@ const __M = Object.create(null);
   //   fill    종류별 세부 규칙. 크기는 전부 미터.
 
   const DISTRICTS = [
-    // ── 구래동 아파트 단지 ──────────────────────────────────────────
+    // ── 구래동 아파트 ───────────────────────────────────────────────
     {
-      id: 'hosu-maeul', name: '호수마을', kind: 'apartment',
-      block: { w: 130, h: 105 }, street: 'local',
-      fill: { bw: 62, bh: 15, gap: 26, floors: [15, 25], start: 101 },
-      path: [[126.6300, 37.6484], [126.6392, 37.6478], [126.6388, 37.6444],
-        [126.6300, 37.6450]],
+      // 2011년 입주 · 26층 · 1,058세대 · 김포한강5로 417
+      id: 'hangaram-umiline', name: '한가람마을 우미린', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [24, 26], start: 101 },
+      path: [[126.6313, 37.6452], [126.6349, 37.6448], [126.6347, 37.6428], [126.6311, 37.6432]],
     },
     {
-      id: 'hangaram-maeul', name: '한가람마을', kind: 'apartment',
-      block: { w: 130, h: 105 }, street: 'local',
-      fill: { bw: 58, bh: 15, gap: 24, floors: [12, 22], start: 101 },
-      path: [[126.6188, 37.6522], [126.6282, 37.6526], [126.6280, 37.6486],
-        [126.6190, 37.6482]],
+      // 2018년 입주 · 1,230세대
+      id: 'hangang-ipark', name: '김포한강아이파크', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+      path: [[126.6231, 37.6474], [126.6267, 37.6470], [126.6265, 37.6450], [126.6229, 37.6454]],
     },
     {
-      id: 'chungsong-maeul', name: '청송마을', kind: 'apartment',
-      block: { w: 125, h: 100 }, street: 'local',
-      fill: { bw: 56, bh: 15, gap: 24, floors: [10, 20], start: 101 },
-      path: [[126.6156, 37.6480], [126.6246, 37.6478], [126.6242, 37.6430],
-        [126.6158, 37.6434]],
+      // 2017년 입주 · 1,510세대 · 김포한강8로 409
+      id: 'prugio3', name: '한강신도시 3차 푸르지오', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 301 },
+      path: [[126.6343, 37.6428], [126.6379, 37.6424], [126.6377, 37.6404], [126.6341, 37.6408]],
     },
     {
-      id: 'eunyeoul-maeul', name: '은여울마을', kind: 'apartment',
-      block: { w: 125, h: 100 }, street: 'local',
-      fill: { bw: 58, bh: 15, gap: 25, floors: [12, 24], start: 101 },
-      path: [[126.6330, 37.6406], [126.6422, 37.6398], [126.6416, 37.6358],
-        [126.6328, 37.6366]],
+      // 2018년 입주
+      id: 'yuborah4', name: '한강신도시 4차 반도유보라', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 401 },
+      path: [[126.6188, 37.6444], [126.6224, 37.6440], [126.6222, 37.6420], [126.6186, 37.6424]],
     },
     {
-      id: 'solteo-maeul', name: '솔터마을', kind: 'apartment',
-      block: { w: 130, h: 100 }, street: 'local',
-      fill: { bw: 60, bh: 15, gap: 26, floors: [14, 26], start: 101 },
-      path: [[126.6428, 37.6452], [126.6508, 37.6444], [126.6502, 37.6396],
-        [126.6426, 37.6404]],
+      // 2013년 입주
+      id: 'epyeonhansesang-hosu', name: 'e편한세상 호수마을', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 22], start: 101 },
+      path: [[126.6251, 37.6394], [126.6287, 37.6390], [126.6285, 37.6370], [126.6249, 37.6374]],
+    },
+    {
+      // 1,770세대 · 김포한강9로
+      id: 'yemiji', name: '김포한강예미지', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 29], start: 101 },
+      path: [[126.6270, 37.6512], [126.6308, 37.6508], [126.6306, 37.6486], [126.6268, 37.6490]],
+    },
+    {
+      // 2014년 입주 · LH
+      id: 'nabi-lh3', name: '나비마을 김포한강3단지', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [12, 20], start: 301 },
+      path: [[126.6182, 37.6508], [126.6218, 37.6504], [126.6216, 37.6484], [126.6180, 37.6488]],
+    },
+    {
+      id: 'moaelga2', name: '김포한강신도시 모아엘가 2차', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 201 },
+      path: [[126.6331, 37.6390], [126.6367, 37.6386], [126.6365, 37.6366], [126.6329, 37.6370]],
+    },
+
+    // ── 마산동 아파트 ───────────────────────────────────────────────
+    {
+      // 2020년 입주 · 1,021세대
+      id: 'dongil1', name: '김포한강동일스위트 더파크뷰 1단지', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 101 },
+      path: [[126.6418, 37.6422], [126.6454, 37.6418], [126.6452, 37.6398], [126.6416, 37.6402]],
+    },
+    {
+      id: 'dongil2', name: '김포한강동일스위트 더파크뷰 2단지', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [20, 29], start: 201 },
+      path: [[126.6418, 37.6377], [126.6454, 37.6373], [126.6452, 37.6353], [126.6416, 37.6357]],
+    },
+    {
+      id: 'hangang-hillstate', name: '한강힐스테이트', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+      path: [[126.6338, 37.6354], [126.6374, 37.6350], [126.6372, 37.6330], [126.6336, 37.6334]],
+    },
+    {
+      id: 'jayeonand-desiang', name: '김포양촌자연앤데시앙', kind: 'apartment',
+      block: { w: 150, h: 112 }, street: 'local',
+      fill: { bw: 55, bh: 14, gap: 22, floors: [15, 25], start: 101 },
+      path: [[126.6055, 37.6478], [126.6091, 37.6474], [126.6089, 37.6454], [126.6053, 37.6458]],
     },
 
     // ── 상가 ───────────────────────────────────────────────────────
     {
-      id: 'gurae-rodeo', name: '구래역 로데오거리', kind: 'commercial',
-      block: { w: 80, h: 62 }, street: 'alley',
-      fill: { depth: 14, minW: 8, maxW: 16, floors: [2, 7] },
-      path: [[126.6246, 37.6434], [126.6332, 37.6428], [126.6328, 37.6394],
-        [126.6244, 37.6400]],
+      // 한강신도시에서 가장 큰 상권. 구래역 남쪽 C지구.
+      id: 'gurae-center', name: '구래동 중심상가', kind: 'commercial',
+      block: { w: 82, h: 64 }, street: 'alley',
+      fill: { depth: 13, minW: 8, maxW: 16, floors: [3, 8] },
+      path: [[126.6262, 37.6444], [126.6314, 37.6438], [126.6310, 37.6410], [126.6258, 37.6416]],
     },
     {
-      id: 'gurae-north', name: '구래역 북측상가', kind: 'commercial',
+      // 호수공원에서 구래역을 지나 중심상가까지 이어지는 1.4km 축
+      id: 'gurae-culture', name: '구래동 문화의 거리', kind: 'commercial',
       block: { w: 78, h: 60 }, street: 'alley',
-      fill: { depth: 13, minW: 8, maxW: 15, floors: [2, 5] },
-      path: [[126.6250, 37.6472], [126.6302, 37.6470], [126.6300, 37.6446],
-        [126.6248, 37.6448]],
+      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
+      path: [[126.6270, 37.6472], [126.6304, 37.6468], [126.6302, 37.6454], [126.6268, 37.6458]],
     },
     {
       id: 'masan-sanggwon', name: '마산역 상가', kind: 'commercial',
       block: { w: 78, h: 60 }, street: 'alley',
-      fill: { depth: 13, minW: 8, maxW: 15, floors: [2, 6] },
-      path: [[126.6368, 37.6414], [126.6434, 37.6408], [126.6430, 37.6378],
-        [126.6366, 37.6384]],
+      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
+      path: [[126.6371, 37.6406], [126.6409, 37.6402], [126.6407, 37.6386], [126.6369, 37.6390]],
     },
     {
-      id: 'yanggok-sijang', name: '양곡 시가지 상가', kind: 'commercial',
+      id: 'yanggok-sanggwon', name: '양곡 시가지', kind: 'commercial',
       block: { w: 76, h: 58 }, street: 'alley',
-      fill: { depth: 12, minW: 7, maxW: 14, floors: [2, 4] },
-      path: [[126.6028, 37.6568], [126.6088, 37.6564], [126.6084, 37.6534],
-        [126.6026, 37.6538]],
+      fill: { depth: 12, minW: 7, maxW: 14, floors: [2, 5] },
+      path: [[126.6005, 37.6584], [126.6055, 37.6578], [126.6051, 37.6558], [126.6001, 37.6564]],
     },
 
     // ── 단독·빌라 ──────────────────────────────────────────────────
@@ -983,96 +1051,110 @@ const __M = Object.create(null);
       id: 'yanggok-house', name: '양곡 주택가', kind: 'house',
       block: { w: 62, h: 52 }, street: 'alley',
       fill: { size: 15, jitter: 4, floors: [2, 5] },
-      path: [[126.5992, 37.6602], [126.6112, 37.6594], [126.6106, 37.6520],
-        [126.5996, 37.6526]],
+      path: [[126.5958, 37.6634], [126.6116, 37.6616], [126.6110, 37.6542],
+        [126.5964, 37.6556]],
     },
     {
-      id: 'gurae-house', name: '구래 단독주택지', kind: 'house',
+      id: 'yuhyeon-house', name: '유현리 마을', kind: 'house',
+      block: { w: 62, h: 52 }, street: 'alley',
+      fill: { size: 14, jitter: 4, floors: [1, 3] },
+      path: [[126.6066, 37.6516], [126.6162, 37.6504], [126.6156, 37.6462],
+        [126.6060, 37.6474]],
+    },
+    {
+      // 마산동 타운하우스 단지
+      id: 'xi-thevillage', name: '자이더빌리지', kind: 'house',
       block: { w: 60, h: 50 }, street: 'alley',
-      fill: { size: 14, jitter: 4, floors: [2, 4] },
-      path: [[126.6160, 37.6422], [126.6252, 37.6416], [126.6248, 37.6380],
-        [126.6158, 37.6386]],
+      fill: { size: 13, jitter: 3, floors: [2, 3] },
+      path: [[126.6444, 37.6350], [126.6484, 37.6345], [126.6481, 37.6324], [126.6441, 37.6329]],
     },
 
-    // ── 공단 ───────────────────────────────────────────────────────
+    // ── 산업단지 ───────────────────────────────────────────────────
     {
-      id: 'yangchon-a', name: '양촌산단 A블록', kind: 'industrial',
+      id: 'yangchon-ind-a', name: '양촌일반산업단지', kind: 'industrial',
       block: { w: 210, h: 150 }, street: 'local',
       fill: { minW: 60, maxW: 130, minH: 40, maxH: 78, floors: [1, 3] },
-      path: [[126.5876, 37.6462], [126.6082, 37.6450], [126.6078, 37.6392],
-        [126.5878, 37.6402]],
+      path: [[126.5870, 37.6448], [126.6038, 37.6448], [126.6038, 37.6404],
+        [126.5870, 37.6404]],
     },
     {
-      id: 'yangchon-b', name: '양촌산단 B블록', kind: 'industrial',
-      block: { w: 200, h: 140 }, street: 'local',
-      fill: { minW: 55, maxW: 120, minH: 38, maxH: 70, floors: [1, 3] },
-      path: [[126.5880, 37.6384], [126.6084, 37.6372], [126.6082, 37.6336],
-        [126.5882, 37.6348]],
-    },
-    {
-      id: 'hagun', name: '학운산업단지', kind: 'industrial',
-      block: { w: 205, h: 150 }, street: 'local',
+      id: 'yangchon-ind-b', name: '양촌일반산업단지', kind: 'industrial',
+      block: { w: 205, h: 145 }, street: 'local',
       fill: { minW: 58, maxW: 125, minH: 40, maxH: 74, floors: [1, 3] },
-      path: [[126.6000, 37.6302], [126.6192, 37.6292], [126.6184, 37.6222],
-        [126.5994, 37.6230]],
+      path: [[126.5870, 37.6398], [126.6038, 37.6398], [126.6038, 37.6360],
+        [126.5870, 37.6360]],
+    },
+    {
+      id: 'hagun2', name: '학운2일반산업단지', kind: 'industrial',
+      block: { w: 200, h: 140 }, street: 'local',
+      fill: { minW: 55, maxW: 118, minH: 38, maxH: 70, floors: [1, 3] },
+      path: [[126.6054, 37.6418], [126.6148, 37.6418], [126.6148, 37.6364],
+        [126.6054, 37.6364]],
+    },
+    {
+      id: 'hagun5', name: '학운5일반산업단지', kind: 'industrial',
+      block: { w: 205, h: 145 }, street: 'local',
+      fill: { minW: 58, maxW: 125, minH: 40, maxH: 74, floors: [1, 3] },
+      path: [[126.6054, 37.6326], [126.6165, 37.6326], [126.6165, 37.6260],
+        [126.6054, 37.6260]],
+    },
+    {
+      id: 'hagun3', name: '학운3일반산업단지', kind: 'industrial',
+      block: { w: 205, h: 145 }, street: 'local',
+      fill: { minW: 58, maxW: 125, minH: 40, maxH: 74, floors: [1, 3] },
+      path: [[126.5914, 37.6326], [126.6031, 37.6326], [126.6031, 37.6256],
+        [126.5914, 37.6256]],
+    },
+    {
+      id: 'hagun7', name: '학운7일반산업단지', kind: 'industrial',
+      block: { w: 160, h: 120 }, street: 'local',
+      fill: { minW: 45, maxW: 90, minH: 32, maxH: 55, floors: [1, 2] },
+      path: [[126.5868, 37.6491], [126.5919, 37.6491], [126.5919, 37.6465],
+        [126.5868, 37.6465]],
     },
 
     // ── 농촌 마을 ──────────────────────────────────────────────────
     {
+      id: 'hagun-ri', name: '학운리', kind: 'rural',
+      block: { w: 150, h: 130 }, street: 'alley',
+      fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.5 },
+      path: [[126.5900, 37.6220], [126.6000, 37.6212], [126.5994, 37.6172],
+        [126.5894, 37.6180]],
+    },
+    {
       id: 'daepo-ri', name: '대포리', kind: 'rural',
       block: { w: 150, h: 130 }, street: 'alley',
       fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.55 },
-      path: [[126.6140, 37.6302], [126.6224, 37.6296], [126.6218, 37.6258],
-        [126.6136, 37.6264]],
+      path: [[126.6260, 37.6320], [126.6360, 37.6310], [126.6354, 37.6270],
+        [126.6254, 37.6280]],
     },
     {
       id: 'nusan-ri', name: '누산리', kind: 'rural',
       block: { w: 150, h: 130 }, street: 'alley',
       fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.5 },
-      path: [[126.6300, 37.6352], [126.6392, 37.6346], [126.6388, 37.6308],
-        [126.6296, 37.6314]],
+      path: [[126.6440, 37.6270], [126.6540, 37.6262], [126.6534, 37.6222],
+        [126.6434, 37.6230]],
     },
     {
-      id: 'heungsin-ri', name: '흥신리', kind: 'rural',
-      block: { w: 150, h: 130 }, street: 'alley',
-      fill: { size: 16, jitter: 8, floors: [1, 2], rate: 0.5 },
-      path: [[126.5900, 37.6300], [126.5990, 37.6294], [126.5986, 37.6256],
-        [126.5896, 37.6262]],
+      id: 'gurae-neighborhood', name: '구래동 근린생활시설', kind: 'commercial',
+      block: { w: 80, h: 62 }, street: 'alley',
+      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 5] },
+      path: [[126.6206, 37.6412], [126.6262, 37.6406], [126.6258, 37.6380],
+        [126.6202, 37.6386]],
     },
     {
-      id: 'hangaram-2', name: '한가람마을', kind: 'apartment',
-      block: { w: 128, h: 102 }, street: 'local',
-      fill: { bw: 58, bh: 15, gap: 25, floors: [13, 23], start: 201 },
-      path: [[126.6290, 37.6550], [126.6392, 37.6540], [126.6386, 37.6488],
-        [126.6288, 37.6494]],
+      id: 'masan-neighborhood', name: '마산동 근린생활시설', kind: 'commercial',
+      block: { w: 80, h: 62 }, street: 'alley',
+      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 5] },
+      path: [[126.6404, 37.6452], [126.6462, 37.6446], [126.6458, 37.6424],
+        [126.6400, 37.6430]],
     },
     {
-      id: 'naru-maeul', name: '나루마을', kind: 'apartment',
-      block: { w: 125, h: 100 }, street: 'local',
-      fill: { bw: 56, bh: 15, gap: 24, floors: [11, 21], start: 101 },
-      path: [[126.6356, 37.6472], [126.6428, 37.6464], [126.6424, 37.6418],
-        [126.6352, 37.6426]],
-    },
-    {
-      id: 'gurae-north-house', name: '구래 북측 주택가', kind: 'house',
-      block: { w: 60, h: 50 }, street: 'alley',
-      fill: { size: 14, jitter: 4, floors: [2, 5] },
-      path: [[126.6182, 37.6558], [126.6288, 37.6554], [126.6286, 37.6524],
-        [126.6186, 37.6528]],
-    },
-    {
-      id: 'masan-house', name: '마산 남측 주택가', kind: 'house',
-      block: { w: 60, h: 50 }, street: 'alley',
-      fill: { size: 14, jitter: 4, floors: [2, 4] },
-      path: [[126.6390, 37.6362], [126.6472, 37.6354], [126.6468, 37.6322],
-        [126.6386, 37.6330]],
-    },
-    {
-      id: 'gurae-station-shops', name: '구래역 앞 상가', kind: 'commercial',
+      id: 'gurae-office', name: '구래동 오피스텔', kind: 'commercial',
       block: { w: 78, h: 60 }, street: 'alley',
-      fill: { depth: 12, minW: 8, maxW: 15, floors: [2, 6] },
-      path: [[126.6250, 37.6450], [126.6334, 37.6444], [126.6330, 37.6428],
-        [126.6248, 37.6434]],
+      fill: { depth: 14, minW: 10, maxW: 18, floors: [8, 15] },
+      path: [[126.6238, 37.6444], [126.6262, 37.6441], [126.6260, 37.6424],
+        [126.6236, 37.6427]],
     },
   ];
 
@@ -1083,6 +1165,9 @@ const __M = Object.create(null);
 (function () {
   // 개별 랜드마크 건물. 나머지 건물은 districts.js 규칙으로 절차 생성된다.
   //
+  // 이름은 전부 실제 시설명이다. 확인한 주소를 주석에 남겨 둔다.
+  // 좌표는 그 주소를 실제 위치에 맞춰 옮긴 근사치다.
+  //
   // 스키마
   //   name    표시 이름
   //   kind    config.js 의 KIND 값
@@ -1090,79 +1175,84 @@ const __M = Object.create(null);
   //   w,h     가로·세로 (미터)
   //   floors  지상 층수, basement 지하 층수
   //   note    실내 안내판에 뜨는 한 줄
-  //   metro   지하철역이면 { line, order } — 역끼리 이동할 때 쓴다
+  //   metro   지하철역이면 { line, order }
 
   const { KIND } = __M;
 
   const PLACES = [
-    // ── 김포골드라인 역 ──────────────────────────────────────────────
+    // ── 김포 골드라인 ───────────────────────────────────────────────
     { name: '구래역', kind: KIND.STATION, lon: 126.6285, lat: 37.6437,
-      w: 30, h: 20, floors: 1, basement: 2, note: '김포골드라인 · 양촌 ↔ 마산',
-      metro: { line: '김포골드라인', order: 2 } },
-    { name: '마산역', kind: KIND.STATION, lon: 126.6398, lat: 37.6396,
-      w: 26, h: 18, floors: 1, basement: 2, note: '김포골드라인 · 구래 ↔ 장기',
-      metro: { line: '김포골드라인', order: 3 } },
-    { name: '양촌역', kind: KIND.STATION, lon: 126.6135, lat: 37.6484,
-      w: 26, h: 18, floors: 1, basement: 2, note: '김포골드라인 종점 · 산업단지 방면',
-      metro: { line: '김포골드라인', order: 1 } },
-
-    // ── 관공서 ─────────────────────────────────────────────────────
-    { name: '구래동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6262, lat: 37.6462,
-      w: 40, h: 24, floors: 4, basement: 1, note: '민원실은 1층입니다' },
-    { name: '마산동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6412, lat: 37.6420,
-      w: 32, h: 20, floors: 3, basement: 0 },
-    { name: '양촌읍 행정복지센터', kind: KIND.PUBLIC, lon: 126.6046, lat: 37.6552,
-      w: 36, h: 22, floors: 3, basement: 0 },
-    { name: '구래우체국', kind: KIND.PUBLIC, lon: 126.6250, lat: 37.6440,
-      w: 24, h: 18, floors: 2, basement: 0 },
-    { name: '구래파출소', kind: KIND.PUBLIC, lon: 126.6242, lat: 37.6455,
-      w: 20, h: 14, floors: 2, basement: 0 },
-    { name: '양촌119안전센터', kind: KIND.PUBLIC, lon: 126.6090, lat: 37.6520,
-      w: 30, h: 20, floors: 3, basement: 0, note: '차고 안쪽은 관계자 외 출입금지' },
-    { name: '구래도서관', kind: KIND.PUBLIC, lon: 126.6296, lat: 37.6470,
-      w: 34, h: 26, floors: 3, basement: 1, note: '3층 열람실 · 2층 어린이자료실' },
-    { name: '김포양촌산업단지 관리사무소', kind: KIND.PUBLIC, lon: 126.5980, lat: 37.6412,
-      w: 30, h: 20, floors: 3, basement: 0 },
-
-    // ── 학교 ───────────────────────────────────────────────────────
-    { name: '구래초등학교', kind: KIND.SCHOOL, lon: 126.6222, lat: 37.6484,
-      w: 80, h: 24, floors: 4, basement: 0 },
-    { name: '구래중학교', kind: KIND.SCHOOL, lon: 126.6206, lat: 37.6448,
-      w: 72, h: 22, floors: 4, basement: 0 },
-    { name: '마산초등학교', kind: KIND.SCHOOL, lon: 126.6450, lat: 37.6414,
-      w: 76, h: 24, floors: 4, basement: 0 },
-    { name: '양곡고등학교', kind: KIND.SCHOOL, lon: 126.6070, lat: 37.6558,
-      w: 84, h: 26, floors: 5, basement: 0, note: '급식실은 지상 1층 끝' },
-    { name: '양촌초등학교', kind: KIND.SCHOOL, lon: 126.6022, lat: 37.6520,
-      w: 70, h: 22, floors: 4, basement: 0 },
+      w: 34, h: 22, floors: 1, basement: 2,     // 김포한강7로 87 (구래동 6880-8)
+      note: '김포 골드라인 · 양촌 ↔ 마산',
+      metro: { line: '김포 골드라인', order: 2 } },
+    { name: '마산역', kind: KIND.STATION, lon: 126.6395, lat: 37.6392,
+      w: 30, h: 20, floors: 1, basement: 2,     // 김포한강3로 지하442 (마산동 641-3)
+      note: '김포 골드라인 · 구래 ↔ 장기',
+      metro: { line: '김포 골드라인', order: 3 } },
+    { name: '양촌역', kind: KIND.STATION, lon: 126.6120, lat: 37.6478,
+      w: 30, h: 20, floors: 1, basement: 2,     // 양촌역길 107 (유현리 275-7)
+      note: '김포 골드라인 기점 · 산업단지 방면',
+      metro: { line: '김포 골드라인', order: 1 } },
 
     // ── 상업 ───────────────────────────────────────────────────────
-    { name: '한강마트 구래점', kind: KIND.MART, lon: 126.6302, lat: 37.6428,
-      w: 70, h: 50, floors: 3, basement: 1, note: '지하 1층 주차 · 3층 푸드코트' },
-    { name: '양촌농협 하나로마트', kind: KIND.MART, lon: 126.6060, lat: 37.6532,
-      w: 46, h: 30, floors: 2, basement: 0 },
-    { name: '구래 시네마', kind: KIND.TOWER, lon: 126.6272, lat: 37.6425,
-      w: 40, h: 30, floors: 6, basement: 1, note: '상영관은 4층부터' },
-    { name: '구래역 스퀘어', kind: KIND.TOWER, lon: 126.6268, lat: 37.6446,
-      w: 32, h: 30, floors: 18, basement: 2, note: '1~3층 상가 · 4층부터 오피스텔' },
-    { name: '한강 센트럴타워', kind: KIND.TOWER, lon: 126.6312, lat: 37.6452,
-      w: 30, h: 28, floors: 20, basement: 2 },
-    { name: '로데오 아케이드', kind: KIND.SHOP, lon: 126.6292, lat: 37.6412,
-      w: 46, h: 22, floors: 4, basement: 0, note: '2층 전체가 학원가' },
+    { name: '이마트 김포한강점', kind: KIND.MART, lon: 126.6301, lat: 37.6428,
+      w: 100, h: 66, floors: 4, basement: 2,    // 구래동 6880-9 · 구래역 4번 출구
+      note: '구래역 4번 출구 · 10:00 ~ 23:00' },
+    { name: '두원타워', kind: KIND.TOWER, lon: 126.6262, lat: 37.6456,
+      w: 42, h: 34, floors: 12, basement: 2,    // 김포한강9로75번길 180
+      note: '8층 메가박스 김포한강신도시 · 5개관 712석' },
+
+    // ── 관공서 ─────────────────────────────────────────────────────
+    { name: '구래동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6270, lat: 37.6478,
+      w: 40, h: 24, floors: 4, basement: 1,     // 김포한강9로115번길 25
+      note: '민원실은 1층입니다' },
+    { name: '마산동 행정복지센터', kind: KIND.PUBLIC, lon: 126.6410, lat: 37.6418,
+      w: 32, h: 20, floors: 3, basement: 0 },
+    { name: '양촌읍 행정복지센터', kind: KIND.PUBLIC, lon: 126.6040, lat: 37.6560,
+      w: 36, h: 22, floors: 3, basement: 0 },   // 양곡1로68번길 37
+    { name: '김포시 마산도서관', kind: KIND.PUBLIC, lon: 126.6428, lat: 37.6404,
+      w: 36, h: 28, floors: 3, basement: 1,
+      note: '3층 열람실 · 2층 어린이자료실' },
+
+    // ── 학교 ───────────────────────────────────────────────────────
+    { name: '김포구래초등학교', kind: KIND.SCHOOL, lon: 126.6228, lat: 37.6472,
+      w: 80, h: 24, floors: 4, basement: 0 },
+    { name: '나비초등학교', kind: KIND.SCHOOL, lon: 126.6196, lat: 37.6494,
+      w: 76, h: 24, floors: 4, basement: 0 },   // 구래동 5723
+    { name: '한가람초등학교', kind: KIND.SCHOOL, lon: 126.6302, lat: 37.6500,
+      w: 76, h: 24, floors: 4, basement: 0 },   // 김포한강9로 한가람초 교차로
+    { name: '김포한가람중학교', kind: KIND.SCHOOL, lon: 126.6318, lat: 37.6472,
+      w: 72, h: 22, floors: 4, basement: 0 },
+    { name: '나래중학교', kind: KIND.SCHOOL, lon: 126.6360, lat: 37.6432,
+      w: 72, h: 22, floors: 4, basement: 0 },
+    { name: '양곡초등학교', kind: KIND.SCHOOL, lon: 126.6068, lat: 37.6566,
+      w: 74, h: 24, floors: 4, basement: 0 },   // 양곡로 548
+    { name: '양곡중학교', kind: KIND.SCHOOL, lon: 126.6086, lat: 37.6582,
+      w: 70, h: 22, floors: 4, basement: 0 },   // 양곡4로 138
+    { name: '양곡고등학교', kind: KIND.SCHOOL, lon: 126.6090, lat: 37.6600,
+      w: 84, h: 26, floors: 5, basement: 0,     // 양곡4로 138
+      note: '급식실은 1층 끝' },
+
+    // ── 산업단지 시설 ──────────────────────────────────────────────
+    { name: '양촌일반산업단지 관리사무소', kind: KIND.PUBLIC, lon: 126.6054, lat: 37.6437,
+      w: 30, h: 20, floors: 3, basement: 0,
+      note: '정문 옆 · 출입증은 1층에서 발급합니다' },
+    { name: '학운2일반산업단지 폐수처리장', kind: KIND.FACTORY, lon: 126.6118, lat: 37.6392,
+      w: 62, h: 42, floors: 2, basement: 0,
+      note: '관계자 외 출입금지' },
+    { name: '학운5일반산업단지 공동물류창고', kind: KIND.WAREHOUSE, lon: 126.6100, lat: 37.6298,
+      w: 124, h: 70, floors: 2, basement: 0 },
 
     // ── 그 밖 ──────────────────────────────────────────────────────
-    { name: '한강종합병원', kind: KIND.HOSPITAL, lon: 126.6322, lat: 37.6486,
-      w: 50, h: 36, floors: 7, basement: 2, note: '응급실 24시간' },
-    { name: '구래중앙교회', kind: KIND.CHURCH, lon: 126.6230, lat: 37.6510,
-      w: 34, h: 24, floors: 3, basement: 1 },
-    { name: '호수공원 전망데크', kind: KIND.PARK_FACILITY, lon: 126.6356, lat: 37.6452,
-      w: 14, h: 10, floors: 1, basement: 0, note: '호수 건너편이 마산동입니다' },
-    { name: '가현산 정자', kind: KIND.PARK_FACILITY, lon: 126.6300, lat: 37.6598,
-      w: 12, h: 12, floors: 1, basement: 0, note: '여기서 신도시가 다 보인다' },
-    { name: '대한정밀 제1공장', kind: KIND.FACTORY, lon: 126.5936, lat: 37.6440,
-      w: 110, h: 60, floors: 2, basement: 0 },
-    { name: '한성물류 김포센터', kind: KIND.WAREHOUSE, lon: 126.6046, lat: 37.6250,
-      w: 130, h: 70, floors: 2, basement: 0 },
+    { name: '한가람마을 우미린 관리사무소', kind: KIND.PARK_FACILITY, lon: 126.6322, lat: 37.6446,
+      w: 24, h: 16, floors: 2, basement: 0,
+      note: '단지 안내방송은 여기서 나갑니다' },
+    { name: '가현산 전망대', kind: KIND.PARK_FACILITY, lon: 126.6180, lat: 37.6182,
+      w: 14, h: 12, floors: 1, basement: 0,
+      note: '해발 215m · 맑으면 강화도까지 보인다' },
+    { name: '구래낚시터 관리동', kind: KIND.PARK_FACILITY, lon: 126.6126, lat: 37.6290,
+      w: 16, h: 12, floors: 1, basement: 0,
+      note: '가현산 등산로 들머리' },
   ];
 
   __M.PLACES = PLACES;
@@ -1193,18 +1283,9 @@ const __M = Object.create(null);
   const { projectPath, pathBounds, pointInPath, metersToTiles } = __M;
   const { makeRng } = __M;
   const { DISTRICTS } = __M;
-  const {
-    SHOP_PREFIX, SHOP_SUFFIX, SHOP_MIX, BUILDING_SUFFIX,
-    FACTORY_PREFIX, FACTORY_SUFFIX, FACTORY_TAIL, RURAL_NAME,
-  } = __M;
+  const { RURAL_NAME, HOUSE_SUFFIX } = __M;
 
   const T = metersToTiles; // 미터 → 타일
-
-  // 상호 하나 짓기
-  function makeShopName(rng, category) {
-    const cat = category || rng.pick(SHOP_MIX);
-    return rng.pick(SHOP_PREFIX) + rng.pick(SHOP_SUFFIX[cat]);
-  }
 
   // 폴리곤 안쪽을 따라 도로 선을 잘라 낸다.
   // 밖으로 삐져나온 부분은 버리고 안쪽 구간만 폴리라인으로 남긴다.
@@ -1229,11 +1310,17 @@ const __M = Object.create(null);
   // 블록 한 칸을 건물로 채운다. 종류별로 규칙이 다르다.
   function fillBlock(district, rect, rng, out) {
     const f = district.fill;
-    // 블록 바닥 — 아파트 단지 마당과 상가 뒷마당은 포장되어 있다
+    // 블록 바닥. 아파트 단지는 조경 녹지가 넓고 주차는 동 앞 한 줄,
+    // 상가 블록은 포장 마당에 뒤쪽 주차장이 붙는다.
+    const parkingDepth = 6; // 타일
     if (district.kind === 'apartment') {
-      out.areas.push({ ...rect, ground: 'parking' });
+      out.areas.push({ ...rect, ground: 'lawn' });
+      out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
+        w: rect.w, h: parkingDepth, ground: 'parking' });
     } else if (district.kind === 'commercial') {
       out.areas.push({ ...rect, ground: 'plaza' });
+      out.areas.push({ x: rect.x, y: rect.y + rect.h - parkingDepth,
+        w: rect.w, h: parkingDepth, ground: 'parking' });
     }
     switch (district.kind) {
       case 'apartment': return fillApartment(district, rect, rng, out, f);
@@ -1308,12 +1395,9 @@ const __M = Object.create(null);
 
   function pushShop(d, rng, out, x, y, w, h, f) {
     const floors = rng.int(f.floors[0], f.floors[1]);
-    // 층이 있으면 건물 이름, 단층이면 가게 이름이 곧 건물 이름
-    const name = floors >= 3
-      ? rng.pick(SHOP_PREFIX) + rng.pick(BUILDING_SUFFIX)
-      : makeShopName(rng);
+    // 이름은 나중에 도로명주소로 붙인다 (world/buildings.js)
     out.buildings.push({
-      name, kind: KIND.SHOP, x, y, w, h,
+      address: true, suffix: '', kind: KIND.SHOP, x, y, w, h,
       floors, basement: floors >= 5 ? 1 : 0, districtId: d.id,
     });
   }
@@ -1329,7 +1413,7 @@ const __M = Object.create(null);
         const w = size + rng.int(-1, 2), h = size + rng.int(-1, 1);
         const floors = rng.int(f.floors[0], f.floors[1]);
         out.buildings.push({
-          name: rng.pick(SHOP_PREFIX) + (floors >= 3 ? '빌라' : '주택'),
+          address: true, suffix: floors >= 3 ? rng.pick(HOUSE_SUFFIX) : '',
           kind: KIND.HOUSE, x, y, w: Math.max(3, w), h: Math.max(3, h),
           floors, basement: 0, districtId: d.id,
         });
@@ -1348,7 +1432,7 @@ const __M = Object.create(null);
       const x = rect.x + rng.int(2, Math.max(2, rect.w - w - 2));
       const warehouse = rng.chance(0.3);
       out.buildings.push({
-        name: rng.pick(FACTORY_PREFIX) + rng.pick(FACTORY_SUFFIX) + ' ' + rng.pick(FACTORY_TAIL),
+        address: true, suffix: warehouse ? '물류창고' : '공장',
         kind: warehouse ? KIND.WAREHOUSE : KIND.FACTORY,
         x, y: cursorY, w, h,
         floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -1365,7 +1449,7 @@ const __M = Object.create(null);
       for (let x = rect.x + 2; x + size <= rect.x + rect.w - 2; x += pitch) {
         if (!rng.chance(f.rate)) continue;
         out.buildings.push({
-          name: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
+          address: true, suffix: rng.pick(RURAL_NAME), kind: KIND.FARMHOUSE,
           x: x + rng.int(0, 3), y: y + rng.int(0, 3),
           w: size + rng.int(-1, 3), h: size + rng.int(-1, 1),
           floors: rng.int(f.floors[0], f.floors[1]), basement: 0, districtId: d.id,
@@ -1426,7 +1510,7 @@ const __M = Object.create(null);
     return out;
   }
 
-  __M.makeShopName = makeShopName; __M.expandDistricts = expandDistricts;
+  __M.expandDistricts = expandDistricts;
 })();
 
 // ── world/buildings.js ─────────────────────────────
@@ -1436,7 +1520,7 @@ const __M = Object.create(null);
   // 랜드마크(places.js)를 먼저 놓고, 절차 생성 건물은 이미 놓인 건물이나
   // 도로와 겹치면 버린다. 그래서 데이터에 손을 대도 지도가 깨지지 않는다.
 
-  const { SEED, BUILDING, KIND, TILE } = __M;
+  const { SEED, BUILDING, KIND, TILE, GEO } = __M;
   const { project, projectPath, metersToTiles } = __M;
   const { GridIndex, rectsOverlap } = __M;
   const { makeRng } = __M;
@@ -1537,6 +1621,34 @@ const __M = Object.create(null);
     }
   }
 
+  // 도로명주소를 만든다.
+  // 실제 규칙: 도로 시작점부터 20m 마다 번호가 1씩 오르고, 왼쪽이 홀수 오른쪽이 짝수.
+  // 이름을 알 수 없는 건물에는 지어낸 상호 대신 이 주소를 붙인다.
+  function buildingAddress(rect, roads) {
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    const r = BUILDING.doorProbeRadius;
+    let best = null, bestD = Infinity;
+    for (const seg of roads.index.query(cx - r, cy - r, cx + r, cy + r)) {
+      if (!seg.name) continue;                 // 이름 있는 도로만 주소가 된다
+      const dx = seg.bx - seg.ax, dy = seg.by - seg.ay;
+      const len2 = dx * dx + dy * dy || 1;
+      let t = ((cx - seg.ax) * dx + (cy - seg.ay) * dy) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const px = seg.ax + t * dx, py = seg.ay + t * dy;
+      const d = Math.hypot(px - cx, py - cy);
+      if (d < bestD) {
+        bestD = d;
+        // 진행 방향 기준 왼쪽인지 오른쪽인지 (외적 부호)
+        const side = dx * (cy - seg.ay) - dy * (cx - seg.ax);
+        best = { seg, along: seg.dist0 + t * Math.sqrt(len2), left: side < 0 };
+      }
+    }
+    if (!best) return null;
+    const meters = best.along * GEO.metersPerTile;
+    const number = Math.max(1, Math.floor(meters / 20) * 2 + (best.left ? 1 : 2));
+    return `${best.seg.name} ${number}`;
+  }
+
   let nextId = 1;
 
   function makeBuilding(spec, roads, index, placed) {
@@ -1556,10 +1668,18 @@ const __M = Object.create(null);
       }
     }
 
-    const rng = makeRng(SEED, 'building', spec.name, rect.x, rect.y);
+    // 이름이 없는 건물은 도로명주소로 부른다
+    let name = spec.name;
+    if (!name && spec.address) {
+      const addr = buildingAddress(rect, roads);
+      name = addr ? (spec.suffix ? `${addr} ${spec.suffix}` : addr)
+        : (spec.suffix || '이름 없는 건물');
+    }
+
+    const rng = makeRng(SEED, 'building', name, rect.x, rect.y);
     const b = {
       id: nextId++,
-      name: spec.name, kind: spec.kind,
+      name, kind: spec.kind,
       x: rect.x, y: rect.y, w: rect.w, h: rect.h,
       floors: Math.max(1, spec.floors | 0),
       basement: spec.basement | 0,
@@ -1626,7 +1746,7 @@ const __M = Object.create(null);
 
   const BUILDING_KINDS = KIND;
 
-  __M.buildRoadIndex = buildRoadIndex; __M.doorOutside = doorOutside; __M.buildBuildings = buildBuildings; __M.buildingAtTile = buildingAtTile; __M.floorLabel = floorLabel; __M.floorRange = floorRange; __M.BUILDING_KINDS = BUILDING_KINDS;
+  __M.buildRoadIndex = buildRoadIndex; __M.doorOutside = doorOutside; __M.buildingAddress = buildingAddress; __M.buildBuildings = buildBuildings; __M.buildingAtTile = buildingAtTile; __M.floorLabel = floorLabel; __M.floorRange = floorRange; __M.BUILDING_KINDS = BUILDING_KINDS;
 })();
 
 // ── world/map.js ─────────────────────────────
@@ -1675,7 +1795,8 @@ const __M = Object.create(null);
 
       // 블록 바닥 (아파트 단지 마당, 상가 뒷마당)
       this.areaIndex = new GridIndex(CH);
-      const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA, yard: GROUND.YARD };
+      const areaGround = { parking: GROUND.PARKING, plaza: GROUND.PLAZA,
+        yard: GROUND.YARD, lawn: GROUND.GRASS };
       for (const a of buildings.areas || []) {
         const area = { ...a, kind: areaGround[a.ground] };
         this.areaIndex.insert(area, a.x, a.y, a.x + a.w, a.y + a.h);
@@ -1747,7 +1868,7 @@ const __M = Object.create(null);
             ground[i] = r.ground;
             regionRate[i] = r.propRate || 0;
             // 도시 바닥은 잔디와 포장이 얼룩덜룩 섞인다 (주차장·광장 자리)
-            if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.63) {
+            if (r.kind === 'city' && fbm(S_CITY, ox + x, oy + y, 9, 2) > 0.74) {
               ground[i] = GROUND.PLAZA;
             }
           }
@@ -1761,8 +1882,10 @@ const __M = Object.create(null);
         for (let y = y0; y < y1; y++) {
           for (let x = x0; x < x1; x++) {
             const i = y * CH + x;
-            ground[i] = a.kind;
-            regionRate[i] = 0;
+            // 포장 바닥에도 화단이 조금씩 섞인다
+            const green = a.kind !== GROUND.GRASS && fbm(S_CITY, ox + x, oy + y, 7, 2) > 0.78;
+            ground[i] = green ? GROUND.GRASS : a.kind;
+            regionRate[i] = a.kind === GROUND.GRASS ? 0.05 : green ? 0.02 : 0;
           }
         }
       }
@@ -1957,7 +2080,6 @@ const __M = Object.create(null);
   const { SEED, INTERIOR, IN, IN_SOLID, KIND } = __M;
   const { makeRng } = __M;
   const { ROOM_NAMES } = __M;
-  const { makeShopName } = __M;
 
   const solidSet = new Set(IN_SOLID);
 
@@ -2155,6 +2277,10 @@ const __M = Object.create(null);
       const pool = rng.shuffle(ROOM_NAMES.station);
       return (i) => pool[i % pool.length];
     }
+    if (b.name && b.name.includes('도서관')) {
+      const pool = rng.shuffle(ROOM_NAMES.library);
+      return (i) => pool[i % pool.length];
+    }
     if (b.kind === KIND.PUBLIC) {
       const pool = rng.shuffle(ROOM_NAMES.public);
       return (i) => pool[i % pool.length];
@@ -2167,8 +2293,13 @@ const __M = Object.create(null);
       const pool = rng.shuffle(ROOM_NAMES.factory);
       return (i) => pool[i % pool.length];
     }
-    if (b.kind === KIND.SHOP || b.kind === KIND.TOWER || b.kind === KIND.MART) {
-      return () => makeShopName(rng);
+    if (b.kind === KIND.MART) {
+      const pool = rng.shuffle(ROOM_NAMES.mart);
+      return (i) => pool[i % pool.length];
+    }
+    if (b.kind === KIND.SHOP || b.kind === KIND.TOWER) {
+      // 상가는 호실 번호로 부른다 (301호, 302호 …)
+      return (i) => `${Math.max(1, floor)}${String(i + 1).padStart(2, '0')}호`;
     }
     if (b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE) {
       return (i) => ['거실', '안방', '작은방', '주방', '창고'][i % 5];
@@ -2356,6 +2487,9 @@ const __M = Object.create(null);
   const { makeRng, noiseAt, seedOf } = __M;
 
   const S = TILE.size;
+  // 간판 색 — 우리나라 상가 간판에 흔한 색들
+  const SIGN_COLORS = ['#d4574a', '#e2b93b', '#3f7fbf', '#4f9a5a', '#e2782f',
+    '#8f5aa8', '#2f2f38', '#d8607f'];
   const GROUND_VARIANTS = 6;   // 지면 종류마다 만들어 둘 변주 개수
   const S_TEX = seedOf(SEED, 'tex');
 
@@ -2419,8 +2553,9 @@ const __M = Object.create(null);
         break;
       }
       case GROUND.ROAD_LINE: {
+        // 우리나라 도로 중앙선은 노란색이다
         px(ctx, 0, 0, S, S, GROUND_COLOR[GROUND.ROAD]);
-        px(ctx, 0, S / 2 - 1, S, 2, '#e8e2c8');
+        px(ctx, 0, S / 2 - 1, S, 2, '#e0b63c');
         break;
       }
       case GROUND.SIDEWALK: { // 보도블럭 격자
@@ -2453,8 +2588,16 @@ const __M = Object.create(null);
           shade(base, -0.1));
         break;
       }
-      case GROUND.YARD: case GROUND.PARKING: { // 주차 구획선
-        px(ctx, 0, 0, 1, S, shade(base, 0.22));
+      case GROUND.PARKING: { // 주차 구획선 — 일부 타일에만 그린다
+        if (variant % 3 === 0) px(ctx, 0, 1, 1, S - 2, shade(base, 0.3));
+        for (let i = 0; i < 10; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, rng.chance(0.5) ? 0.06 : -0.06));
+        break;
+      }
+      case GROUND.YARD: { // 공단 포장 마당
+        for (let i = 0; i < 14; i++) px(ctx, rng.int(0, S - 1), rng.int(0, S - 1), 1, 1,
+          shade(base, rng.chance(0.5) ? 0.07 : -0.07));
+        if (variant % 4 === 0) px(ctx, 0, 0, S, 1, shade(base, -0.12));
         break;
       }
       case GROUND.TRACK: { // 산책로 — 자잘한 자갈
@@ -2603,7 +2746,11 @@ const __M = Object.create(null);
 
     const pw = b.w * S, ph = b.h * S + wh;
     const { canvas, ctx } = makeCanvas(pw, ph);
-    const col = BUILDING_COLOR[b.kind] || BUILDING_COLOR[KIND.SHOP];
+    let col = BUILDING_COLOR[b.kind] || BUILDING_COLOR[KIND.SHOP];
+    // 비닐하우스는 흰 비닐이 씌워져 있다
+    if (b.name && b.name.includes('비닐하우스')) {
+      col = { wall: '#e8eeea', roof: '#dfe6e2', trim: '#b8c4bc', accent: '#cfe0d8' };
+    }
     const rng = makeRng(SEED, 'sprite', b.seed, b.kind);
     // 같은 종류라도 채마다 색을 조금씩 흔든다
     const wall = shade(col.wall, rng.range(-0.06, 0.06));
@@ -2640,13 +2787,25 @@ const __M = Object.create(null);
     const dark = shade(roof, -0.16), light = shade(roof, 0.12);
     switch (b.kind) {
       case KIND.APARTMENT: case KIND.TOWER: {
-        // 옥상 난간 + 물탱크 + 계단탑
-        px(ctx, 1, 1, pw - 2, 1, light);
-        px(ctx, 1, roofH - 3, pw - 2, 1, dark);
-        const tx = Math.floor(pw * 0.62), ty = Math.floor(roofH * 0.3);
-        px(ctx, tx, ty, 12, 8, shade(roof, -0.25));
-        px(ctx, tx + 1, ty + 1, 10, 2, light);
-        px(ctx, 6, Math.floor(roofH * 0.45), 10, 9, dark);
+        // 옥상 난간
+        px(ctx, 1, 1, pw - 2, 2, light);
+        px(ctx, 1, roofH - 3, pw - 2, 2, dark);
+        px(ctx, 1, 1, 2, roofH - 3, shade(roof, 0.06));
+        px(ctx, pw - 3, 1, 2, roofH - 3, shade(roof, -0.06));
+        // 계단탑과 엘리베이터 기계실 — 세대 라인마다 하나씩 올라온다
+        const towerStep = 42;
+        for (let x = 8; x < pw - 16; x += towerStep) {
+          const ty = Math.floor(roofH * 0.34);
+          px(ctx, x, ty, 13, 10, shade(roof, -0.26));
+          px(ctx, x + 1, ty + 1, 11, 3, light);
+          px(ctx, x + 3, ty + 10, 7, 2, shade(roof, -0.34));
+        }
+        // 물탱크
+        if (pw > 60) {
+          const wx = pw - 22;
+          px(ctx, wx, 6, 14, 9, shade(roof, -0.2));
+          px(ctx, wx + 1, 7, 12, 3, light);
+        }
         break;
       }
       case KIND.HOUSE: case KIND.FARMHOUSE: {
@@ -2715,6 +2874,7 @@ const __M = Object.create(null);
   }
 
   function drawWindows(ctx, b, pw, roofH, wh, wall, col, rng) {
+    if (b.kind === KIND.APARTMENT) return drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng);
     if (b.kind === KIND.FARMHOUSE && b.w < 6) return;
     const glass = shade(col.accent, rng.range(-0.05, 0.1));
     const rows = Math.max(1, Math.min(4, Math.floor((wh - 8) / 9)));
@@ -2729,13 +2889,47 @@ const __M = Object.create(null);
         px(ctx, x, y + 4, 5, 1, shade(glass, -0.25));
       }
     }
-    // 상가는 1층에 간판띠
+    // 상가는 1층에 간판띠. 색은 건물마다 다르다 (실제 간판이 그렇듯)
     if ((b.kind === KIND.SHOP || b.kind === KIND.MART) && wh > 14) {
+      const sign = b.kind === KIND.MART ? col.accent : rng.pick(SIGN_COLORS);
       const y = roofH + wh - 14;
-      px(ctx, 1, y, pw - 2, 5, col.accent);
-      px(ctx, 1, y, pw - 2, 1, shade(col.accent, 0.25));
+      px(ctx, 1, y, pw - 2, 5, sign);
+      px(ctx, 1, y, pw - 2, 1, shade(sign, 0.25));
       for (let x = 3; x < pw - 5; x += 4) px(ctx, x, y + 2, 2, 1, '#fffdf2');
+      // 위층에도 간판이 하나씩 붙는다
+      if (wh > 26 && rng.chance(0.7)) {
+        const y2 = roofH + wh - 26;
+        const sign2 = rng.pick(SIGN_COLORS);
+        px(ctx, 2, y2, Math.max(6, pw - 8), 4, sign2);
+        for (let x = 4; x < pw - 8; x += 4) px(ctx, x, y2 + 1, 2, 1, '#fffdf2');
+      }
     }
+  }
+
+  // 아파트 앞면 — 세대 구획선과 발코니 띠, 그 사이 창문
+  function drawApartmentFace(ctx, b, pw, roofH, wh, wall, col, rng) {
+    const unit = 22;                    // 세대 하나의 폭(픽셀)
+    const glass = shade(col.accent, rng.range(-0.04, 0.08));
+    const line = shade(wall, -0.16);
+    const rows = Math.max(2, Math.floor((wh - 6) / 8));
+
+    for (let r = 0; r < rows; r++) {
+      const y = roofH + 3 + r * 8;
+      if (y + 6 > roofH + wh - 3) break;
+      // 발코니 난간 띠
+      px(ctx, 1, y + 5, pw - 2, 1, line);
+      for (let x = 3; x < pw - 6; x += unit) {
+        px(ctx, x, y, 8, 5, glass);
+        px(ctx, x, y, 8, 1, shade(glass, 0.22));
+        px(ctx, x + 10, y + 1, 6, 4, shade(glass, -0.12)); // 작은방 창
+      }
+    }
+    // 세대 사이 벽선
+    for (let x = 0; x < pw; x += unit) px(ctx, x, roofH + 1, 1, wh - 3, line);
+    // 1층 출입구 캐노피
+    const dx = Math.max(2, Math.min(pw - 16, (b.door.x - b.x) * S));
+    px(ctx, dx, roofH + wh - 8, 14, 8, shade(col.trim, -0.1));
+    px(ctx, dx + 2, roofH + wh - 7, 10, 4, shade(col.accent, 0.15));
   }
 
   function drawFrontDoor(ctx, b, pw, roofH, wh, col, rng) {
@@ -3658,34 +3852,34 @@ const __M = Object.create(null);
     // ── 즉시 끝나는 것들 ───────────────────────────────────────────
     {
       id: 'E01', title: '대폭발', tag: 'bad', when: 'any',
-      hint: '불 꺼진 공장에서 밸브를 돌리면',
+      hint: '전기를 끊어 놓고 폐수처리장 밸브를 돌리면',
       test: (s) => s.has('valve') && s.has('blackout'),
       lines: ['압력계 바늘이 오른쪽 끝까지 갔다.',
-        '정전된 공장에서 경보는 울리지 않았다.',
+        '전기가 나간 학운2단지에서 경보는 울리지 않았다.',
         '양촌 하늘이 잠깐 아주 밝았다.'],
     },
     {
       id: 'E02', title: '자수', tag: 'odd', when: 'any',
-      hint: '파출소에서 하지 않아도 될 말을 하면',
+      hint: '역무실에서 하지 않아도 될 말을 하면',
       test: (s) => s.has('confess'),
       lines: ['"제가 그랬습니다."',
-        '경관은 무엇을 그랬는지 세 번 물었다.',
-        '조서에는 결국 출근 시각만 적혔다.'],
+        '역무원은 무엇을 그랬는지 세 번 물었다.',
+        '유실물 대장에 결국 출근 시각만 적혔다.'],
     },
     {
-      id: 'E03', title: '과다복용', tag: 'bad', when: 'any',
-      hint: '같은 약을 세 번 받으면',
-      test: (s) => s.count('pill') >= 3,
-      lines: ['세 번째 알약을 삼키자 복도가 기울었다.',
-        '병원 침대는 생각보다 편했다.',
-        '출근은 내일부터 하기로 했다.'],
+      id: 'E03', title: '갇혔다', tag: 'bad', when: 'any',
+      hint: '전기를 끊어 놓고 엘리베이터를 타면',
+      test: (s) => s.has('stuck'),
+      lines: ['버튼을 누르자 안내판이 꺼졌다.',
+        '두원타워 엘리베이터는 층과 층 사이에서 멈췄다.',
+        '비상벨을 누르는 데까지가 오늘의 출근길이었다.'],
     },
     {
       id: 'E04', title: '연행', tag: 'bad', when: 'any',
       hint: '사이렌을 울린 채로 차단기를 만지면',
       test: (s) => s.has('siren') && s.has('gate'),
       lines: ['비상벨 소리가 아직 귀에 남아 있었다.',
-        '차단기가 올라가는 순간 순찰차가 도착했다.',
+        '산업단지 차단기가 올라가는 순간 순찰차가 도착했다.',
         '앞자리에 앉아 본 것은 처음이었다.'],
     },
     {
@@ -3712,7 +3906,7 @@ const __M = Object.create(null);
       hint: '정말로 아무것도 건드리지 않고 제시간에 닿으면',
       test: (s) => s.touched === 0 && !s.late,
       lines: ['자판기도, 비상벨도, 남의 집 문도 그냥 지나쳤다.',
-        '08시 52분. 공단 정문.',
+        '양촌일반산업단지 정문 앞에서 시계를 봤다.',
         '아무 일도 일어나지 않았다는 것이 오늘의 사건이었다.'],
     },
     {
@@ -3735,8 +3929,8 @@ const __M = Object.create(null);
       id: 'E10', title: '정전 속의 첫 출근', tag: 'bad', when: 'goal',
       hint: '어딘가의 분전반을 열어 두고 도착하면',
       test: (s) => s.has('blackout'),
-      lines: ['구래동 상가 절반이 어두웠다.',
-        '공단 사무실도 비상등만 켜져 있었다.',
+      lines: ['이마트도 중심상가도 절반이 어두웠다.',
+        '양촌산단 사무실도 비상등만 켜져 있었다.',
         '"오늘 왜 이러지?" 아무도 나를 보지 않았다.'],
     },
     {
@@ -3773,11 +3967,11 @@ const __M = Object.create(null);
     },
     {
       id: 'E15', title: '도시락', tag: 'good', when: 'goal',
-      hint: '하나로마트에서 뭔가 사 가면',
+      hint: '이마트에서 도시락을 사 가면',
       test: (s) => s.has('lunch'),
       lines: ['가방에서 도시락이 아직 따뜻했다.',
         '점심시간에 혼자 먹지 않아도 됐다.',
-        '"이거 어디서 샀어요?" 양촌농협이요.'],
+        '"이거 어디서 샀어요?" 구래역 이마트요.'],
     },
     {
       id: 'E16', title: '자판기 커피', tag: 'good', when: 'goal',
@@ -3800,7 +3994,7 @@ const __M = Object.create(null);
       hint: '도서관에서 책을 빌리면',
       test: (s) => s.has('book'),
       lines: ['가방 속 책은 2주 뒤에 반납해야 한다.',
-        '공단에서 구래도서관까지 다시 오는 일은 없었다.',
+        '양촌산단에서 마산도서관까지 다시 오는 일은 없었다.',
         '연체일이 쌓이는 동안 책은 사물함에 있었다.'],
     },
     {
@@ -3815,7 +4009,7 @@ const __M = Object.create(null);
       id: 'E20', title: '조조', tag: 'odd', when: 'goal',
       hint: '출근길에 상영관에 들어가면',
       test: (s) => s.has('movie'),
-      lines: ['상영관에는 나 혼자였다.',
+      lines: ['두원타워 8층. 상영관에는 나 혼자였다.',
         '무슨 영화였는지는 끝까지 몰랐다.',
         '엔딩 크레딧을 보고 나오니 공단 갈 시간이 딱 맞았다. 아마도.'],
     },
@@ -3829,41 +4023,41 @@ const __M = Object.create(null);
     },
     {
       id: 'E22', title: '소방차 뒤를 따라', tag: 'odd', when: 'goal',
-      hint: '119안전센터에 신고하면',
+      hint: '길가 비상전화로 신고하면',
       test: (s) => s.has('report'),
       lines: ['신고한 것은 별일이 아니었다.',
         '그래도 소방차는 왔고, 나는 그 뒤를 따라 걸었다.',
         '양촌까지 길이 전부 비켜 있었다.'],
     },
     {
-      id: 'E23', title: '종소리 배웅', tag: 'good', when: 'goal',
-      hint: '교회 종을 치고 나오면',
-      test: (s) => s.has('church_bell'),
-      lines: ['한 번만 치려던 종을 세 번 쳤다.',
-        '소리가 구래동 위로 넓게 퍼졌다.',
-        '누가 배웅해 준 것 같은 아침이었다.'],
+      id: 'E23', title: '안내방송', tag: 'odd', when: 'goal',
+      hint: '아파트 관리사무소 마이크를 켜면',
+      test: (s) => s.has('broadcast'),
+      lines: ['"아, 아. 잠시 안내 말씀 드리겠습니다."',
+        '한가람마을 우미린 열두 개 동에 내 목소리가 나갔다.',
+        '무슨 말을 했는지는 공단에 도착할 때까지 기억나지 않았다.'],
     },
     {
       id: 'E24', title: '굴뚝 연기', tag: 'true', when: 'goal',
-      hint: '망원경으로 본 것을 옥상에서 다시 보면',
+      hint: '가현산에서 본 것을 두원타워 옥상에서 다시 보면',
       test: (s) => s.has('saw_smoke') && s.has('rooftop'),
-      lines: ['호수공원 망원경으로 본 연기가 옥상에서도 보였다.',
+      lines: ['가현산 망원경으로 본 연기가 두원타워 옥상에서도 보였다.',
         '방향이 조금 달랐다. 두 번 보면 알 수 있다.',
-        '공단에 도착해 물었더니, 오늘은 아무 공정도 돌리지 않았다고 했다.'],
+        '양촌산단에 도착해 물었더니, 오늘은 아무 공정도 돌리지 않았다고 했다.'],
     },
     {
       id: 'E25', title: '냉동식품', tag: 'odd', when: 'goal',
       hint: '마트 냉동고를 열어 보면',
       test: (s) => s.has('frozen'),
-      lines: ['냉동고 문을 오래 열어 두었다.',
-        '가방 속 만두는 공단에 도착할 때쯤 다 녹았다.',
+      lines: ['이마트 냉동고 문을 오래 열어 두었다.',
+        '가방 속 만두는 양촌산단에 도착할 때쯤 다 녹았다.',
         '점심으로는 못 쓰게 됐다.'],
     },
     {
       id: 'E26', title: '등기우편', tag: 'good', when: 'goal',
-      hint: '편지를 넣고 우체국에도 들르면',
+      hint: '편지를 넣고 무인택배함에도 넣으면',
       test: (s) => s.has('letter') && s.has('parcel'),
-      lines: ['우체통에 넣은 편지와 창구에서 부친 소포.',
+      lines: ['우체통에 넣은 편지와 무인택배함에 넣은 소포.',
         '둘 다 오늘 안에 떠난다고 했다.',
         '나만 아직 도착하지 않았다. 이제 도착했다.'],
     },
@@ -3879,8 +4073,8 @@ const __M = Object.create(null);
       id: 'E28', title: '첫 출근', tag: 'good', when: 'goal',
       hint: '무사히 도착하면',
       test: () => true,
-      lines: ['구래동에서 양촌공단까지 걸었다.',
-        '논과 아파트와 공장이 차례로 지나갔다.',
+      lines: ['구래동에서 양촌산단까지 걸었다.',
+        '아파트와 논과 공장이 차례로 지나갔다.',
         '이제 여기서 일한다.'],
     },
   ];
@@ -3912,66 +4106,77 @@ const __M = Object.create(null);
   // 만질 수 있는 것들. 이 배열이 곧 선택지다.
   //
   // 자리 정하기
-  //   { place: '건물 이름', floor: 층, slot: 실내 자리 번호 }  실내
+  //   { place: '건물 이름', floor: 층, slot: 실내 자리 번호 }  실내 (실제 건물 이름을 쓴다)
   //   { lon, lat }                                            길 위
   // effect 에서 상태에 플래그를 남기고, 그 조합이 endings.js 에서 결말이 된다.
-  // 새 물건을 넣으려면 여기에 하나 더 적으면 된다.
 
   const GIZMOS = [
     // ── 길 위 ──────────────────────────────────────────────────────
     {
-      id: 'vending', icon: 'vending', at: { lon: 126.6288, lat: 37.6434 },
+      id: 'vending', icon: 'vending', at: { lon: 126.6289, lat: 37.6433 },
       name: '자판기', once: true,
       text: '종이컵이 덜컹 떨어진다. 300원.',
-      effect: (s) => s.set('coffee', '자판기 커피를 뽑았다'),
+      effect: (s) => s.set('coffee', '구래역 앞에서 자판기 커피를 뽑았다'),
     },
     {
-      id: 'siren', icon: 'button', at: { lon: 126.6282, lat: 37.6441 },
+      id: 'siren', icon: 'button', at: { lon: 126.6281, lat: 37.6441 },
       name: '역 앞 비상벨', once: true,
       text: '누르지 마시오, 라고 적혀 있다. 눌렀다.',
-      effect: (s) => s.set('siren', '비상벨을 눌렀다'),
+      effect: (s) => s.set('siren', '구래역 비상벨을 눌렀다'),
     },
     {
-      id: 'hydrant', icon: 'valve', at: { lon: 126.6296, lat: 37.6419 },
+      id: 'hydrant', icon: 'valve', at: { lon: 126.6293, lat: 37.6424 },
       name: '소화전', once: true,
       text: '뚜껑이 생각보다 쉽게 돌아간다. 물이 솟는다.',
-      effect: (s) => s.set('water', '소화전을 열었다'),
+      effect: (s) => s.set('water', '중심상가 소화전을 열었다'),
     },
     {
-      id: 'postbox', icon: 'note', at: { lon: 126.6253, lat: 37.6443 },
+      id: 'postbox', icon: 'note', at: { lon: 126.6274, lat: 37.6473 },
       name: '우체통', once: true,
       text: '주머니에 있던 봉투를 넣었다. 언제부터 있었는지는 모른다.',
       effect: (s) => s.set('letter', '우체통에 편지를 넣었다'),
     },
     {
-      id: 'timetable', icon: 'note', at: { lon: 126.6272, lat: 37.6456 },
-      name: '버스 시간표', once: true,
-      text: '양촌 방면 첫차는 이미 지나갔다.',
-      effect: (s) => s.set('timetable', '버스 시간표를 읽었다'),
+      id: 'parcel-box', icon: 'panel', at: { lon: 126.6331, lat: 37.6441 },
+      name: '무인택배함', once: true,
+      text: '빈 칸에 소포를 넣고 번호를 눌렀다. 받는 사람은 나중에 정하기로.',
+      effect: (s) => s.set('parcel', '무인택배함에 소포를 넣었다'),
     },
     {
-      id: 'telescope', icon: 'panel', at: { lon: 126.6357, lat: 37.6451 },
-      name: '망원경', once: true,
-      text: '호수 건너 서쪽. 공단 굴뚝에서 연기가 오른다.',
-      effect: (s) => s.set('saw_smoke', '망원경으로 공단 연기를 봤다'),
+      id: 'timetable', icon: 'note', at: { lon: 126.6278, lat: 37.6446 },
+      name: '버스 노선도', once: true,
+      text: '양촌산단 방면 첫차는 이미 지나갔다.',
+      effect: (s) => s.set('timetable', '버스 노선도를 읽었다'),
     },
     {
-      id: 'mountain-bell', icon: 'bell', at: { lon: 126.6301, lat: 37.6597 },
-      name: '가현산 정자의 종', once: true,
-      text: '한 번 치면 소리가 오래 남는다.',
+      id: 'emergency-phone', icon: 'button', at: { lon: 126.6152, lat: 37.6344 },
+      name: '김포한강로 비상전화', once: true,
+      text: '수화기를 들자 바로 연결됐다. 아까 그 소화전 이야기를 했다.',
+      effect: (s) => s.set('report', '김포한강로 비상전화로 신고했다'),
+    },
+    {
+      id: 'telescope', icon: 'panel', at: { lon: 126.6166, lat: 37.6232 },
+      name: '가현산 등산로 망원경', once: true,
+      text: '북서쪽. 양촌산단 굴뚝에서 연기가 오른다.',
+      effect: (s) => s.set('saw_smoke', '가현산에서 공단 연기를 봤다'),
+    },
+    {
+      id: 'mountain-bell', icon: 'bell', at: { lon: 126.6177, lat: 37.6184 },
+      name: '가현산 전망대의 종', once: true,
+      text: '해발 215m. 한 번 치면 소리가 오래 남는다.',
       effect: (s) => s.set('mountain_bell', '가현산에서 종을 쳤다'),
     },
     {
-      id: 'catbowl', icon: 'bowl', at: { lon: 126.6281, lat: 37.6466 },
+      id: 'catbowl', icon: 'bowl', at: { lon: 126.6281, lat: 37.6470 },
       name: '고양이 밥그릇', once: true,
-      text: '빈 그릇에 가진 것을 조금 덜어 놓았다.',
+      text: '구래근린공원 화단 옆. 빈 그릇에 가진 것을 조금 덜어 놓았다.',
       effect: (s) => { s.set('cat_bowl', '고양이 밥그릇을 채웠다'); s.bump('cat'); },
     },
     {
-      id: 'gate', icon: 'lever', at: { lon: 126.6086, lat: 37.6421 },
-      name: '공단 진입 차단기', once: true,
+      id: 'gate', icon: 'lever', at: { lon: 126.6046, lat: 37.6420 },
+      name: '산업단지 진입 차단기', once: true,
       text: '수동 레버가 있다. 올린다.',
-      effect: (s) => s.set('gate', '공단 차단기를 올렸다'),
+      effect: (s) => s.set('gate', '산업단지 차단기를 올렸다'),
     },
 
     // ── 구래역 ─────────────────────────────────────────────────────
@@ -3979,127 +4184,113 @@ const __M = Object.create(null);
       id: 'ticket', icon: 'panel', at: { place: '구래역', floor: 1, slot: 2 },
       name: '발매기', once: true,
       text: '양촌역까지 한 장.',
-      effect: (s) => s.set('ticket', '승차권을 샀다'),
+      effect: (s) => s.set('ticket', '구래역에서 승차권을 샀다'),
+    },
+    {
+      id: 'confess', icon: 'button', at: { place: '구래역', floor: 1, slot: 7 },
+      name: '역무실 창구', once: true,
+      text: '"저기요, 드릴 말씀이 있는데요."',
+      effect: (s) => s.set('confess', '역무실에서 하지 않아도 될 말을 했다'),
     },
     {
       id: 'lost-found', icon: 'note', at: { place: '구래역', floor: -1, slot: 3 },
       name: '유실물 보관함', once: true,
       text: '열쇠 하나가 주인 없이 놓여 있다. 집었다.',
-      effect: (s) => s.set('key', '유실물 열쇠를 챙겼다'),
+      effect: (s) => s.set('key', '구래역 유실물 열쇠를 챙겼다'),
     },
     {
       id: 'train-west', icon: 'button', at: { place: '구래역', floor: -2, slot: 1 },
       name: '양촌 방면 승강장', once: false,
-      text: '열차가 들어온다. 서쪽이다.',
-      effect: (s, ctx) => { s.set('metro', '열차를 탔다'); ctx.rideTo('양촌역'); },
+      text: '열차가 들어온다. 서쪽, 양촌역 방면이다.',
+      effect: (s, ctx) => { s.set('metro', '골드라인을 타고 양촌역까지 갔다'); ctx.rideTo('양촌역'); },
     },
     {
       id: 'train-east', icon: 'button', at: { place: '구래역', floor: -2, slot: 6 },
       name: '마산 방면 승강장', once: false,
-      text: '열차가 들어온다. 반대쪽이다.',
+      text: '열차가 들어온다. 반대쪽, 장기 방면이다.',
       effect: (s) => s.set('ride_east', '반대 방향 열차를 탔다'),
     },
 
-    // ── 관공서·시설 ────────────────────────────────────────────────
+    // ── 관공서 · 학교 ──────────────────────────────────────────────
     {
       id: 'civil', icon: 'panel', at: { place: '구래동 행정복지센터', floor: 1, slot: 4 },
       name: '민원 창구', once: true,
       text: '전입신고서를 내밀자 도장이 두 번 찍혔다.',
-      effect: (s) => s.set('moved', '전입신고를 했다'),
+      effect: (s) => s.set('moved', '구래동 행정복지센터에서 전입신고를 했다'),
     },
     {
-      id: 'book', icon: 'note', at: { place: '구래도서관', floor: 3, slot: 5 },
+      id: 'book', icon: 'note', at: { place: '김포시 마산도서관', floor: 3, slot: 5 },
       name: '대출대', once: true,
       text: '김포 지명 유래집. 2주 뒤 반납.',
-      effect: (s) => s.set('book', '도서관에서 책을 빌렸다'),
+      effect: (s) => s.set('book', '마산도서관에서 책을 빌렸다'),
     },
     {
-      id: 'confess', icon: 'button', at: { place: '구래파출소', floor: 1, slot: 1 },
-      name: '민원 접수대', once: true,
-      text: '"저기요, 드릴 말씀이 있는데요."',
-      effect: (s) => s.set('confess', '파출소에서 자수했다'),
-    },
-    {
-      id: 'report', icon: 'button', at: { place: '양촌119안전센터', floor: 1, slot: 2 },
-      name: '신고 접수대', once: true,
-      text: '아까 그 소화전 이야기를 했다.',
-      effect: (s) => s.set('report', '119에 신고했다'),
-    },
-    {
-      id: 'parcel', icon: 'note', at: { place: '구래우체국', floor: 1, slot: 2 },
-      name: '창구', once: true,
-      text: '소포 하나를 부쳤다. 받는 사람은 나중에 정하기로.',
-      effect: (s) => s.set('parcel', '우체국에서 소포를 부쳤다'),
-    },
-    {
-      id: 'schoolbell', icon: 'button', at: { place: '구래초등학교', floor: 1, slot: 3 },
+      id: 'schoolbell', icon: 'button', at: { place: '김포구래초등학교', floor: 1, slot: 3 },
       name: '수업 종 스위치', once: true,
       text: '복도 끝 스위치. 종이 울린다. 아직 방학이다.',
-      effect: (s) => s.set('school_bell', '학교 종을 울렸다'),
+      effect: (s) => s.set('school_bell', '구래초등학교 종을 울렸다'),
     },
     {
-      id: 'churchbell', icon: 'bell', at: { place: '구래중앙교회', floor: 1, slot: 2 },
-      name: '종줄', once: true,
-      text: '한 번, 두 번, 세 번.',
-      effect: (s) => s.set('church_bell', '교회 종을 쳤다'),
-    },
-    {
-      id: 'pill', icon: 'bowl', at: { place: '한강종합병원', floor: 1, slot: 4 },
-      name: '접수대의 약봉지', once: false,
-      text: '이름이 적히지 않은 봉지. 하나 삼켰다.',
-      effect: (s) => { s.set('pill', '약을 먹었다'); s.bump('pill'); },
-    },
-    {
-      id: 'rooftop', icon: 'panel', at: { place: '구래역 스퀘어', floor: 18, slot: 1 },
-      name: '옥상 출입문', once: true,
-      text: '문은 잠겨 있지 않았다. 서쪽으로 공단이 보인다.',
-      effect: (s) => s.set('rooftop', '스퀘어 옥상에 올라갔다'),
-    },
-    {
-      id: 'movie', icon: 'button', at: { place: '구래 시네마', floor: 4, slot: 2 },
-      name: '4관 입구', once: true,
-      text: '조조. 불이 꺼진다.',
-      effect: (s) => s.set('movie', '조조영화를 봤다'),
+      id: 'broadcast', icon: 'bell',
+      at: { place: '한가람마을 우미린 관리사무소', floor: 1, slot: 2 },
+      name: '단지 방송 마이크', once: true,
+      text: '스위치를 올리자 스피커가 켜졌다. "아, 아."',
+      effect: (s) => s.set('broadcast', '아파트 단지에 안내방송을 했다'),
     },
 
     // ── 상업 ───────────────────────────────────────────────────────
     {
-      id: 'breaker', icon: 'panel', at: { place: '한강마트 구래점', floor: -1, slot: 2 },
+      id: 'breaker', icon: 'panel', at: { place: '이마트 김포한강점', floor: -2, slot: 2 },
       name: '분전반', once: true,
-      text: '차단기 여섯 개. 전부 내렸다.',
-      effect: (s) => s.set('blackout', '마트 분전반을 내렸다'),
+      text: '지하 주차장 구석. 차단기 여섯 개를 전부 내렸다.',
+      effect: (s) => s.set('blackout', '이마트 분전반을 내렸다'),
     },
     {
-      id: 'freezer', icon: 'panel', at: { place: '한강마트 구래점', floor: 1, slot: 6 },
+      id: 'freezer', icon: 'panel', at: { place: '이마트 김포한강점', floor: 1, slot: 6 },
       name: '냉동고', once: true,
       text: '문을 열고 한참 서 있었다. 만두를 하나 집었다.',
-      effect: (s) => s.set('frozen', '마트 냉동고를 열었다'),
+      effect: (s) => s.set('frozen', '이마트 냉동고를 열었다'),
     },
     {
-      id: 'lunch', icon: 'bowl', at: { place: '양촌농협 하나로마트', floor: 1, slot: 3 },
+      id: 'lunch', icon: 'bowl', at: { place: '이마트 김포한강점', floor: 2, slot: 3 },
       name: '도시락 매대', once: true,
       text: '제육. 아직 따뜻하다.',
-      effect: (s) => s.set('lunch', '도시락을 샀다'),
+      effect: (s) => s.set('lunch', '이마트에서 도시락을 샀다'),
+    },
+    {
+      id: 'movie', icon: 'button', at: { place: '두원타워', floor: 8, slot: 2 },
+      name: '메가박스 4관 입구', once: true,
+      text: '조조. 불이 꺼진다.',
+      effect: (s) => s.set('movie', '메가박스에서 조조를 봤다'),
+    },
+    {
+      id: 'rooftop', icon: 'panel', at: { place: '두원타워', floor: 12, slot: 1 },
+      name: '옥상 출입문', once: true,
+      text: '문은 잠겨 있지 않았다. 서쪽으로 양촌산단이 보인다.',
+      effect: (s) => s.set('rooftop', '두원타워 옥상에 올라갔다'),
     },
 
-    // ── 공단 ───────────────────────────────────────────────────────
+    // ── 산업단지 ───────────────────────────────────────────────────
     {
-      id: 'pass', icon: 'panel', at: { place: '김포양촌산업단지 관리사무소', floor: 1, slot: 2 },
+      id: 'pass', icon: 'panel',
+      at: { place: '양촌일반산업단지 관리사무소', floor: 1, slot: 2 },
       name: '출입증 발급기', once: true,
       text: '사진이 이상하게 나왔지만 발급됐다.',
-      effect: (s) => s.set('pass', '공단 출입증을 받았다'),
+      effect: (s) => s.set('pass', '양촌산단 출입증을 받았다'),
     },
     {
-      id: 'valve', icon: 'valve', at: { place: '대한정밀 제1공장', floor: 1, slot: 4 },
+      id: 'valve', icon: 'valve',
+      at: { place: '학운2일반산업단지 폐수처리장', floor: 1, slot: 4 },
       name: '압력 밸브', once: true,
-      text: '빨간 손잡이. 시계 방향으로 돌아간다.',
-      effect: (s) => s.set('valve', '공장 압력 밸브를 돌렸다'),
+      text: '학운2단지 폐수처리장. 빨간 손잡이가 시계 방향으로 돌아간다.',
+      effect: (s) => s.set('valve', '폐수처리장 압력 밸브를 돌렸다'),
     },
     {
-      id: 'forklift', icon: 'lever', at: { place: '한성물류 김포센터', floor: 1, slot: 3 },
+      id: 'forklift', icon: 'lever',
+      at: { place: '학운5일반산업단지 공동물류창고', floor: 1, slot: 3 },
       name: '지게차', once: true,
       text: '열쇠가 꽂혀 있다. 시동이 걸린다.',
-      effect: (s) => s.set('forklift', '지게차에 시동을 걸었다'),
+      effect: (s) => s.set('forklift', '물류창고 지게차에 시동을 걸었다'),
     },
   ];
 
@@ -4645,6 +4836,13 @@ const __M = Object.create(null);
   }
 
   function openPicker() {
+    // 전기를 끊어 놓고 엘리베이터를 타면 갇힌다
+    if (state.game.has('blackout')) {
+      state.game.set('stuck', '정전 중에 엘리베이터를 탔다');
+      toast('버튼을 누르자 안내판이 꺼졌다.');
+      checkImmediateEnding();
+      return;
+    }
     const floors = floorList(state.interiorBuilding);
     state.picker = { floors, index: Math.max(0, floors.indexOf(state.floor)) };
   }
