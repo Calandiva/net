@@ -49,6 +49,8 @@ export function renderKeyboard(press, opts) {
     if (hit) {
       g.appendChild(text(x + K.whiteW / 2, padT + K.whiteH - 16, hit.tone ? hit.tone.short : '',
         { 'font-size': 10, fill: '#fff', 'font-weight': 700 }));
+      if (hit.finger) g.appendChild(text(x + K.whiteW / 2, padT + K.whiteH - 32, hit.finger,
+        { 'font-size': 9, fill: 'rgba(255,255,255,.75)' }));
       g.appendChild(text(x + K.whiteW / 2, padT - 10, hit.hand === 'L' ? '왼' : '오',
         { 'font-size': 10, fill: hit.hand === 'L' ? COLOR.warn : COLOR.ok, 'font-weight': 700 }));
     }
@@ -64,6 +66,8 @@ export function renderKeyboard(press, opts) {
     if (hit) {
       g.appendChild(text(x + K.blackW / 2, padT + K.blackH - 12, hit.tone ? hit.tone.short : '',
         { 'font-size': 9, fill: '#fff', 'font-weight': 700 }));
+      if (hit.finger) g.appendChild(text(x + K.blackW / 2, padT + K.blackH - 26, hit.finger,
+        { 'font-size': 8.5, fill: 'rgba(255,255,255,.75)' }));
       g.appendChild(text(x + K.blackW / 2, padT - 10, hit.hand === 'L' ? '왼' : '오',
         { 'font-size': 10, fill: hit.hand === 'L' ? COLOR.warn : COLOR.ok, 'font-weight': 700 }));
     }

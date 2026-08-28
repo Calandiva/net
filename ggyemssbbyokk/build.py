@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""악기 교실 빌드 — src/*.js (ES 모듈) 를 의존성 없는 단일 index.html 로 굽는다.
+"""GGYEMSSBBYOKK 빌드 — src/*.js (ES 모듈) 를 의존성 없는 단일 index.html 로 굽는다.
 
 왜 빌드 단계가 있나:
   브라우저는 file:// 에서 ES 모듈을 CORS 로 막는다. 소스는 진짜 모듈로 두고 싶고,
@@ -8,7 +8,7 @@
 
 규칙 (이걸 지키면 번들러가 단순하게 유지된다):
   - import 는 `import { a, b } from './x.js';` 형태만 쓴다 (default·별칭·네임스페이스 금지)
-  - export 는 `export const/let/var/function/class 이름` 형태만 쓴다
+  - export 는 `export [async] const/let/var/function/class 이름` 형태만 쓴다
   - 모듈 순서는 아래 MODULES 목록이 정한다 (의존성 순)
 """
 import io, os, re, sys
@@ -30,18 +30,15 @@ MODULES = [
     'theory/keyboard.js',
     'audio/engine.js',
     'audio/metronome.js',
+    'audio/pitch.js',
     'audio/tuner.js',
     'render/staff.js',
     'render/fret.js',
     'render/keys.js',
-    'lesson/vocal.js',
-    'lesson/guitar.js',
-    'lesson/bass.js',
-    'lesson/keys.js',
-    'lesson/drums.js',
-    'lesson/index.js',
-    'ui/lesson.js',
-    'ui/chordlab.js',
+    'ui/chordbar.js',
+    'ui/inst-fret.js',
+    'ui/inst-bass.js',
+    'ui/inst-keys.js',
     'ui/tuner.js',
     'ui/metronome.js',
     'ui/shell.js',
@@ -50,7 +47,7 @@ MODULES = [
 
 IMPORT_RE = re.compile(r'^import\s*\{([^}]*)\}\s*from\s*[\'"][^\'"]+[\'"];?', re.M)
 BAD_IMPORT_RE = re.compile(r'^import\s+(?!\{)', re.M)
-EXPORT_DECL_RE = re.compile(r'^export\s+(?:const|let|var|function|class)\s+([A-Za-z0-9_$]+)', re.M)
+EXPORT_DECL_RE = re.compile(r'^export\s+(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z0-9_$]+)', re.M)
 BAD_EXPORT_RE = re.compile(r'^export\s*(?:\{|default)', re.M)
 
 

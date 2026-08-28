@@ -2,9 +2,23 @@
 
 import { FRET_METRIC, COLOR, DEG_COLOR, TUNINGS } from './../config.js';
 import { sv, svgRoot, line, rect, circle, text } from './../util/svg.js';
+import { noteName, midiToNote } from './../theory/notes.js';
 
 const F = FRET_METRIC;
 const INLAY = [3, 5, 7, 9, 15, 17, 19, 21];
+
+// 점 안에 무엇을 적을지. 도수 · 손가락 번호 · 음이름 중 고른다.
+export const LABEL_MODES = [
+  { id: 'deg', label: '도수', hint: '이 음이 코드에서 몇 도인지. 다른 코드로 옮길 때 쓸모 있다.' },
+  { id: 'finger', label: '손가락', hint: '검지1 중지2 약지3 새끼4. 처음 잡을 때는 이쪽.' },
+  { id: 'note', label: '음이름', hint: '실제로 나는 음.' },
+];
+
+function labelOf(t, mode) {
+  if (mode === 'finger') return t.finger ? String(t.finger) : '○';
+  if (mode === 'note') return noteName(t.tone ? t.tone.note : midiToNote(t.midi));
+  return t.tone ? t.tone.short : '';
+}
 
 // 코드 하나의 운지. shape 는 theory/fretboard.js 의 findShapes 결과.
 export function renderChordBox(shape, opts) {
@@ -57,14 +71,15 @@ export function renderChordBox(shape, opts) {
     if (t.fret === 0) {
       const col = t.tone ? DEG_COLOR[t.tone.role] : COLOR.ok;
       g.appendChild(circle(xOf(t.string), padT - 16, 7, 'none', { stroke: col, 'stroke-width': 2 }));
-      g.appendChild(text(xOf(t.string), padT - 34, t.tone ? t.tone.short : '', { 'font-size': 10, fill: col, 'font-weight': 700 }));
+      g.appendChild(text(xOf(t.string), padT - 34, o.labelMode === 'finger' ? '개방' : labelOf(t, o.labelMode),
+        { 'font-size': 10, fill: col, 'font-weight': 700 }));
       return;
     }
     const r = t.fret - baseFret + 0.5;
     if (r < 0 || r > rows) return;
     const col = t.tone ? DEG_COLOR[t.tone.role] : COLOR.accent;
     g.appendChild(circle(xOf(t.string), yOf(r), F.dotR + 2, col));
-    g.appendChild(text(xOf(t.string), yOf(r), t.tone ? t.tone.short : '', { 'font-size': 9.5, fill: '#fff', 'font-weight': 700 }));
+    g.appendChild(text(xOf(t.string), yOf(r), labelOf(t, o.labelMode), { 'font-size': 9.5, fill: '#fff', 'font-weight': 700 }));
   });
 
   // 줄 이름

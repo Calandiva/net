@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="보컬·기타·베이스·건반·드럼 튜토리얼과 코드 사전, 튜너, 메트로놈. 학원 없이 혼자 보는 악기 교실.">
-<title>악기 교실 — 보컬 · 기타 · 베이스 · 건반 · 드럼</title>
+<meta name="description" content="GGYEMSSBBYOKK — 기타·베이스·건반·우쿨렐레 코드 사전, 크로매틱 튜너, 메트로놈. 서버 없이 도는 한 장짜리 웹앱.">
+<title>GGYEMSSBBYOKK — 코드 사전 · 튜너 · 메트로놈</title>
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
@@ -75,16 +75,13 @@
                 border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); }
   button.mini:hover { border-color: var(--accent); }
 
-  /* ── 튜토리얼 ── */
-  .steps { display: grid; gap: 10px; }
-  .card.step { display: flex; gap: 14px; margin-bottom: 0; }
-  .step-no { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--panel2);
-             color: var(--accent); display: flex; align-items: center; justify-content: center;
-             font-weight: 700; font-size: 14px; }
-  .step-body { flex: 1; min-width: 0; }
-  .score-card .score-title { font-size: 13px; color: var(--dim); margin-bottom: 10px; }
   .score-scroll { overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
   .score-scroll svg { display: block; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pick-row { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; }
+  .pick-row .field-label { padding-top: 5px; }
+  .algo-list { margin-top: 8px; font-size: 12.5px; }
+  .algo-list b { color: var(--ink); }
 
   /* ── 코드 사전 ── */
   .chord-input { width: 100%; padding: 12px 14px; font: inherit; font-size: 18px;
@@ -104,9 +101,12 @@
   .panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                 border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
   .panel-head h3 { margin: 0; flex: 1; }
-  .shape-row { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
-  .shape { flex: 0 0 auto; text-align: center; }
-  .shape-meta { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .shape-grid { display: grid; gap: 16px; margin-top: 12px;
+                grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .shape { text-align: center; }
+  .shape-meta { font-size: 11px; color: var(--dim); margin: 6px 0 4px; }
+  .shape .btn-row { justify-content: center; }
+  .shape .btn-row button.mini { margin-top: 0; }
   .hands { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; }
   .hand { display: flex; gap: 8px; }
   .hand-label { color: var(--warn); font-size: 12px; flex: 0 0 auto; }
@@ -117,6 +117,9 @@
   .tuner-read { font-size: 40px; font-weight: 700; margin-top: 6px; letter-spacing: .02em; }
   .tuner-read.good { color: var(--ok); }
   .tuner-detail { font-size: 13px; color: var(--dim); min-height: 20px; }
+  .strip, .meter { display: flex; justify-content: center; margin-top: 8px; }
+  .cost { font-size: 11px; color: #5d6470; margin-top: 6px; }
+  .a4v { font-size: 12px; color: var(--dim); min-width: 62px; }
   .string-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
   .string-btn { cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 1px;
                 padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
@@ -131,6 +134,8 @@
   .lamp { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); }
   .lamp.first { border-color: var(--accent); }
   .lamp.on { background: var(--accent); box-shadow: 0 0 10px rgba(228,87,46,.7); }
+  .lamp.silent { background: var(--line); box-shadow: 0 0 8px rgba(154,160,172,.5); }
+  .barcount { font-size: 12px; color: var(--dim); margin-top: -4px; }
   .metro-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 8px; }
   .slider { flex: 1; max-width: 340px; accent-color: var(--accent); }
   .metro-card .count-row { justify-content: center; }
@@ -147,7 +152,7 @@
 </head>
 <body>
 <div id="app"></div>
-<div id="boot">불러오는 중…</div>
+<div id="boot">GGYEMSSBBYOKK</div>
 <script>
 /* BUNDLE */
 </script>

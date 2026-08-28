@@ -20,6 +20,17 @@ export function getCtx() {
 }
 
 // 음 하나. 배음을 두 개만 얹어도 오르간 비슷한 소리가 난다.
+// 컨텍스트가 확실히 깨어난 뒤에 돌려준다.
+// 마이크를 열 때 이걸 안 기다리면, 아직 잠들어 있는 컨텍스트 위에 만들어진
+// MediaStreamAudioSourceNode 가 영영 무음이 되는 일이 생긴다.
+export async function ensureCtx() {
+  const c = getCtx();
+  if (c && c.state !== 'running') {
+    try { await c.resume(); } catch (e) { /* 막혀 있으면 그대로 둔다 */ }
+  }
+  return c;
+}
+
 export function playFreq(hz, when, dur, gain) {
   const c = getCtx();
   if (!c) return;
@@ -42,27 +53,32 @@ export function playFreq(hz, when, dur, gain) {
   });
 }
 
-// MIDI 번호 여러 개. strum 을 주면 기타처럼 아래에서 위로 훑는다.
-export function playMidis(midis, strum) {
+// MIDI 번호 여러 개.
+//   'block'  한꺼번에 (건반)
+//   'strum'  아래에서 위로 살짝 밀며 (기타 스트로크)
+//   'arp'    한 음씩 또박또박 (아르페지오 — 어느 음이 들었는지 확인할 때)
+export function playMidis(midis, mode) {
   const c = getCtx();
   if (!c) return;
-  const gap = strum ? AUDIO.strumGap : 0;
+  const gap = mode === 'strum' ? AUDIO.strumGap : mode === 'arp' ? AUDIO.arpGap : 0;
+  const dur = mode === 'arp' ? AUDIO.arpGap * 2.2 : AUDIO.noteDur;
   midis.slice().sort((a, b) => a - b).forEach((m, i) => {
-    playFreq(midiToFreq(m), c.currentTime + i * gap, AUDIO.noteDur, 0.85);
+    playFreq(midiToFreq(m), c.currentTime + i * gap, dur, 0.85);
   });
 }
 
-// 메트로놈 클릭(짧은 사인 + 급한 감쇠)
-export function click(hz, when, gain) {
+// 메트로놈 클릭. 짧게 때리고 급하게 죽인다 — 그래야 박이 또렷하다.
+export function click(hz, when, gain, type, dur) {
   const c = getCtx();
   if (!c) return;
+  const d = dur == null ? 0.055 : dur;
   const o = c.createOscillator();
   const g = c.createGain();
-  o.type = 'square';
+  o.type = type || 'square';
   o.frequency.value = hz;
   g.gain.setValueAtTime(0.0001, when);
   g.gain.exponentialRampToValueAtTime(gain == null ? 0.6 : gain, when + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.055);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + d);
   o.connect(g); g.connect(master);
-  o.start(when); o.stop(when + 0.08);
+  o.start(when); o.stop(when + d + 0.03);
 }

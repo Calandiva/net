@@ -52,6 +52,15 @@ export function parseNote(s, defOct) {
   return makeNote(letter, alter, oct);
 }
 
+// 기준음 A4. 튜너에서 415~466 사이로 바꿀 수 있다(옛 악기·오케스트라 관행).
+export function setReferenceA(hz) {
+  AUDIO.a4 = hz;
+}
+
+export function referenceA() {
+  return AUDIO.a4;
+}
+
 export function midiToFreq(midi) {
   return AUDIO.a4 * Math.pow(2, (midi - 69) / 12);
 }

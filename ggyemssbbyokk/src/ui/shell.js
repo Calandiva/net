@@ -1,10 +1,10 @@
 // 전체 껍데기. 위쪽 탭과 본문 자리를 만들고, 탭에 맞는 화면을 붙인다.
 
-import { APP, TABS } from './../config.js';
+import { APP, TABS, INSTRUMENTS } from './../config.js';
 import { el, clear } from './../util/dom.js';
-import { LESSONS } from './../lesson/index.js';
-import { mountLesson } from './lesson.js';
-import { mountChordLab } from './chordlab.js';
+import { mountFretInstrument } from './inst-fret.js';
+import { mountBass } from './inst-bass.js';
+import { mountKeys } from './inst-keys.js';
 import { mountTuner } from './tuner.js';
 import { mountMetronome } from './metronome.js';
 
@@ -23,18 +23,18 @@ export function mountShell(root) {
   });
 
   root.appendChild(el('header.top', [
-    el('div.brand', [el('b', APP.title), el('span', APP.subtitle)]),
+    el('div.brand', [el('b', APP.name), el('span', APP.subtitle)]),
     tabs,
   ]));
   root.appendChild(body);
-  root.appendChild(el('footer.foot', '학원 없이 혼자 보는 악기 교실 · 서버 없이 이 파일 하나로 돈다'));
+  root.appendChild(el('footer.foot', APP.name + ' · 서버 없이 이 파일 하나로 돈다'));
 
   function go(id) {
     current = id;
     try { localStorage.setItem(APP.storageKey, id); } catch (e) { /* 막혀 있어도 상관없다 */ }
     if (location.hash.slice(1) !== id) location.hash = id;
     tabs.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
-    body.scrollTop = 0;
+    window.scrollTo(0, 0);
     render(body, id);
   }
 
@@ -47,15 +47,21 @@ export function mountShell(root) {
   if (!start || !TABS.some((t) => t.id === start)) {
     try { start = localStorage.getItem(APP.storageKey); } catch (e) { start = null; }
   }
-  go(TABS.some((t) => t.id === start) ? start : 'vocal');
+  go(TABS.some((t) => t.id === start) ? start : 'guitar');
 }
 
 function render(body, id) {
   clear(body);
   const page = el('div.page');
   body.appendChild(page);
-  if (LESSONS[id]) mountLesson(page, LESSONS[id]);
-  else if (id === 'chord') mountChordLab(page);
-  else if (id === 'tuner') mountTuner(page);
+  const tab = TABS.find((t) => t.id === id);
+  if (tab && tab.inst) {
+    const kind = INSTRUMENTS[tab.inst].kind;
+    if (kind === 'bass') mountBass(page);
+    else if (kind === 'keys') mountKeys(page);
+    else mountFretInstrument(page, tab.inst);
+    return;
+  }
+  if (id === 'tuner') mountTuner(page);
   else if (id === 'metro') mountMetronome(page);
 }
