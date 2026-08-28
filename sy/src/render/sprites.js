@@ -6,7 +6,7 @@
 
 import { TILE, GROUND, PROP, KIND, IN, BUILDING, PLAYER, SEED } from '../config.js';
 import {
-  GROUND_COLOR, GROUND_JITTER, PROP_COLOR, BUILDING_COLOR, INTERIOR_COLOR,
+  GROUND_COLOR, GROUND_JITTER, PROP_COLOR, BUILDING_COLOR, INTERIOR_COLOR, THEME_COLOR,
   PLAYER_COLOR, NPC_COLORS, shade, mix,
 } from './palette.js';
 import { makeRng, noiseAt, seedOf } from '../util/rng.js';
@@ -861,13 +861,17 @@ export function carDirIndex(angle) {
 // ── 실내 타일 ───────────────────────────────────────────────────────────
 const interiorCache = new Map();
 
-export function interiorTile(kind, variant) {
-  const key = kind * 16 + variant;
+export function interiorTile(kind, variant, theme) {
+  const key = `${kind}|${variant}|${theme || ''}`;
   let hit = interiorCache.get(key);
   if (hit) return hit;
 
   const { canvas, ctx } = makeCanvas(S, S);
-  const base = INTERIOR_COLOR[kind] || '#ff00ff';
+  // 바닥과 벽은 건물 분위기에 따라 색이 달라진다 (구조는 그대로)
+  const palette = THEME_COLOR[theme];
+  const base = (palette && kind === IN.FLOOR ? palette.floor
+    : palette && kind === IN.WALL ? palette.wall
+    : INTERIOR_COLOR[kind]) || '#ff00ff';
   const rng = makeRng(SEED, 'in', kind, variant);
   px(ctx, 0, 0, S, S, base);
 
@@ -1051,6 +1055,74 @@ export function interiorTile(kind, variant) {
       px(ctx, 3, 3, 10, 5, shade(base, -0.3));
       px(ctx, 4, 10, 3, 3, '#e2705f');
       px(ctx, 9, 10, 3, 3, '#8fc48a');
+      break;
+    }
+    case IN.SOFA: {            // 소파 — 등받이와 팔걸이
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 1, 4, 14, 10, base);
+      px(ctx, 1, 2, 14, 3, shade(base, 0.18));
+      px(ctx, 1, 4, 2, 10, shade(base, -0.18));
+      px(ctx, 13, 4, 2, 10, shade(base, -0.18));
+      break;
+    }
+    case IN.FRIDGE: {          // 냉장고
+      px(ctx, 2, 0, 12, 16, base);
+      px(ctx, 2, 7, 12, 1, shade(base, -0.35));
+      px(ctx, 11, 4, 1, 3, '#8a919c');
+      px(ctx, 11, 9, 1, 3, '#8a919c');
+      break;
+    }
+    case IN.SINK: {            // 싱크대
+      px(ctx, 0, 3, S, 11, base);
+      px(ctx, 3, 5, 8, 6, shade(base, -0.3));
+      px(ctx, 6, 2, 2, 4, '#8a919c');
+      break;
+    }
+    case IN.BOOKS: {           // 책장
+      px(ctx, 1, 1, 14, 14, base);
+      for (let y = 2; y < 14; y += 5) {
+        for (let x = 2; x < 14; x += 3) {
+          px(ctx, x, y, 2, 4, rng.pick(['#c05a4a', '#4a6f8a', '#d8b45a', '#5a7a5e']));
+        }
+      }
+      break;
+    }
+    case IN.BOARD: {           // 칠판·화이트보드
+      px(ctx, 0, 2, S, 11, base);
+      px(ctx, 1, 3, 14, 9, shade(base, -0.2));
+      px(ctx, 3, 6, 5, 1, '#e8e8ee');
+      px(ctx, 3, 9, 8, 1, '#e8e8ee');
+      px(ctx, 0, 13, S, 2, shade(base, 0.2));
+      break;
+    }
+    case IN.VENDING: {         // 자판기·정수기
+      px(ctx, 1, 0, 14, 16, base);
+      px(ctx, 3, 2, 7, 8, '#2a3038');
+      for (let y = 3; y < 9; y += 3) px(ctx, 4, y, 5, 2, '#8fc48a');
+      px(ctx, 11, 3, 3, 4, '#d8d8dc');
+      px(ctx, 11, 10, 3, 3, '#3a3a44');
+      break;
+    }
+    case IN.RACK: {            // 옷걸이·행거
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 1, 3, 14, 1, '#8a919c');
+      for (let x = 2; x < 14; x += 3) {
+        px(ctx, x, 4, 2, 8, rng.pick(['#7f6f8c', '#4a6f8a', '#c05a4a', '#d8b45a']));
+      }
+      px(ctx, 7, 12, 2, 3, '#8a919c');
+      break;
+    }
+    case IN.BENCH: {           // 긴 의자
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 0, 5, S, 6, base);
+      px(ctx, 0, 4, S, 2, shade(base, 0.2));
+      px(ctx, 2, 11, 2, 3, shade(base, -0.35));
+      px(ctx, 12, 11, 2, 3, shade(base, -0.35));
+      break;
+    }
+    case IN.MAT: {             // 매트 — 밟고 지나갈 수 있다
+      px(ctx, 1, 2, 14, 12, base);
+      px(ctx, 2, 3, 12, 10, shade(base, 0.12));
       break;
     }
   }

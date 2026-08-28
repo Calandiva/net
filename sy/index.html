@@ -229,11 +229,28 @@ const __M = Object.create(null);
     CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
     DOOR: 21, DOOR_OPEN: 22, LOCKER: 23,
     SMOKE: 24, BOX: 25, PUDDLE: 26, CONE: 27,
+    // 건물마다 다른 살림살이
+    SOFA: 28, FRIDGE: 29, SINK: 30, BOOKS: 31, BOARD: 32,
+    VENDING: 33, RACK: 34, BENCH: 35, MAT: 36,
   };
   const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
     IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
     IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER,
-    IN.BOX, IN.CONE];
+    IN.BOX, IN.CONE,
+    IN.SOFA, IN.FRIDGE, IN.SINK, IN.BOOKS, IN.BOARD, IN.VENDING, IN.RACK, IN.BENCH];
+
+  // 건물 종류별 실내 분위기 (바닥·벽 색). render/palette.js 가 색을 정한다.
+  const INTERIOR_THEMES = {
+    home: ['apartment', 'house', 'farmhouse'],
+    office: ['tower', 'public'],
+    school: ['school'],
+    mart: ['mart', 'shop'],
+    factory: ['factory', 'warehouse'],
+    hospital: ['hospital'],
+    station: ['station'],
+    church: ['church'],
+    park: ['park'],
+  };
 
   // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
   const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
@@ -339,7 +356,7 @@ const __M = Object.create(null);
     intervalSeconds: 5,
   };
 
-  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.ELEVATOR_KINDS = ELEVATOR_KINDS; __M.LIFE = LIFE; __M.NPC = NPC; __M.TRAFFIC = TRAFFIC; __M.UI = UI; __M.PATHING = PATHING; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
+  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.INTERIOR_THEMES = INTERIOR_THEMES; __M.ELEVATOR_KINDS = ELEVATOR_KINDS; __M.LIFE = LIFE; __M.NPC = NPC; __M.TRAFFIC = TRAFFIC; __M.UI = UI; __M.PATHING = PATHING; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
 })();
 
 // ── util/rng.js ─────────────────────────────
@@ -654,6 +671,28 @@ const __M = Object.create(null);
     [IN.BOX]: '#b98f5c',
     [IN.PUDDLE]: '#7fa8bd',
     [IN.CONE]: '#e2703a',
+    [IN.SOFA]: '#7f6f8c',
+    [IN.FRIDGE]: '#dfe4e8',
+    [IN.SINK]: '#b8c4cc',
+    [IN.BOOKS]: '#8a6a52',
+    [IN.BOARD]: '#3f5f4a',
+    [IN.VENDING]: '#c05a4a',
+    [IN.RACK]: '#a89a8a',
+    [IN.BENCH]: '#b08a5c',
+    [IN.MAT]: '#7f8a72',
+  };
+
+  // 건물 분위기별 바닥·벽 색. 같은 구조라도 색이 달라 보이게.
+  const THEME_COLOR = {
+    home:     { floor: '#e2d6bf', wall: '#a8927a' },   // 장판과 벽지
+    office:   { floor: '#cfd2d6', wall: '#8f959c' },   // 타일 카펫
+    school:   { floor: '#d8d2b8', wall: '#9aa88f' },   // 리놀륨
+    mart:     { floor: '#e8e4dc', wall: '#b8b2a6' },   // 밝은 타일
+    factory:  { floor: '#a8a49c', wall: '#7c7876' },   // 콘크리트
+    hospital: { floor: '#dfe6e8', wall: '#a8bcc2' },
+    station:  { floor: '#c8c4bc', wall: '#8a8f96' },   // 석재
+    church:   { floor: '#d8c8a8', wall: '#9a8464' },
+    park:     { floor: '#d2cdbc', wall: '#94957f' },
   };
 
   // ── 인물 ────────────────────────────────────────────────────────────────
@@ -724,7 +763,7 @@ const __M = Object.create(null);
     return rgbToHex([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
   }
 
-  __M.GROUND_COLOR = GROUND_COLOR; __M.GROUND_JITTER = GROUND_JITTER; __M.PROP_COLOR = PROP_COLOR; __M.BUILDING_COLOR = BUILDING_COLOR; __M.INTERIOR_COLOR = INTERIOR_COLOR; __M.PLAYER_COLOR = PLAYER_COLOR; __M.NPC_COLORS = NPC_COLORS; __M.MAP_KIND = MAP_KIND; __M.MAP_COLOR = MAP_COLOR; __M.UI_COLOR = UI_COLOR; __M.hexToRgb = hexToRgb; __M.rgbToHex = rgbToHex; __M.shade = shade; __M.mix = mix;
+  __M.GROUND_COLOR = GROUND_COLOR; __M.GROUND_JITTER = GROUND_JITTER; __M.PROP_COLOR = PROP_COLOR; __M.BUILDING_COLOR = BUILDING_COLOR; __M.INTERIOR_COLOR = INTERIOR_COLOR; __M.THEME_COLOR = THEME_COLOR; __M.PLAYER_COLOR = PLAYER_COLOR; __M.NPC_COLORS = NPC_COLORS; __M.MAP_KIND = MAP_KIND; __M.MAP_COLOR = MAP_COLOR; __M.UI_COLOR = UI_COLOR; __M.hexToRgb = hexToRgb; __M.rgbToHex = rgbToHex; __M.shade = shade; __M.mix = mix;
 })();
 
 // ── world/spatial.js ─────────────────────────────
@@ -1420,6 +1459,196 @@ const __M = Object.create(null);
   __M.PLACES = PLACES;
 })();
 
+// ── world/data/npcs_extra.js ─────────────────────────────
+(function () {
+  // 사람들이 할 말을 더 얹는다. (npcs.js 의 역할에 대사를 붙이고, 역할도 몇 가지 더한다)
+  //
+  // 지리만 실제이고 사람과 이야기는 전부 지어낸 것이다.
+  // EXTRA_LINES  역할 id → 덧붙일 대사
+  // EXTRA_ROLES  건물 종류 → 새 역할
+  // EXTRA_OUTDOOR 지역 성격 → 새 역할
+
+  const { KIND } = __M;
+
+  const EXTRA_LINES = {
+    cashier: ['카드 여기 꽂아 주세요.', '봉투는 오십 원입니다.',
+      '어제 이 시간엔 줄이 문밖까지 섰어요.'],
+    clerk: ['그건 저쪽 끝 매대에 있어요. 같이 가 드릴까요?',
+      '창고에 하나 남았을 거예요. 확인해 볼게요.',
+      '오전엔 물건이 계속 들어와서 통로가 좁아요.'],
+    sampler: ['오늘은 만두예요. 어제는 소시지였고요.',
+      '아침부터 서 있으면 다리가 먼저 알아요.'],
+    cartman: ['카트 한 대가 사흘째 안 돌아와요.',
+      '주차장까지 밀고 가시는 분들이 있어요.'],
+    shopper: ['장은 아침에 봐야 편해요.', '오늘 저녁 뭐 할지 아직도 못 정했어요.',
+      '세일한다길래 왔는데 어제 끝났대요.'],
+    gamer: ['잠깐만요, 이 판만요.', '헤드셋 쓰고 있어서 초인종 소리를 못 들었어요.',
+      '오늘 출근이었나… 아니네요, 오늘은 아니에요.'],
+    sleeper: ['(이불이 반쯤 흘러내려 있다)', '으음… 조금만 더요…',
+      '(휴대폰 알람이 세 번째 울린다)'],
+    cook: ['국이 좀 짜졌어요.', '냄비가 두 개뿐이라 순서를 잘 짜야 해요.',
+      '밥은 늘 두 공기씩 해요. 남으면 얼려 두고요.'],
+    delivery: ['이 동은 계단이 좁아요.', '오전 안에 백 개는 돌려야 해요.',
+      '문 앞에 두고 사진 찍는 게 규칙이에요.'],
+    grandma: ['여기 원래 다 논이었어요. 저 앞까지 물이 찼지.',
+      '아파트 들어서고 나서 길이 다 바뀌었어요.',
+      '요새는 젊은 사람이 많아서 좋아요.'],
+    tv: ['아침 방송이 제일 재밌어요.', '뉴스에서 오늘 덥다고 했어요.'],
+    student: ['시험이 다음 주예요.', '집중이 안 돼서 물만 마시고 있어요.'],
+    landlord: ['월세는 이십오 일이에요.', '보일러는 작년에 갈았어요.'],
+    guard: ['외부인은 여기 적고 들어가세요.',
+      '밤에는 여기만 불이 켜져 있어요.',
+      '아이들이 자꾸 옥상에 올라가요.'],
+    teacher: ['수업 종 치기 전에 자리에 앉으라고 전해 주세요.',
+      '오늘 급식은 미역국이에요.', '복도에서 뛰면 안 돼요. 아시죠?'],
+    pupil: ['저 지금 지각이에요.', '체육 시간에 비 오면 좋겠어요.',
+      '급식 먹고 도서관 갈 거예요.'],
+    cook2: ['오늘 삼백 인분이에요.', '국은 여덟 시부터 끓입니다.'],
+    worker: ['장갑 안 끼면 손 다쳐요.', '오전 반은 이 라인만 봅니다.',
+      '점심은 열두 시 정각이에요. 그때만 조용해요.'],
+    foreman: ['안전모는 여기서부터 필수입니다.',
+      '오늘 신입이 셋이라 정신이 없어요.',
+      '기계 소리 바뀌면 바로 서요. 그게 제일 중요해요.'],
+    inspector: ['수치는 아침저녁 두 번 적습니다.',
+      '작년 기록이랑 비교하면 확실히 나아졌어요.'],
+    forklift: ['후진할 때 소리 나면 비켜 주세요.',
+      '통로에 상자 두고 가는 사람이 제일 무섭습니다.'],
+    picker: ['오늘 물량이 평소 두 배예요.', '이 구역만 오백 박스예요.'],
+    officer: ['서류는 저쪽 창구에서 받으세요.',
+      '오늘은 오전에만 처리가 됩니다.', '도장은 여기 한 번만 찍으시면 돼요.'],
+    visitor: ['번호표 뽑고 삼십 분 기다렸어요.',
+      '서류를 하나 안 가져왔대요. 다시 와야 해요.'],
+    helper: ['엘리베이터는 저쪽 끝입니다.', '무엇을 도와드릴까요?'],
+    staff: ['다음 열차는 사 분 뒤입니다.',
+      '유실물은 대합실 창구에서 찾으세요.',
+      '오늘 아침에는 열차가 좀 늦었어요.'],
+    commuter: ['이 시간 열차는 늘 붐벼요.', '한 대 보내고 앉아 가려고요.'],
+    cleaner: ['방금 닦은 데라 미끄러워요.',
+      '오전에 한 번, 오후에 한 번 돕니다.'],
+    tutor: ['수업은 열 시부터예요.', '중등부는 이 층, 고등부는 위층입니다.'],
+    officeworker: ['오늘 회의가 세 개예요.', '커피 없으면 아침이 안 열려요.'],
+    usher: ['상영관은 왼쪽으로 들어가세요.',
+      '조조는 사람이 거의 없어요.', '팝콘은 카운터에서 받아 가세요.'],
+    owner: ['오늘은 재료가 좀 늦게 왔어요.', '단골이 반이에요. 나머지 반은 처음 오는 분들이고요.'],
+    parttime: ['사장님은 열 시에 나오세요.', '카드 단말기가 오늘따라 느려요.'],
+    customer: ['여기 커피가 이 동네에서 제일 나아요.', '자리 있어요? 창가로 앉을게요.'],
+    nurse: ['접수부터 하고 오세요.', '지금 대기가 스무 분쯤 됩니다.'],
+    patient: ['어제부터 허리가 안 좋아서요.', '두 시간 기다렸는데 아직이에요.'],
+    keeper: ['문은 늘 열려 있습니다.', '조용히 앉았다 가셔도 돼요.'],
+    manager: ['단지 방송은 여기서 나갑니다.', '주차 등록은 서류 두 장이면 됩니다.',
+      '엘리베이터 점검이 다음 주예요.'],
+    farmer: ['새벽에 한 번, 저녁에 한 번 나옵니다.', '올해는 벌레가 적어요.'],
+    resident: ['저 사거리에서 왼쪽이 지름길이에요.',
+      '주말엔 여기가 다 차로 막혀요.', '이 동네는 십 년 사이에 아주 달라졌어요.'],
+    rider: ['헬멧 쓰고 있어서 잘 안 들려요.', '이 시간엔 아파트 주문이 몰려요.'],
+    student2: ['버스 놓치면 이십 분 기다려요.', '지각하면 청소예요.'],
+    walker: ['이 길로 사십 분이면 한 바퀴예요.', '아침엔 여기가 제일 조용해요.'],
+    shift: ['야간 끝나면 밥이 제일 먼저 생각나요.', '정문은 저쪽으로 돌아가야 해요.'],
+    driver: ['상차 순번이 아직 멀었어요.', '이 근처에 기사식당 하나 있어요.'],
+    elder: ['저 앞 수로 따라가면 큰길 나와요.', '여기는 예전 그대로예요.',
+      '옛날에는 여기까지 배가 들어왔대요.'],
+    farmer2: ['물꼬 보러 나왔어요.', '올해는 비가 알맞게 왔어요.'],
+    hiker: ['정상에서 보면 강화도까지 보여요.', '아침 산은 사람이 적어서 좋아요.',
+      '내려갈 땐 무릎을 조심해야 해요.'],
+  };
+
+  // 건물 안에 사는 사람 몇 가지 더
+  const EXTRA_ROLES = {
+    [KIND.MART]: [
+      { id: 'butcher', name: '정육 담당', where: 'counter', lines: [
+        '오늘 삼겹살이 좋아요.', '한 근씩 미리 썰어 놨어요.'] },
+      { id: 'stocker', many: true, name: '진열 담당', where: 'machine', lines: [
+        '이 통로만 마저 채우면 끝나요.', '박스 밟지 않게 조심하세요.'] },
+    ],
+    [KIND.APARTMENT]: [
+      { id: 'kid', many: true, name: '아이', where: 'corridor', lines: [
+        '엘리베이터 버튼 제가 누를래요.', '아저씨 여기 사세요?'] },
+      { id: 'walker2', name: '개 산책 시키는 사람', where: 'corridor', lines: [
+        '한 바퀴 돌고 오는 길이에요.', '이 시간엔 다른 개가 없어서 좋아요.'] },
+      { id: 'repair', name: '설비 기사', where: 'any', lines: [
+        '세대 보일러 보러 왔습니다.', '이 동은 배관이 오래됐어요.'] },
+    ],
+    [KIND.SCHOOL]: [
+      { id: 'coach', name: '체육 선생님', where: 'corridor', lines: [
+        '운동장은 비 와서 오늘 못 씁니다.', '줄넘기 가져온 사람?'] },
+      { id: 'admin', name: '행정실 직원', where: 'counter', lines: [
+        '방문증 여기 있습니다.', '학부모님이시면 이쪽으로 오세요.'] },
+    ],
+    [KIND.FACTORY]: [
+      { id: 'engineer', name: '설비 엔지니어', where: 'machine', lines: [
+        '이 기계는 십오 년 됐어요.', '소리만 들어도 어디가 아픈지 압니다.'] },
+      { id: 'office2', name: '생산관리', where: 'room', lines: [
+        '오늘 물량이 어제의 두 배예요.', '납기가 목요일이라 마음이 급해요.'] },
+    ],
+    [KIND.WAREHOUSE]: [
+      { id: 'packer', many: true, name: '포장 담당', where: 'machine', lines: [
+        '테이프가 벌써 세 통째예요.', '이 박스는 깨지는 거라 조심해야 해요.'] },
+    ],
+    [KIND.STATION]: [
+      { id: 'busker', name: '연주하는 사람', where: 'corridor', lines: [
+        '한 시간만 하고 갑니다.', '신청곡 있으세요?'] },
+    ],
+    [KIND.PUBLIC]: [
+      { id: 'volunteer', name: '자원봉사자', where: 'corridor', lines: [
+        '서류 쓰는 거 도와드릴까요?', '오늘은 오전만 나와요.'] },
+    ],
+    [KIND.SHOP]: [
+      { id: 'agent', name: '공인중개사', where: 'counter', lines: [
+        '요새 전세가 잘 안 나가요.', '이 앞 상가는 권리금이 없어요.'] },
+      { id: 'barber', name: '미용사', where: 'counter', lines: [
+        '오늘은 예약이 다 찼어요.', '앞머리만 하시게요?'] },
+    ],
+    [KIND.HOSPITAL]: [
+      { id: 'doctor', name: '의사', where: 'room', lines: [
+        '어디가 불편해서 오셨어요?', '엑스레이부터 찍고 오세요.'] },
+    ],
+    [KIND.PARK_FACILITY]: [
+      { id: 'fisher', name: '낚시터 주인', where: 'counter', lines: [
+        '오늘은 붕어가 잘 나와요.', '자리는 저쪽 그늘이 좋아요.'] },
+    ],
+    [KIND.CHURCH]: [
+      { id: 'praying', many: true, name: '기도하는 사람', where: 'any', lines: [
+        '...', '조용히 있다 가려고요.'] },
+    ],
+  };
+
+  // 길에서 만나는 사람 몇 가지 더
+  const EXTRA_OUTDOOR = {
+    city: [
+      { id: 'busdriver', name: '버스 기사', lines: [
+        '여기서 오 분 쉬었다 갑니다.', '다음 차는 십 분 뒤예요.'] },
+      { id: 'street-clean', name: '환경미화원', lines: [
+        '새벽 다섯 시부터 돕니다.', '이 골목이 제일 오래 걸려요.'] },
+      { id: 'realtor', name: '중개인', lines: [
+        '이 자리는 삼 년째 비어 있어요.', '요새는 상가가 잘 안 나가요.'] },
+      { id: 'catmom', name: '고양이 밥 주는 사람', lines: [
+        '이 근처에 네 마리 살아요.', '노란 애가 제일 겁이 많아요.'] },
+      { id: 'jogger', name: '달리는 사람', lines: [
+        '오 킬로 뛰고 출근합니다.', '이 길이 평평해서 좋아요.'] },
+    ],
+    industrial: [
+      { id: 'security', name: '경비원', lines: [
+        '방문증 없으면 여기서 돌아가셔야 해요.', '오늘 화물차가 유난히 많네요.'] },
+      { id: 'welder', name: '용접 기사', lines: [
+        '불티 튀니까 좀 떨어져서 지나가세요.', '오전에 이거 다 붙여야 합니다.'] },
+    ],
+    field: [
+      { id: 'birder', name: '새 보는 사람', lines: [
+        '이맘때 여기 재두루미가 와요.', '조용히 해 주세요. 지금 앉으려고 해요.'] },
+      { id: 'greenhouse', name: '하우스 하는 사람', lines: [
+        '오늘 따서 오후에 시장 나갑니다.', '올해 값이 영 아니에요.'] },
+    ],
+    forest: [
+      { id: 'monk', name: '산에서 만난 사람', lines: [
+        '이 길로 쭉 가면 정상이에요.', '새벽에 오르면 안개가 아주 예뻐요.'] },
+      { id: 'ranger', name: '산림 감시원', lines: [
+        '불씨 될 만한 건 안 됩니다.', '멧돼지 나오면 뛰지 말고 물러서세요.'] },
+    ],
+  };
+
+  __M.EXTRA_LINES = EXTRA_LINES; __M.EXTRA_ROLES = EXTRA_ROLES; __M.EXTRA_OUTDOOR = EXTRA_OUTDOOR;
+})();
+
 // ── world/data/npcs.js ─────────────────────────────
 (function () {
   // 건물 안팎에 사는 사람들. 역할과 대사.
@@ -1431,9 +1660,10 @@ const __M = Object.create(null);
   //   counter 카운터 옆 · machine 기계 옆 · room 방 안 · corridor 복도 · any 아무 데나
 
   const { KIND } = __M;
+  const { EXTRA_LINES, EXTRA_ROLES, EXTRA_OUTDOOR } = __M;
 
   // 건물 종류별 실내 인물
-  const INDOOR_ROLES = {
+  const INDOOR_ROLES_BASE = {
     [KIND.MART]: [
       { id: 'cashier', name: '캐셔', where: 'counter', lines: [
         '봉투 필요하세요?',
@@ -1646,7 +1876,7 @@ const __M = Object.create(null);
   };
 
   // 길에서 만나는 사람들 — 어느 동네냐에 따라 말이 다르다
-  const OUTDOOR_ROLES = {
+  const OUTDOOR_ROLES_BASE = {
     city: [
       { id: 'resident', name: '주민', lines: [
         '구래역까지는 이 길로 쭉 가시면 돼요.',
@@ -1694,7 +1924,253 @@ const __M = Object.create(null);
     ],
   };
 
+  // 대사를 더 붙이고, 역할도 더 얹는다 (npcs_extra.js)
+  function merge(base, extra) {
+    const out = {};
+    for (const key of new Set([...Object.keys(base), ...Object.keys(extra || {})])) {
+      const roles = (base[key] || []).map((r) => (EXTRA_LINES[r.id]
+        ? { ...r, lines: r.lines.concat(EXTRA_LINES[r.id]) }
+        : r));
+      out[key] = roles.concat((extra && extra[key]) || []);
+    }
+    return out;
+  }
+
+  const INDOOR_ROLES = merge(INDOOR_ROLES_BASE, EXTRA_ROLES);
+  const OUTDOOR_ROLES = merge(OUTDOOR_ROLES_BASE, EXTRA_OUTDOOR);
+
   __M.INDOOR_ROLES = INDOOR_ROLES; __M.OUTDOOR_ROLES = OUTDOOR_ROLES;
+})();
+
+// ── world/data/events_odd.js ─────────────────────────────
+(function () {
+  // 좀처럼 없는 일들 — 그 자리에 어울리는 사건 반, 전혀 어울리지 않는 사건 반.
+  //
+  // events.js 와 형식이 같다. 가중치가 낮아 자주 나오지는 않지만,
+  // 한 판을 길게 돌아다니면 어딘가에서는 반드시 하나쯤 만난다.
+  // 지리만 실제이고 여기 적힌 일은 전부 지어낸 것이다.
+
+  const { KIND } = __M;
+
+  const INDOOR_EVENTS_ODD = [
+    // ── 그 자리에 어울리는 일 ─────────────────────────────────────
+    { id: 'mart-blackout', name: '매장 정전', kinds: [KIND.MART, KIND.SHOP], weight: 2, prop: 'dark',
+      notice: '천장 조명이 절반만 켜져 있다.',
+      lines: ['한전에서 곧 온다고 했어요.', '냉동 매대만 비상 전원으로 돌리는 중입니다.',
+        '계산은 수기로 받고 있어요. 죄송합니다.'] },
+    { id: 'mart-recall', name: '회수 안내', kinds: [KIND.MART], weight: 3,
+      notice: '매대 하나가 비닐로 덮여 있다.',
+      lines: ['그 제품 오늘 아침에 전량 회수됐어요.', '영수증 없어도 환불해 드립니다.'] },
+    { id: 'shop-open', name: '개업 첫날', kinds: [KIND.SHOP], weight: 4, prop: 'crowd',
+      notice: '화환이 계단까지 늘어서 있다.',
+      lines: ['오늘 첫날이에요. 커피 한 잔 드릴까요?', '삼 년 준비했어요.',
+        '앞집 사장님이 화환을 두 개나 보내 주셨어요.'] },
+    { id: 'shop-closing', name: '폐업 정리', kinds: [KIND.SHOP], weight: 3,
+      notice: '진열대가 절반쯤 비어 있다.',
+      lines: ['이번 주까지만 합니다.', '남은 건 다 반값이에요.',
+        '십일 년 했어요. 이제 좀 쉬려고요.'] },
+    { id: 'school-drill', name: '대피 훈련', kinds: [KIND.SCHOOL], weight: 3,
+      notice: '복도에 아이들이 줄 서 있다.',
+      lines: ['오늘 지진 대피 훈련이에요.', '머리 감싸고 책상 밑으로 들어가는 거 배웠어요.',
+        '작년엔 진짜인 줄 알고 울었어요.'] },
+    { id: 'school-sports', name: '운동회 준비', kinds: [KIND.SCHOOL], weight: 3, prop: 'boxes',
+      notice: '복도에 청군 백군 깃발이 쌓여 있다.',
+      lines: ['다음 주 운동회예요.', '올해는 학부모 달리기도 한대요.'] },
+    { id: 'school-lunch', name: '급식 늦어짐', kinds: [KIND.SCHOOL], weight: 3,
+      notice: '급식실 쪽에서 사람들이 서성인다.',
+      lines: ['배식차가 아직 안 왔어요.', '오늘 메뉴가 바뀔 수도 있대요.'] },
+    { id: 'office-audit', name: '감사 나온 날', kinds: [KIND.PUBLIC, KIND.TOWER], weight: 3,
+      notice: '회의실 문이 닫혀 있고 사람들이 조용하다.',
+      lines: ['오늘은 아무것도 묻지 마세요.', '서류가 세 박스 나갔어요.',
+        '작년에도 이맘때 왔어요.'] },
+    { id: 'office-move', name: '사무실 이전', kinds: [KIND.TOWER, KIND.PUBLIC], weight: 3, prop: 'boxes',
+      notice: '복도에 이삿짐 상자가 줄지어 있다.',
+      lines: ['이번 주말에 옮깁니다.', '십 년 치 서류를 다 버리고 있어요.'] },
+    { id: 'factory-inspect', name: '안전 점검', kinds: [KIND.FACTORY, KIND.WAREHOUSE], weight: 4, prop: 'cone',
+      notice: '라인 앞에 점검 표시가 세워져 있다.',
+      lines: ['오전에는 라인 안 돌립니다.', '작년 그 일 이후로 점검이 잦아졌어요.'] },
+    { id: 'factory-newbie', name: '신입 교육', kinds: [KIND.FACTORY, KIND.WAREHOUSE], weight: 4, prop: 'crowd',
+      notice: '한쪽에 사람들이 둘러서 있다.',
+      lines: ['오늘 신입만 다섯이에요.', '장갑부터 챙기라고 늘 말합니다.',
+        '처음엔 다들 손이 아파요. 이 주면 괜찮아져요.'] },
+    { id: 'station-delay', name: '열차 지연', kinds: [KIND.STATION], weight: 4, prop: 'crowd',
+      notice: '안내판의 시각이 계속 바뀐다.',
+      lines: ['앞 열차에 사람이 많아서 늦어지고 있습니다.', '오 분이라더니 벌써 십오 분이에요.'] },
+    { id: 'station-busk', name: '대합실 연주', kinds: [KIND.STATION], weight: 2,
+      notice: '어디선가 기타 소리가 난다.',
+      lines: ['허가받고 하는 거예요.', '이 시간엔 사람이 적어서 편해요.'] },
+    { id: 'apart-notice', name: '단수 안내', kinds: [KIND.APARTMENT], weight: 4,
+      notice: '엘리베이터 문에 안내문이 붙어 있다.',
+      lines: ['오늘 열 시부터 두 시까지 물 안 나와요.', '어제도 붙었는데 못 보셨죠?'] },
+    { id: 'apart-noise', name: '층간소음 다툼', kinds: [KIND.APARTMENT], weight: 3,
+      notice: '위층에서 문 닫는 소리가 크게 났다.',
+      lines: ['새벽 두 시까지 쿵쿵거렸대요.', '관리실에 벌써 세 번 왔어요.',
+        '저는 아무 소리도 못 들었는데요.'] },
+    { id: 'apart-move', name: '이사 나가는 날', kinds: [KIND.APARTMENT, KIND.HOUSE], weight: 4, prop: 'boxes',
+      notice: '복도에 짐이 반쯤 나와 있다.',
+      lines: ['오후에 사다리차 옵니다.', '이 집은 육 년 살았어요.'] },
+    { id: 'church-prep', name: '예배 준비', kinds: [KIND.CHURCH], weight: 4,
+      notice: '의자를 줄 맞춰 놓는 중이다.',
+      lines: ['오늘 오후 예배가 있어요.', '한 줄에 여덟 개씩 놓습니다.'] },
+    { id: 'hospital-wait', name: '대기 두 시간', kinds: [KIND.HOSPITAL], weight: 4, prop: 'crowd',
+      notice: '대기 번호가 스물여덟 개 밀려 있다.',
+      lines: ['아침부터 이래요.', '접수만 해 놓고 나갔다 오세요.'] },
+    { id: 'park-repair', name: '정자 보수', kinds: [KIND.PARK_FACILITY], weight: 4, prop: 'cone',
+      notice: '난간 한쪽이 떼어져 있다.',
+      lines: ['비에 썩어서 갈고 있어요.', '오후엔 다시 앉을 수 있어요.'] },
+
+    // ── 그 자리에 어울리지 않는 일 ────────────────────────────────
+    { id: 'odd-fog', name: '실내에 낀 안개', weight: 1, prop: 'smoke',
+      notice: '실내인데 안개가 발목까지 차 있다.',
+      lines: ['환기하면 빠진대서 창을 다 열었어요.',
+        '아침에 문 열었더니 이랬어요. 냄새는 안 나요.',
+        '작년에도 딱 한 번 이런 적 있어요.'] },
+    { id: 'odd-cow', name: '들어온 소', kinds: [KIND.SCHOOL, KIND.PUBLIC, KIND.SHOP], weight: 1,
+      notice: '복도 끝에 소가 한 마리 서 있다.',
+      lines: ['어디서 왔는지 아무도 몰라요.', '축사에서 나왔겠죠. 근데 여기까지요?',
+        '아이들이 좋아해서 일단 그냥 뒀어요.'] },
+    { id: 'odd-snow', name: '복도에 쌓인 눈', kinds: [KIND.APARTMENT, KIND.TOWER], weight: 1,
+      notice: '복도 한쪽에 눈이 소복이 쌓여 있다.',
+      lines: ['오늘 팔월인데요.', '만져 보세요. 차가워요. 진짜 눈이에요.',
+        '관리실에서 곧 치운다고 했어요.'] },
+    { id: 'odd-fish', name: '바닥의 물고기', weight: 1, prop: 'puddle',
+      notice: '젖은 바닥에 손바닥만 한 물고기가 몇 마리 있다.',
+      lines: ['수족관 차가 지나갔나 했는데 그건 아니래요.',
+        '아직 살아 있어요. 대야에 담아 뒀어요.'] },
+    { id: 'odd-bell', name: '멈추지 않는 벨', weight: 1,
+      notice: '어디선가 초인종 소리가 규칙적으로 난다.',
+      lines: ['한 시간째예요.', '전원을 내렸는데도 울려요.',
+        '이런 건 처음 봐요.'] },
+    { id: 'odd-mirror', name: '늘어난 거울', kinds: [KIND.TOWER, KIND.PUBLIC, KIND.MART], weight: 1,
+      notice: '없던 자리에 전신 거울이 하나 서 있다.',
+      lines: ['어제까지 저기 없었어요.', '아무도 안 가져다 놨대요.',
+        '들여다보면 좀 이상해요. 직접 보세요.'] },
+    { id: 'odd-clock', name: '거꾸로 가는 시계', weight: 1,
+      notice: '벽시계 초침이 반대로 돈다.',
+      lines: ['건전지를 갈아도 그래요.', '아침엔 멀쩡했어요.',
+        '시간은 맞아요. 그게 더 이상하죠.'] },
+    { id: 'odd-grass', name: '자란 풀', kinds: [KIND.WAREHOUSE, KIND.FACTORY, KIND.APARTMENT], weight: 1,
+      notice: '바닥 이음새를 따라 풀이 한 줄로 자라 있다.',
+      lines: ['한 주 만에 이만큼 자랐어요.', '뽑아도 다음 날 또 나요.'] },
+    { id: 'odd-parachute', name: '옥상의 낙하산', kinds: [KIND.FACTORY, KIND.TOWER, KIND.SCHOOL], weight: 1,
+      notice: '천장 채광창 너머로 흰 천이 덮여 있다.',
+      lines: ['새벽에 뭔가 내려앉았대요.', '군에서 온다고 했는데 아직이에요.',
+        '사람은 없었어요. 그게 제일 이상해요.'] },
+    { id: 'odd-queue', name: '이유 없는 줄', weight: 1, prop: 'crowd',
+      notice: '사람들이 아무것도 없는 벽 앞에 줄을 서 있다.',
+      lines: ['앞 사람이 서 있길래 섰어요.', '뭐 하는 줄인지는 저도 몰라요.',
+        '삼십 분째인데 아무도 안 가요.'] },
+    { id: 'odd-light', name: '천장의 빛', weight: 1,
+      notice: '천장 한가운데가 동그랗게 밝다. 조명은 꺼져 있다.',
+      lines: ['위층은 창고예요. 불 켤 일이 없어요.',
+        '손을 대면 따뜻해요.', '사진으로는 안 찍혀요.'] },
+    { id: 'odd-mail', name: '받는 사람이 나', weight: 1,
+      notice: '탁자에 놓인 봉투에 내 이름이 적혀 있다.',
+      lines: ['아침에 누가 두고 갔어요.', '이름이 같은 분이 계신가 봐요.',
+        '열어 보셔도 돼요. 저희는 안 봤어요.'] },
+    { id: 'odd-radio', name: '같은 방송', weight: 1,
+      notice: '스피커에서 어제 들은 것과 똑같은 방송이 나온다.',
+      lines: ['어제 그 방송 맞죠? 저도 그렇게 들었어요.',
+        '녹음이라기엔 잡음까지 같아요.'] },
+    { id: 'odd-door', name: '없던 문', weight: 1,
+      notice: '복도 끝에 도면에 없는 문이 하나 있다.',
+      lines: ['도면에는 벽이에요.', '열어 봤는데 안이 그냥 벽이었어요.',
+        '누가 손잡이를 새로 달았어요.'] },
+    { id: 'odd-bee', name: '실내의 벌떼', kinds: [KIND.SCHOOL, KIND.PUBLIC, KIND.HOSPITAL], weight: 1, prop: 'crowd',
+      notice: '창문 안쪽에 벌이 잔뜩 붙어 있다.',
+      lines: ['소방서에서 온다고 했어요.', '창을 열면 나갈 텐데 무서워서요.',
+        '작년엔 옥상에 집을 지었어요.'] },
+  ];
+
+  const OUTDOOR_EVENTS_ODD = [
+    // ── 어울리는 일 ───────────────────────────────────────────────
+    { id: 'street-band', name: '길거리 공연', where: 'city', prop: 'crowd', weight: 3,
+      notice: '앰프 소리가 골목을 채운다.',
+      lines: ['상가 번영회에서 부른 팀이에요.', '한 시간만 하고 갑니다.'] },
+    { id: 'market-day', name: '오일장', where: 'city', prop: 'stall', weight: 3,
+      notice: '길 한쪽에 좌판이 길게 늘어서 있다.',
+      lines: ['오늘이 장날이에요.', '이 시간에 와야 좋은 걸 골라요.'] },
+    { id: 'blood-bus', name: '헌혈 버스', where: 'city', prop: 'crowd', weight: 3,
+      notice: '버스 한 대가 인도 옆에 서 있다.',
+      lines: ['십 분이면 끝나요.', '기념품으로 영화표 줍니다.'] },
+    { id: 'election', name: '유세 차량', where: 'city', prop: 'crowd', weight: 2,
+      notice: '확성기 소리가 사거리에서 울린다.',
+      lines: ['아침마다 여기 섭니다.', '한 표 부탁드립니다!'] },
+    { id: 'road-paint', name: '차선 도색', where: 'city', prop: 'cone', weight: 3,
+      notice: '갓 칠한 흰 선에서 냄새가 난다.',
+      lines: ['밟지 마세요, 아직 안 말랐어요.', '오늘 이 구간만 합니다.'] },
+    { id: 'delivery-rush', name: '배송 전쟁', where: 'city', prop: 'boxes', weight: 4,
+      notice: '인도에 택배 상자가 쌓여 있다.',
+      lines: ['오전 안에 다 돌려야 해요.', '엘리베이터가 하나뿐이라 오래 걸려요.'] },
+    { id: 'crane-day', name: '크레인 작업', where: 'industrial', prop: 'cone', weight: 4,
+      notice: '크레인이 자재를 들어 올리고 있다.',
+      lines: ['이 밑으로 지나가지 마세요.', '오늘 안에 다 올려야 합니다.'] },
+    { id: 'wastewater', name: '폐수 점검', where: 'industrial', prop: 'puddle', weight: 3,
+      notice: '수로 옆에서 사람들이 물을 떠 담고 있다.',
+      lines: ['정기 채수예요.', '수치는 늘 그렇듯 괜찮을 겁니다.'] },
+    { id: 'strike', name: '천막 농성', where: 'industrial', prop: 'crowd', weight: 2,
+      notice: '정문 앞에 천막이 하나 서 있다.',
+      lines: ['오늘로 열이틀째입니다.', '지나가시는 분들은 그냥 지나가셔도 돼요.'] },
+    { id: 'field-burn', name: '논두렁 태우기', where: 'field', prop: null, weight: 3,
+      notice: '멀리서 연기가 낮게 깔린다.',
+      lines: ['신고하고 하는 겁니다.', '바람 없는 날만 해요.'] },
+    { id: 'drone-spray', name: '방제 드론', where: 'field', prop: null, weight: 3,
+      notice: '논 위로 드론이 낮게 지나간다.',
+      lines: ['이제 사람 손으로 안 해요.', '한 필지에 십 분이면 끝나요.'] },
+    { id: 'goose', name: '기러기 떼', where: 'field', prop: null, weight: 3,
+      notice: '하늘에 새 떼가 줄지어 지나간다.',
+      lines: ['이맘때면 저렇게 지나가요.', '작년보다 많아요.'] },
+    { id: 'mountain-clean', name: '등산로 정비', where: 'forest', prop: 'cone', weight: 3,
+      notice: '계단 목재를 교체하는 중이다.',
+      lines: ['이 구간은 돌아가세요.', '주말 전에는 끝냅니다.'] },
+    { id: 'temple-bell', name: '산에서 나는 종소리', where: 'forest', prop: null, weight: 3,
+      notice: '어디선가 종소리가 길게 울린다.',
+      lines: ['아침마다 저래요.', '소리가 여기까지 와요.'] },
+
+    // ── 어울리지 않는 일 ──────────────────────────────────────────
+    { id: 'odd-piano', name: '길 한가운데 피아노', where: 'city', prop: 'stall', weight: 1,
+      notice: '인도 한가운데 업라이트 피아노가 놓여 있다.',
+      lines: ['아침에 와 보니 있었어요.', '조율도 돼 있어요. 쳐 보세요.',
+        '치우겠다는 사람이 아직 없어요.'] },
+    { id: 'odd-penguin', name: '펭귄', where: 'city', prop: null, weight: 1,
+      notice: '횡단보도 앞에 펭귄 한 마리가 서 있다.',
+      lines: ['동물원 차가 지나갔다는 말이 있어요.',
+        '신호 바뀌길 기다리는 것 같아요. 진짜로요.'] },
+    { id: 'odd-sand', name: '사거리의 모래', where: 'city', prop: null, weight: 1,
+      notice: '사거리 한복판에 고운 모래가 한 무더기 쌓여 있다.',
+      lines: ['공사 자재는 아니래요.', '바다 모래래요. 여기 바다 없잖아요.'] },
+    { id: 'odd-orange', name: '쏟아진 귤', where: 'city', prop: 'boxes', weight: 1,
+      notice: '내리막 전체에 귤이 굴러다닌다.',
+      lines: ['차가 문을 열어 둔 채로 갔어요.', '주워 가셔도 돼요. 어차피 못 팔아요.'] },
+    { id: 'odd-tv', name: '켜져 있는 텔레비전', where: 'field', prop: null, weight: 1,
+      notice: '논둑에 텔레비전이 한 대 놓여 있고, 켜져 있다.',
+      lines: ['전기는 어디서 오는지 모르겠어요.', '화면에 이 논이 나와요.'] },
+    { id: 'odd-statue', name: '새로 생긴 석상', where: 'forest', prop: null, weight: 1,
+      notice: '등산로 옆에 사람 크기의 돌이 서 있다. 어제는 없었다.',
+      lines: ['누가 지고 올라왔겠어요, 이걸.', '얼굴이 있는 것 같기도 하고요.'] },
+    { id: 'odd-boat', name: '길 위의 배', where: 'field', prop: null, weight: 1,
+      notice: '마른 논 한가운데 작은 배가 한 척 놓여 있다.',
+      lines: ['강에서 여기까지 삼 킬로예요.', '누가 갖다 놨는지 아무도 몰라요.'] },
+    { id: 'odd-suit', name: '정장 입은 사람들', where: 'industrial', prop: 'crowd', weight: 1,
+      notice: '공터에 정장 차림 사람 여럿이 아무 말 없이 서 있다.',
+      lines: ['세 시간째 저러고 있어요.', '물어봤는데 대답을 안 해요.'] },
+    { id: 'odd-siren', name: '들리지 않는 사이렌', where: 'industrial', prop: null, weight: 1,
+      notice: '경광등이 도는데 소리는 나지 않는다.',
+      lines: ['고장인가 했는데 스피커는 멀쩡하대요.',
+        '한 시간에 한 번씩 저래요.'] },
+    { id: 'odd-hole', name: '메워진 구멍', where: 'city', prop: 'cone', weight: 1,
+      notice: '아스팔트에 동그란 자국이 있다. 어제 여기 구멍이 있었다.',
+      lines: ['밤새 누가 메웠어요.', '구청은 온 적 없대요.'] },
+    { id: 'odd-butterfly', name: '나비 떼', where: 'forest', prop: 'crowd', weight: 1,
+      notice: '길 전체가 흰 나비로 덮여 있다.',
+      lines: ['이런 건 처음 봐요.', '가만히 있으면 옷에 앉아요.'] },
+    { id: 'odd-echo', name: '되돌아오는 말', where: 'forest', prop: null, weight: 1,
+      notice: '말을 하면 잠깐 뒤에 그 말이 되돌아온다.',
+      lines: ['골짜기라 그래요. …그렇겠죠?',
+        '아까는 제가 안 한 말이 돌아왔어요.'] },
+  ];
+
+  __M.INDOOR_EVENTS_ODD = INDOOR_EVENTS_ODD; __M.OUTDOOR_EVENTS_ODD = OUTDOOR_EVENTS_ODD;
 })();
 
 // ── world/data/events.js ─────────────────────────────
@@ -1714,8 +2190,9 @@ const __M = Object.create(null);
   //          · dark 어두움 · crowd 사람 많음
 
   const { KIND } = __M;
+  const { INDOOR_EVENTS_ODD, OUTDOOR_EVENTS_ODD } = __M;
 
-  const INDOOR_EVENTS = [
+  const INDOOR_EVENTS_BASE = [
     // ── 마트 ────────────────────────────────────────────────────────
     { id: 'mart-tasting', name: '시식 행사', kinds: [KIND.MART], weight: 6, prop: 'crowd',
       notice: '시식 코너에 사람이 몰려 있다.',
@@ -1900,7 +2377,7 @@ const __M = Object.create(null);
   ];
 
   // 길 위에서 벌어지는 일. where 는 어느 지역에서 벌어지는가.
-  const OUTDOOR_EVENTS = [
+  const OUTDOOR_EVENTS_BASE = [
     { id: 'road-work', name: '도로 공사', where: 'city', prop: 'cone', weight: 5,
       notice: '한 차로가 막혀 있다.',
       lines: ['상수도 관 교체 중입니다.', '이번 주말까지 이래요.'] },
@@ -1965,6 +2442,10 @@ const __M = Object.create(null);
       notice: '경고 현수막이 걸려 있다.',
       lines: ['어제 새벽에 봤다는 사람이 있어요.', '혼자 다니지 마세요.'] },
   ];
+
+  // 흔한 일 + 좀처럼 없는 일
+  const INDOOR_EVENTS = INDOOR_EVENTS_BASE.concat(INDOOR_EVENTS_ODD);
+  const OUTDOOR_EVENTS = OUTDOOR_EVENTS_BASE.concat(OUTDOOR_EVENTS_ODD);
 
   __M.INDOOR_EVENTS = INDOOR_EVENTS; __M.OUTDOOR_EVENTS = OUTDOOR_EVENTS;
 })();
@@ -3460,7 +3941,7 @@ const __M = Object.create(null);
   // 실내 생성 · 층 전환. 건물에 들어갈 때마다 그 층을 즉석에서 만든다.
   // 모든 건물이 시드로 만들어지므로 같은 건물의 같은 층은 언제나 같은 모습이다.
 
-  const { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS } = __M;
+  const { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS, INTERIOR_THEMES } = __M;
   const { makeRng } = __M;
   const { ROOM_NAMES } = __M;
 
@@ -3613,6 +4094,7 @@ const __M = Object.create(null);
 
     return {
       building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout, roomAt,
+      theme: themeOf(b, floor),
       // 문을 열면 걸어 닿을 수 있는 칸인가 (사람·물건을 여기에만 놓는다)
       canReach(x, y) {
         if (x < 0 || y < 0 || x >= w || y >= h) return false;
@@ -3642,6 +4124,15 @@ const __M = Object.create(null);
   }
 
   function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // 이 건물의 실내 분위기 (바닥·벽 색). 지하 주차장은 어디든 콘크리트다.
+  function themeOf(b, floor) {
+    if (floor < 0 && (b.basement || 0) > 0 && layoutOf(b.kind, floor, b) === 'parking') return 'factory';
+    for (const [theme, kinds] of Object.entries(INTERIOR_THEMES)) {
+      if (kinds.includes(b.kind)) return theme;
+    }
+    return 'home';
+  }
 
   // 이 건물의 "1층" (지상 최저층)
   function groundFloorOf(b) { return 1; }
@@ -3870,40 +4361,155 @@ const __M = Object.create(null);
     const inside = (x, y) => x > room.x && x < room.x + room.w - 1 &&
       y > room.y && y < room.y + room.h - 1;
     const put = (x, y, v) => { if (inside(x, y) && get(x, y) === IN.FLOOR) set(x, y, v); };
+    const name = room.name || '';
+    const x0 = room.x + 1, y0 = room.y + 1;
+    const x1 = room.x + room.w - 2, y1 = room.y + room.h - 2;
+    const midX = room.x + Math.floor(room.w / 2), midY = room.y + Math.floor(room.h / 2);
+    const row = (y, v, step) => { for (let x = x0; x <= x1; x += (step || 1)) put(x, y, v); };
 
-    // 교실 — 책상을 줄 맞춰 놓고 앞에 교탁
-    if (b.kind === KIND.SCHOOL && /반$/.test(room.name || '')) {
-      for (let y = room.y + 2; y < room.y + room.h - 1; y += 2) {
-        for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+    // ── 학교 ───────────────────────────────────────────────
+    if (b.kind === KIND.SCHOOL) {
+      if (/반$/.test(name)) {                    // 교실 — 칠판과 줄 맞춘 책상
+        row(room.y + 1, IN.BOARD);
+        for (let y = room.y + 3; y <= y1; y += 2) {
+          for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+        }
+        put(midX, room.y + 2, IN.COUNTER);       // 교탁
+        return;
       }
-      put(room.x + Math.floor(room.w / 2), room.y + 1, IN.COUNTER);
+      if (name.includes('교무') || name.includes('행정')) {
+        for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+        put(x1, y0, IN.VENDING);
+        put(x0, y1, IN.BOOKS);
+        return;
+      }
+      if (name.includes('급식')) {
+        for (let y = y0 + 1; y <= y1; y += 3) row(y, IN.TABLE);
+        row(room.y + 1, IN.COUNTER);
+        return;
+      }
+      if (name.includes('도서') || name.includes('자료')) {
+        for (let y = y0; y <= y1; y += 2) row(y, IN.BOOKS, 1);
+        put(midX, y1, IN.TABLE);
+        return;
+      }
+      if (name.includes('과학') || name.includes('실습') || name.includes('음악')) {
+        for (let y = y0 + 1; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.TABLE);
+        put(x0, y0, IN.SINK);
+        row(room.y + 1, IN.BOARD);
+        return;
+      }
+      for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.DESK);
       return;
     }
-    // 세대 — 현관 쪽에 신발장, 안쪽에 침대와 식탁
-    if (b.kind === KIND.APARTMENT || b.kind === KIND.HOUSE) {
-      put(room.x + 1, room.y + 1, IN.SHELF);
-      put(room.x + room.w - 2, room.y + 1, IN.BED);
-      put(room.x + Math.floor(room.w / 2), room.y + Math.floor(room.h / 2), IN.TABLE);
-      if (rng.chance(0.5)) put(room.x + 1, room.y + room.h - 2, IN.PLANT);
+
+    // ── 집 · 세대 ──────────────────────────────────────────
+    if (b.kind === KIND.APARTMENT || b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE) {
+      put(x0, y0, IN.SHELF);                     // 현관 신발장
+      put(x0 + 1, y0, IN.MAT);
+      if (room.w >= 6) {                          // 주방
+        put(x1, y0, IN.FRIDGE);
+        put(x1 - 1, y0, IN.SINK);
+      }
+      put(x1, y1, IN.BED);
+      put(midX, midY, IN.TABLE);
+      if (rng.chance(0.7)) put(midX - 1, midY + 1, IN.SOFA);
+      if (rng.chance(0.5)) put(x0, y1, IN.BOOKS);
+      if (rng.chance(0.5)) put(x0 + 1, y1, IN.PLANT);
+      if (rng.chance(0.4)) put(midX + 1, midY, IN.RUG);
       return;
     }
-    // 사무실·민원실 — 책상을 두 줄로
+
+    // ── 병원 ───────────────────────────────────────────────
+    if (b.kind === KIND.HOSPITAL || name.includes('병원') || name.includes('진료')) {
+      if (name.includes('병실') || name.includes('입원')) {
+        for (let y = y0; y <= y1; y += 2) { put(x0, y, IN.BED); put(x1, y, IN.BED); }
+        put(midX, midY, IN.PLANT);
+        return;
+      }
+      put(midX, y0, IN.DESK);
+      put(midX + 1, y0, IN.MACHINE);
+      for (let y = y0 + 2; y <= y1; y += 2) put(x0, y, IN.BENCH);
+      return;
+    }
+
+    // ── 사무실 · 관공서 · 오피스텔 ─────────────────────────
     if (b.kind === KIND.PUBLIC || b.kind === KIND.TOWER || b.kind === KIND.STATION) {
-      for (let y = room.y + 1; y < room.y + room.h - 1; y += 3) {
-        for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+      if (name.includes('민원') || name.includes('창구') || name.includes('대합')) {
+        row(room.y + 2, IN.COUNTER);
+        for (let y = y0 + 3; y <= y1; y += 2) row(y, IN.BENCH, 2);
+        put(x1, y1, IN.VENDING);
+        return;
       }
+      if (name.includes('회의') || name.includes('강당')) {
+        for (let y = y0 + 1; y <= y1 - 1; y++) put(midX, y, IN.TABLE);
+        for (let y = y0 + 1; y <= y1 - 1; y++) { put(midX - 2, y, IN.SEAT); put(midX + 2, y, IN.SEAT); }
+        row(room.y + 1, IN.BOARD);
+        return;
+      }
+      if (name.includes('휴게') || name.includes('탕비')) {
+        put(x0, y0, IN.VENDING); put(x0 + 1, y0, IN.SINK);
+        for (let y = y0 + 2; y <= y1; y += 2) row(y, IN.TABLE, 3);
+        return;
+      }
+      for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+      if (rng.chance(0.6)) put(x1, y1, IN.VENDING);
+      if (rng.chance(0.5)) put(x0, y1, IN.PLANT);
       return;
     }
 
+    // ── 상가 · 사무소 ──────────────────────────────────────
+    if (b.kind === KIND.SHOP || b.kind === KIND.MART) {
+      if (name.includes('옷') || name.includes('의류') || name.includes('가게')) {
+        for (let y = y0; y <= y1; y += 3) row(y, IN.RACK, 2);
+        put(x0, y1, IN.COUNTER);
+        return;
+      }
+      if (name.includes('식당') || name.includes('분식') || name.includes('카페')) {
+        for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.TABLE);
+        row(room.y + 1, IN.COUNTER);
+        put(x1, y0, IN.FRIDGE);
+        return;
+      }
+      if (name.includes('학원') || name.includes('교습')) {
+        row(room.y + 1, IN.BOARD);
+        for (let y = y0 + 2; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+        return;
+      }
+      for (let y = y0; y <= y1; y += 2) row(y, IN.SHELF, 2);
+      put(midX, y1, IN.COUNTER);
+      if (rng.chance(0.5)) put(x0, y0, IN.VENDING);
+      return;
+    }
+
+    // ── 공장 · 창고 ────────────────────────────────────────
+    if (b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE) {
+      for (let y = y0; y <= y1; y += 3) {
+        for (let x = x0; x <= x1; x += 4) put(x, y, rng.chance(0.6) ? IN.MACHINE : IN.SHELF);
+      }
+      if (rng.chance(0.6)) put(x0, y1, IN.BOX);
+      if (rng.chance(0.5)) put(x1, y0, IN.LOCKER);
+      return;
+    }
+
+    // ── 교회 · 기도처 ──────────────────────────────────────
+    if (b.kind === KIND.CHURCH) {
+      for (let y = y0 + 1; y <= y1; y += 2) {
+        for (let x = x0; x <= x1; x++) { if (x !== midX) put(x, y, IN.BENCH); }
+      }
+      put(midX, y0, IN.COUNTER);
+      return;
+    }
+
+    // ── 그 밖 ──────────────────────────────────────────────
     const kit = furnitureKit(b.kind, room.name);
     const count = Math.max(1, Math.floor(room.w * room.h * 0.16));
     for (let i = 0; i < count; i++) {
-      const x = rng.int(room.x + 1, room.x + room.w - 2);
-      const y = rng.int(room.y + 1, room.y + room.h - 2);
+      const x = rng.int(x0, x1), y = rng.int(y0, y1);
       put(x, y, rng.pick(kit));
     }
-    if (rng.chance(0.4)) put(room.x + 1, room.y + 1, IN.PLANT);
-    if (rng.chance(0.3)) put(room.x + room.w - 2, room.y + room.h - 2, IN.RUG);
+    if (rng.chance(0.4)) put(x0, y0, IN.PLANT);
+    if (rng.chance(0.3)) put(x1, y1, IN.RUG);
   }
 
   function furnitureKit(kind, roomName) {
@@ -3915,7 +4521,7 @@ const __M = Object.create(null);
       case KIND.PUBLIC: case KIND.STATION: return [IN.DESK, IN.COUNTER, IN.SHELF];
       case KIND.SHOP: case KIND.TOWER: case KIND.MART: return [IN.SHELF, IN.TABLE, IN.COUNTER];
       case KIND.FACTORY: case KIND.WAREHOUSE: return [IN.MACHINE, IN.SHELF];
-      case KIND.CHURCH: return [IN.TABLE, IN.PLANT];
+      case KIND.CHURCH: return [IN.BENCH, IN.PLANT];
       default: return [IN.DESK, IN.SHELF, IN.TABLE];
     }
   }
@@ -4427,7 +5033,7 @@ const __M = Object.create(null);
 
   const { TILE, GROUND, PROP, KIND, IN, BUILDING, PLAYER, SEED } = __M;
   const {
-    GROUND_COLOR, GROUND_JITTER, PROP_COLOR, BUILDING_COLOR, INTERIOR_COLOR,
+    GROUND_COLOR, GROUND_JITTER, PROP_COLOR, BUILDING_COLOR, INTERIOR_COLOR, THEME_COLOR,
     PLAYER_COLOR, NPC_COLORS, shade, mix,
   } = __M;
   const { makeRng, noiseAt, seedOf } = __M;
@@ -5282,13 +5888,17 @@ const __M = Object.create(null);
   // ── 실내 타일 ───────────────────────────────────────────────────────────
   const interiorCache = new Map();
 
-  function interiorTile(kind, variant) {
-    const key = kind * 16 + variant;
+  function interiorTile(kind, variant, theme) {
+    const key = `${kind}|${variant}|${theme || ''}`;
     let hit = interiorCache.get(key);
     if (hit) return hit;
 
     const { canvas, ctx } = makeCanvas(S, S);
-    const base = INTERIOR_COLOR[kind] || '#ff00ff';
+    // 바닥과 벽은 건물 분위기에 따라 색이 달라진다 (구조는 그대로)
+    const palette = THEME_COLOR[theme];
+    const base = (palette && kind === IN.FLOOR ? palette.floor
+      : palette && kind === IN.WALL ? palette.wall
+      : INTERIOR_COLOR[kind]) || '#ff00ff';
     const rng = makeRng(SEED, 'in', kind, variant);
     px(ctx, 0, 0, S, S, base);
 
@@ -5472,6 +6082,74 @@ const __M = Object.create(null);
         px(ctx, 3, 3, 10, 5, shade(base, -0.3));
         px(ctx, 4, 10, 3, 3, '#e2705f');
         px(ctx, 9, 10, 3, 3, '#8fc48a');
+        break;
+      }
+      case IN.SOFA: {            // 소파 — 등받이와 팔걸이
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 1, 4, 14, 10, base);
+        px(ctx, 1, 2, 14, 3, shade(base, 0.18));
+        px(ctx, 1, 4, 2, 10, shade(base, -0.18));
+        px(ctx, 13, 4, 2, 10, shade(base, -0.18));
+        break;
+      }
+      case IN.FRIDGE: {          // 냉장고
+        px(ctx, 2, 0, 12, 16, base);
+        px(ctx, 2, 7, 12, 1, shade(base, -0.35));
+        px(ctx, 11, 4, 1, 3, '#8a919c');
+        px(ctx, 11, 9, 1, 3, '#8a919c');
+        break;
+      }
+      case IN.SINK: {            // 싱크대
+        px(ctx, 0, 3, S, 11, base);
+        px(ctx, 3, 5, 8, 6, shade(base, -0.3));
+        px(ctx, 6, 2, 2, 4, '#8a919c');
+        break;
+      }
+      case IN.BOOKS: {           // 책장
+        px(ctx, 1, 1, 14, 14, base);
+        for (let y = 2; y < 14; y += 5) {
+          for (let x = 2; x < 14; x += 3) {
+            px(ctx, x, y, 2, 4, rng.pick(['#c05a4a', '#4a6f8a', '#d8b45a', '#5a7a5e']));
+          }
+        }
+        break;
+      }
+      case IN.BOARD: {           // 칠판·화이트보드
+        px(ctx, 0, 2, S, 11, base);
+        px(ctx, 1, 3, 14, 9, shade(base, -0.2));
+        px(ctx, 3, 6, 5, 1, '#e8e8ee');
+        px(ctx, 3, 9, 8, 1, '#e8e8ee');
+        px(ctx, 0, 13, S, 2, shade(base, 0.2));
+        break;
+      }
+      case IN.VENDING: {         // 자판기·정수기
+        px(ctx, 1, 0, 14, 16, base);
+        px(ctx, 3, 2, 7, 8, '#2a3038');
+        for (let y = 3; y < 9; y += 3) px(ctx, 4, y, 5, 2, '#8fc48a');
+        px(ctx, 11, 3, 3, 4, '#d8d8dc');
+        px(ctx, 11, 10, 3, 3, '#3a3a44');
+        break;
+      }
+      case IN.RACK: {            // 옷걸이·행거
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 1, 3, 14, 1, '#8a919c');
+        for (let x = 2; x < 14; x += 3) {
+          px(ctx, x, 4, 2, 8, rng.pick(['#7f6f8c', '#4a6f8a', '#c05a4a', '#d8b45a']));
+        }
+        px(ctx, 7, 12, 2, 3, '#8a919c');
+        break;
+      }
+      case IN.BENCH: {           // 긴 의자
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 0, 5, S, 6, base);
+        px(ctx, 0, 4, S, 2, shade(base, 0.2));
+        px(ctx, 2, 11, 2, 3, shade(base, -0.35));
+        px(ctx, 12, 11, 2, 3, shade(base, -0.35));
+        break;
+      }
+      case IN.MAT: {             // 매트 — 밟고 지나갈 수 있다
+        px(ctx, 1, 2, 14, 12, base);
+        px(ctx, 2, 3, 12, 10, shade(base, 0.12));
         break;
       }
     }
@@ -6104,9 +6782,9 @@ const __M = Object.create(null);
           }
           // 벽·가구 아래에도 바닥을 먼저 깔아 둔다
           if (t !== IN.FLOOR && t !== IN.WALL) {
-            ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3), x * S, y * S);
+            ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3, it.theme), x * S, y * S);
           }
-          ctx.drawImage(interiorTile(t, (x * 3 + y) % 3), x * S, y * S);
+          ctx.drawImage(interiorTile(t, (x * 3 + y) % 3, it.theme), x * S, y * S);
         }
       }
 

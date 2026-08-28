@@ -13,8 +13,9 @@
 //          · dark 어두움 · crowd 사람 많음
 
 import { KIND } from '../../config.js';
+import { INDOOR_EVENTS_ODD, OUTDOOR_EVENTS_ODD } from './events_odd.js';
 
-export const INDOOR_EVENTS = [
+const INDOOR_EVENTS_BASE = [
   // ── 마트 ────────────────────────────────────────────────────────
   { id: 'mart-tasting', name: '시식 행사', kinds: [KIND.MART], weight: 6, prop: 'crowd',
     notice: '시식 코너에 사람이 몰려 있다.',
@@ -199,7 +200,7 @@ export const INDOOR_EVENTS = [
 ];
 
 // 길 위에서 벌어지는 일. where 는 어느 지역에서 벌어지는가.
-export const OUTDOOR_EVENTS = [
+const OUTDOOR_EVENTS_BASE = [
   { id: 'road-work', name: '도로 공사', where: 'city', prop: 'cone', weight: 5,
     notice: '한 차로가 막혀 있다.',
     lines: ['상수도 관 교체 중입니다.', '이번 주말까지 이래요.'] },
@@ -264,3 +265,7 @@ export const OUTDOOR_EVENTS = [
     notice: '경고 현수막이 걸려 있다.',
     lines: ['어제 새벽에 봤다는 사람이 있어요.', '혼자 다니지 마세요.'] },
 ];
+
+// 흔한 일 + 좀처럼 없는 일
+export const INDOOR_EVENTS = INDOOR_EVENTS_BASE.concat(INDOOR_EVENTS_ODD);
+export const OUTDOOR_EVENTS = OUTDOOR_EVENTS_BASE.concat(OUTDOOR_EVENTS_ODD);

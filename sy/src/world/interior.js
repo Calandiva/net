@@ -1,7 +1,8 @@
 // 실내 생성 · 층 전환. 건물에 들어갈 때마다 그 층을 즉석에서 만든다.
 // 모든 건물이 시드로 만들어지므로 같은 건물의 같은 층은 언제나 같은 모습이다.
 
-import { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS } from '../config.js';
+import { SEED, INTERIOR, IN, IN_SOLID, KIND, ELEVATOR_KINDS, INTERIOR_THEMES }
+  from '../config.js';
 import { makeRng } from '../util/rng.js';
 import { ROOM_NAMES } from './data/names.js';
 
@@ -154,6 +155,7 @@ export function makeInterior(b, floor) {
 
   return {
     building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout, roomAt,
+    theme: themeOf(b, floor),
     // 문을 열면 걸어 닿을 수 있는 칸인가 (사람·물건을 여기에만 놓는다)
     canReach(x, y) {
       if (x < 0 || y < 0 || x >= w || y >= h) return false;
@@ -183,6 +185,15 @@ export function makeInterior(b, floor) {
 }
 
 function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// 이 건물의 실내 분위기 (바닥·벽 색). 지하 주차장은 어디든 콘크리트다.
+function themeOf(b, floor) {
+  if (floor < 0 && (b.basement || 0) > 0 && layoutOf(b.kind, floor, b) === 'parking') return 'factory';
+  for (const [theme, kinds] of Object.entries(INTERIOR_THEMES)) {
+    if (kinds.includes(b.kind)) return theme;
+  }
+  return 'home';
+}
 
 // 이 건물의 "1층" (지상 최저층)
 export function groundFloorOf(b) { return 1; }
@@ -411,40 +422,155 @@ function furnish(room, layout, set, get, rng, b) {
   const inside = (x, y) => x > room.x && x < room.x + room.w - 1 &&
     y > room.y && y < room.y + room.h - 1;
   const put = (x, y, v) => { if (inside(x, y) && get(x, y) === IN.FLOOR) set(x, y, v); };
+  const name = room.name || '';
+  const x0 = room.x + 1, y0 = room.y + 1;
+  const x1 = room.x + room.w - 2, y1 = room.y + room.h - 2;
+  const midX = room.x + Math.floor(room.w / 2), midY = room.y + Math.floor(room.h / 2);
+  const row = (y, v, step) => { for (let x = x0; x <= x1; x += (step || 1)) put(x, y, v); };
 
-  // 교실 — 책상을 줄 맞춰 놓고 앞에 교탁
-  if (b.kind === KIND.SCHOOL && /반$/.test(room.name || '')) {
-    for (let y = room.y + 2; y < room.y + room.h - 1; y += 2) {
-      for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+  // ── 학교 ───────────────────────────────────────────────
+  if (b.kind === KIND.SCHOOL) {
+    if (/반$/.test(name)) {                    // 교실 — 칠판과 줄 맞춘 책상
+      row(room.y + 1, IN.BOARD);
+      for (let y = room.y + 3; y <= y1; y += 2) {
+        for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+      }
+      put(midX, room.y + 2, IN.COUNTER);       // 교탁
+      return;
     }
-    put(room.x + Math.floor(room.w / 2), room.y + 1, IN.COUNTER);
+    if (name.includes('교무') || name.includes('행정')) {
+      for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+      put(x1, y0, IN.VENDING);
+      put(x0, y1, IN.BOOKS);
+      return;
+    }
+    if (name.includes('급식')) {
+      for (let y = y0 + 1; y <= y1; y += 3) row(y, IN.TABLE);
+      row(room.y + 1, IN.COUNTER);
+      return;
+    }
+    if (name.includes('도서') || name.includes('자료')) {
+      for (let y = y0; y <= y1; y += 2) row(y, IN.BOOKS, 1);
+      put(midX, y1, IN.TABLE);
+      return;
+    }
+    if (name.includes('과학') || name.includes('실습') || name.includes('음악')) {
+      for (let y = y0 + 1; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.TABLE);
+      put(x0, y0, IN.SINK);
+      row(room.y + 1, IN.BOARD);
+      return;
+    }
+    for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.DESK);
     return;
   }
-  // 세대 — 현관 쪽에 신발장, 안쪽에 침대와 식탁
-  if (b.kind === KIND.APARTMENT || b.kind === KIND.HOUSE) {
-    put(room.x + 1, room.y + 1, IN.SHELF);
-    put(room.x + room.w - 2, room.y + 1, IN.BED);
-    put(room.x + Math.floor(room.w / 2), room.y + Math.floor(room.h / 2), IN.TABLE);
-    if (rng.chance(0.5)) put(room.x + 1, room.y + room.h - 2, IN.PLANT);
+
+  // ── 집 · 세대 ──────────────────────────────────────────
+  if (b.kind === KIND.APARTMENT || b.kind === KIND.HOUSE || b.kind === KIND.FARMHOUSE) {
+    put(x0, y0, IN.SHELF);                     // 현관 신발장
+    put(x0 + 1, y0, IN.MAT);
+    if (room.w >= 6) {                          // 주방
+      put(x1, y0, IN.FRIDGE);
+      put(x1 - 1, y0, IN.SINK);
+    }
+    put(x1, y1, IN.BED);
+    put(midX, midY, IN.TABLE);
+    if (rng.chance(0.7)) put(midX - 1, midY + 1, IN.SOFA);
+    if (rng.chance(0.5)) put(x0, y1, IN.BOOKS);
+    if (rng.chance(0.5)) put(x0 + 1, y1, IN.PLANT);
+    if (rng.chance(0.4)) put(midX + 1, midY, IN.RUG);
     return;
   }
-  // 사무실·민원실 — 책상을 두 줄로
+
+  // ── 병원 ───────────────────────────────────────────────
+  if (b.kind === KIND.HOSPITAL || name.includes('병원') || name.includes('진료')) {
+    if (name.includes('병실') || name.includes('입원')) {
+      for (let y = y0; y <= y1; y += 2) { put(x0, y, IN.BED); put(x1, y, IN.BED); }
+      put(midX, midY, IN.PLANT);
+      return;
+    }
+    put(midX, y0, IN.DESK);
+    put(midX + 1, y0, IN.MACHINE);
+    for (let y = y0 + 2; y <= y1; y += 2) put(x0, y, IN.BENCH);
+    return;
+  }
+
+  // ── 사무실 · 관공서 · 오피스텔 ─────────────────────────
   if (b.kind === KIND.PUBLIC || b.kind === KIND.TOWER || b.kind === KIND.STATION) {
-    for (let y = room.y + 1; y < room.y + room.h - 1; y += 3) {
-      for (let x = room.x + 1; x < room.x + room.w - 1; x += 2) put(x, y, IN.DESK);
+    if (name.includes('민원') || name.includes('창구') || name.includes('대합')) {
+      row(room.y + 2, IN.COUNTER);
+      for (let y = y0 + 3; y <= y1; y += 2) row(y, IN.BENCH, 2);
+      put(x1, y1, IN.VENDING);
+      return;
     }
+    if (name.includes('회의') || name.includes('강당')) {
+      for (let y = y0 + 1; y <= y1 - 1; y++) put(midX, y, IN.TABLE);
+      for (let y = y0 + 1; y <= y1 - 1; y++) { put(midX - 2, y, IN.SEAT); put(midX + 2, y, IN.SEAT); }
+      row(room.y + 1, IN.BOARD);
+      return;
+    }
+    if (name.includes('휴게') || name.includes('탕비')) {
+      put(x0, y0, IN.VENDING); put(x0 + 1, y0, IN.SINK);
+      for (let y = y0 + 2; y <= y1; y += 2) row(y, IN.TABLE, 3);
+      return;
+    }
+    for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+    if (rng.chance(0.6)) put(x1, y1, IN.VENDING);
+    if (rng.chance(0.5)) put(x0, y1, IN.PLANT);
     return;
   }
 
+  // ── 상가 · 사무소 ──────────────────────────────────────
+  if (b.kind === KIND.SHOP || b.kind === KIND.MART) {
+    if (name.includes('옷') || name.includes('의류') || name.includes('가게')) {
+      for (let y = y0; y <= y1; y += 3) row(y, IN.RACK, 2);
+      put(x0, y1, IN.COUNTER);
+      return;
+    }
+    if (name.includes('식당') || name.includes('분식') || name.includes('카페')) {
+      for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 3) put(x, y, IN.TABLE);
+      row(room.y + 1, IN.COUNTER);
+      put(x1, y0, IN.FRIDGE);
+      return;
+    }
+    if (name.includes('학원') || name.includes('교습')) {
+      row(room.y + 1, IN.BOARD);
+      for (let y = y0 + 2; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) put(x, y, IN.DESK);
+      return;
+    }
+    for (let y = y0; y <= y1; y += 2) row(y, IN.SHELF, 2);
+    put(midX, y1, IN.COUNTER);
+    if (rng.chance(0.5)) put(x0, y0, IN.VENDING);
+    return;
+  }
+
+  // ── 공장 · 창고 ────────────────────────────────────────
+  if (b.kind === KIND.FACTORY || b.kind === KIND.WAREHOUSE) {
+    for (let y = y0; y <= y1; y += 3) {
+      for (let x = x0; x <= x1; x += 4) put(x, y, rng.chance(0.6) ? IN.MACHINE : IN.SHELF);
+    }
+    if (rng.chance(0.6)) put(x0, y1, IN.BOX);
+    if (rng.chance(0.5)) put(x1, y0, IN.LOCKER);
+    return;
+  }
+
+  // ── 교회 · 기도처 ──────────────────────────────────────
+  if (b.kind === KIND.CHURCH) {
+    for (let y = y0 + 1; y <= y1; y += 2) {
+      for (let x = x0; x <= x1; x++) { if (x !== midX) put(x, y, IN.BENCH); }
+    }
+    put(midX, y0, IN.COUNTER);
+    return;
+  }
+
+  // ── 그 밖 ──────────────────────────────────────────────
   const kit = furnitureKit(b.kind, room.name);
   const count = Math.max(1, Math.floor(room.w * room.h * 0.16));
   for (let i = 0; i < count; i++) {
-    const x = rng.int(room.x + 1, room.x + room.w - 2);
-    const y = rng.int(room.y + 1, room.y + room.h - 2);
+    const x = rng.int(x0, x1), y = rng.int(y0, y1);
     put(x, y, rng.pick(kit));
   }
-  if (rng.chance(0.4)) put(room.x + 1, room.y + 1, IN.PLANT);
-  if (rng.chance(0.3)) put(room.x + room.w - 2, room.y + room.h - 2, IN.RUG);
+  if (rng.chance(0.4)) put(x0, y0, IN.PLANT);
+  if (rng.chance(0.3)) put(x1, y1, IN.RUG);
 }
 
 function furnitureKit(kind, roomName) {
@@ -456,7 +582,7 @@ function furnitureKit(kind, roomName) {
     case KIND.PUBLIC: case KIND.STATION: return [IN.DESK, IN.COUNTER, IN.SHELF];
     case KIND.SHOP: case KIND.TOWER: case KIND.MART: return [IN.SHELF, IN.TABLE, IN.COUNTER];
     case KIND.FACTORY: case KIND.WAREHOUSE: return [IN.MACHINE, IN.SHELF];
-    case KIND.CHURCH: return [IN.TABLE, IN.PLANT];
+    case KIND.CHURCH: return [IN.BENCH, IN.PLANT];
     default: return [IN.DESK, IN.SHELF, IN.TABLE];
   }
 }

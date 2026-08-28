@@ -110,6 +110,28 @@ export const INTERIOR_COLOR = {
   [IN.BOX]: '#b98f5c',
   [IN.PUDDLE]: '#7fa8bd',
   [IN.CONE]: '#e2703a',
+  [IN.SOFA]: '#7f6f8c',
+  [IN.FRIDGE]: '#dfe4e8',
+  [IN.SINK]: '#b8c4cc',
+  [IN.BOOKS]: '#8a6a52',
+  [IN.BOARD]: '#3f5f4a',
+  [IN.VENDING]: '#c05a4a',
+  [IN.RACK]: '#a89a8a',
+  [IN.BENCH]: '#b08a5c',
+  [IN.MAT]: '#7f8a72',
+};
+
+// 건물 분위기별 바닥·벽 색. 같은 구조라도 색이 달라 보이게.
+export const THEME_COLOR = {
+  home:     { floor: '#e2d6bf', wall: '#a8927a' },   // 장판과 벽지
+  office:   { floor: '#cfd2d6', wall: '#8f959c' },   // 타일 카펫
+  school:   { floor: '#d8d2b8', wall: '#9aa88f' },   // 리놀륨
+  mart:     { floor: '#e8e4dc', wall: '#b8b2a6' },   // 밝은 타일
+  factory:  { floor: '#a8a49c', wall: '#7c7876' },   // 콘크리트
+  hospital: { floor: '#dfe6e8', wall: '#a8bcc2' },
+  station:  { floor: '#c8c4bc', wall: '#8a8f96' },   // 석재
+  church:   { floor: '#d8c8a8', wall: '#9a8464' },
+  park:     { floor: '#d2cdbc', wall: '#94957f' },
 };
 
 // ── 인물 ────────────────────────────────────────────────────────────────

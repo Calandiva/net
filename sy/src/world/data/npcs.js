@@ -7,9 +7,10 @@
 //   counter 카운터 옆 · machine 기계 옆 · room 방 안 · corridor 복도 · any 아무 데나
 
 import { KIND } from '../../config.js';
+import { EXTRA_LINES, EXTRA_ROLES, EXTRA_OUTDOOR } from './npcs_extra.js';
 
 // 건물 종류별 실내 인물
-export const INDOOR_ROLES = {
+const INDOOR_ROLES_BASE = {
   [KIND.MART]: [
     { id: 'cashier', name: '캐셔', where: 'counter', lines: [
       '봉투 필요하세요?',
@@ -222,7 +223,7 @@ export const INDOOR_ROLES = {
 };
 
 // 길에서 만나는 사람들 — 어느 동네냐에 따라 말이 다르다
-export const OUTDOOR_ROLES = {
+const OUTDOOR_ROLES_BASE = {
   city: [
     { id: 'resident', name: '주민', lines: [
       '구래역까지는 이 길로 쭉 가시면 돼요.',
@@ -269,3 +270,18 @@ export const OUTDOOR_ROLES = {
     ] },
   ],
 };
+
+// 대사를 더 붙이고, 역할도 더 얹는다 (npcs_extra.js)
+function merge(base, extra) {
+  const out = {};
+  for (const key of new Set([...Object.keys(base), ...Object.keys(extra || {})])) {
+    const roles = (base[key] || []).map((r) => (EXTRA_LINES[r.id]
+      ? { ...r, lines: r.lines.concat(EXTRA_LINES[r.id]) }
+      : r));
+    out[key] = roles.concat((extra && extra[key]) || []);
+  }
+  return out;
+}
+
+export const INDOOR_ROLES = merge(INDOOR_ROLES_BASE, EXTRA_ROLES);
+export const OUTDOOR_ROLES = merge(OUTDOOR_ROLES_BASE, EXTRA_OUTDOOR);

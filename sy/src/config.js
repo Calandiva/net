@@ -183,11 +183,28 @@ export const IN = {
   CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
   DOOR: 21, DOOR_OPEN: 22, LOCKER: 23,
   SMOKE: 24, BOX: 25, PUDDLE: 26, CONE: 27,
+  // 건물마다 다른 살림살이
+  SOFA: 28, FRIDGE: 29, SINK: 30, BOOKS: 31, BOARD: 32,
+  VENDING: 33, RACK: 34, BENCH: 35, MAT: 36,
 };
 export const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
   IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
   IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER,
-  IN.BOX, IN.CONE];
+  IN.BOX, IN.CONE,
+  IN.SOFA, IN.FRIDGE, IN.SINK, IN.BOOKS, IN.BOARD, IN.VENDING, IN.RACK, IN.BENCH];
+
+// 건물 종류별 실내 분위기 (바닥·벽 색). render/palette.js 가 색을 정한다.
+export const INTERIOR_THEMES = {
+  home: ['apartment', 'house', 'farmhouse'],
+  office: ['tower', 'public'],
+  school: ['school'],
+  mart: ['mart', 'shop'],
+  factory: ['factory', 'warehouse'],
+  hospital: ['hospital'],
+  station: ['station'],
+  church: ['church'],
+  park: ['park'],
+};
 
 // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
 export const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];

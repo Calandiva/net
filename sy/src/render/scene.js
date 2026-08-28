@@ -335,9 +335,9 @@ export class Scene {
         }
         // 벽·가구 아래에도 바닥을 먼저 깔아 둔다
         if (t !== IN.FLOOR && t !== IN.WALL) {
-          ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3), x * S, y * S);
+          ctx.drawImage(interiorTile(IN.FLOOR, (x + y) % 3, it.theme), x * S, y * S);
         }
-        ctx.drawImage(interiorTile(t, (x * 3 + y) % 3), x * S, y * S);
+        ctx.drawImage(interiorTile(t, (x * 3 + y) % 3, it.theme), x * S, y * S);
       }
     }
 
