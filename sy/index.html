@@ -168,6 +168,11 @@ const __M = Object.create(null);
     labelMax: 14,          // 한 화면에 그릴 이름표 최대 개수
     nightless: true,       // 낮 고정 (시간대 연출 없음)
     shadowAlpha: 0.18,
+    // 건물 뒤(북쪽)에 섰을 때 그 건물을 이만큼 투명하게 만든다.
+    // 탑뷰라 건물 북쪽 땅은 지붕에 가려 안 보이는데, 실제로는 걸어 다닐 수 있는 곳이다.
+    occludeAlpha: 0.38,
+    occludeFadeSpeed: 9,   // 초당 알파 변화 속도
+    occludePad: 3,         // 가림 판정에 두는 여유(픽셀)
   };
 
   // ── 건물 ────────────────────────────────────────────────────────────────
@@ -3333,6 +3338,41 @@ const __M = Object.create(null);
       this.buildings = buildings;
       this.cache = new Map();   // 구워 둔 청크 캔버스
       this.order = [];
+      this.fade = new Map();    // 건물 id → 지금 투명도 (뒤에 서면 서서히 비친다)
+    }
+
+    // 플레이어가 이 건물 뒤(북쪽)에 서서 지붕에 가려지는가
+    occludes(b, player) {
+      const wh = wallHeight(b);
+      const left = b.x * S, right = (b.x + b.w) * S;
+      const top = b.y * S - wh, bottom = (b.y + b.h) * S;
+      // 플레이어가 건물 바닥선보다 위(북쪽)에 있어야 가려진다
+      if (player.y >= bottom) return false;
+      const pad = RENDER.occludePad;
+      const px0 = player.x - PLAYER.drawWidth / 2 - pad;
+      const px1 = player.x + PLAYER.drawWidth / 2 + pad;
+      const py0 = player.y - PLAYER.drawHeight - pad;
+      const py1 = player.y + pad;
+      return px1 > left && px0 < right && py1 > top && py0 < bottom;
+    }
+
+    // 건물별 투명도를 부드럽게 따라가게 한다
+    buildingAlpha(b, player, dt) {
+      const target = this.occludes(b, player) ? RENDER.occludeAlpha : 1;
+      const current = this.fade.get(b.id);
+      if (current === undefined) {
+        this.fade.set(b.id, target);
+        return target;
+      }
+      const t = Math.min(1, dt * RENDER.occludeFadeSpeed);
+      const next = current + (target - current) * t;
+      // 다 돌아왔으면 지워서 Map 이 무한정 커지지 않게 한다
+      if (target === 1 && next > 0.995) {
+        this.fade.delete(b.id);
+        return 1;
+      }
+      this.fade.set(b.id, next);
+      return next;
     }
 
     // 청크 하나를 캔버스에 굽는다 (지면 + 소품)
@@ -3394,12 +3434,15 @@ const __M = Object.create(null);
       // 세로로 겹치는 것들을 발밑 높이 순으로 정렬해 그린다
       const items = [];
       const seen = new Set();
+      let hidden = false;   // 플레이어가 어느 건물엔가 가려졌는가
       for (let cy = cy0; cy <= cy1; cy++) {
         for (let cx = cx0; cx <= cx1; cx++) {
           for (const b of this.map.chunk(Math.max(0, cx), Math.max(0, cy)).buildings) {
             if (seen.has(b.id)) continue;
             seen.add(b.id);
-            items.push({ base: (b.y + b.h) * S, draw: () => this.drawBuilding(ctx, b) });
+            const alpha = this.buildingAlpha(b, state.player, state.dt || 0.016);
+            if (alpha < 0.95) hidden = true;
+            items.push({ base: (b.y + b.h) * S, draw: () => this.drawBuilding(ctx, b, alpha) });
           }
         }
       }
@@ -3418,19 +3461,38 @@ const __M = Object.create(null);
       items.sort((a, b) => a.base - b.base);
       for (const it of items) it.draw();
 
+      // 건물 뒤에 있으면 반투명 지붕 위로 한 번 더 그려 준다 — 자기 위치를 놓치지 않게
+      if (hidden) {
+        ctx.globalAlpha = 0.9;
+        this.drawPlayer(ctx, state.player);
+        ctx.globalAlpha = 1;
+      }
+
       ctx.restore();
     }
 
-    drawBuilding(ctx, b) {
+    drawBuilding(ctx, b, alpha = 1) {
       const sprite = buildingSprite(b);
       const wh = wallHeight(b);
       // 출입구 발판은 건물보다 먼저 (땅에 깔린 것)
       ctx.drawImage(doorMatSprite(), b.door.x * S, b.door.y * S);
-      ctx.globalAlpha = RENDER.shadowAlpha;
+      ctx.globalAlpha = RENDER.shadowAlpha * alpha;
       ctx.fillStyle = '#000000';
       ctx.fillRect(b.x * S + 2, (b.y + b.h) * S - 2, b.w * S, 4);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = alpha;
       ctx.drawImage(sprite, b.x * S, b.y * S - wh);
+      // 반투명해진 건물은 윤곽선을 남겨 어디까지가 건물인지 알 수 있게 한다
+      if (alpha < 0.95) {
+        const edge = (1 - alpha);
+        ctx.globalAlpha = edge * 0.9;
+        ctx.strokeStyle = UI_COLOR.labelShadow;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(b.x * S + 0.5, b.y * S - wh + 0.5, b.w * S - 1, b.h * S + wh - 1);
+        ctx.globalAlpha = edge * 0.5;
+        ctx.strokeStyle = UI_COLOR.label;
+        ctx.strokeRect(b.x * S + 1.5, b.y * S - wh + 1.5, b.w * S - 3, b.h * S + wh - 3);
+      }
+      ctx.globalAlpha = 1;
     }
 
     drawActor(ctx, a) {
@@ -4625,6 +4687,7 @@ const __M = Object.create(null);
   }
 
   function update(dt) {
+    state.dt = dt;              // 그리는 쪽에서 부드러운 전환에 쓴다
     const g = state.game;
     if (g.ending) return;
     if (state.showHelp || state.showGallery || state.picker) return;

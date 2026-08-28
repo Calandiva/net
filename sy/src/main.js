@@ -174,6 +174,7 @@ function loop(now) {
 }
 
 function update(dt) {
+  state.dt = dt;              // 그리는 쪽에서 부드러운 전환에 쓴다
   const g = state.game;
   if (g.ending) return;
   if (state.showHelp || state.showGallery || state.picker) return;
