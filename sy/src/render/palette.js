@@ -106,6 +106,10 @@ export const INTERIOR_COLOR = {
   [IN.DOOR]: '#8a6a45',
   [IN.DOOR_OPEN]: '#8a6a45',
   [IN.LOCKER]: '#7f8f9c',
+  [IN.SMOKE]: '#8c8c94',
+  [IN.BOX]: '#b98f5c',
+  [IN.PUDDLE]: '#7fa8bd',
+  [IN.CONE]: '#e2703a',
 };
 
 // ── 인물 ────────────────────────────────────────────────────────────────

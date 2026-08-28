@@ -56,7 +56,7 @@ export function drawHud(ctx, state) {
   if (state.showMinimap && state.minimap && state.mode === 'outdoor') drawMinimap(ctx, state, H, W);
 
   // ── 아래 가운데: 상호작용 안내 ────────────────────────────
-  if (state.prompt) {
+  if (state.prompt && !state.dialogue) {   // 말하는 중에는 안내를 감춘다
     const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
     const w = textWidth(ctx, text, 14) + 36;
     panel(ctx, (W - w) / 2, H - 76, w, 34);
@@ -139,7 +139,7 @@ function drawHelp(ctx, W, H, touch) {
   const lines = touch ? [
     ['이동', '왼쪽 화면을 끌기'],
     ['달리기', '많이 밀거나 달리기 버튼'],
-    ['들어가기 · 만지기', '만지기 버튼'],
+    ['들어가기 · 만지기 · 말 걸기', '만지기 버튼'],
     ['층 이동', '계단·엘리베이터 위에서 만지기'],
     ['지도', '지도 버튼 (지도를 눌러 목적지 표시)'],
     ['전체화면', '오른쪽 아래 ⛶'],
@@ -147,7 +147,7 @@ function drawHelp(ctx, W, H, touch) {
   ] : [
     ['이동', '방향키 · WASD'],
     ['달리기', 'Shift'],
-    ['들어가기 · 만지기', 'Space · Enter · E'],
+    ['들어가기 · 만지기 · 말 걸기', 'Space · Enter · E'],
     ['층 이동', '계단이나 엘리베이터 위에서 Space'],
     ['전체화면', 'F'],
     ['미니맵', 'M'],

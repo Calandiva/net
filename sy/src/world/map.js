@@ -304,6 +304,15 @@ export class WorldMap {
     return t ? t.ground : GROUND.FIELD;
   }
 
+  // 지금 서 있는 곳이 어떤 성격의 땅인가 (사람·사건을 고를 때 쓴다)
+  regionKindAt(tx, ty) {
+    let kind = 'field';
+    for (const r of this.regionIndex.queryPoint(tx, ty)) {
+      if (pointInPath(tx, ty, r.path)) kind = r.kind;
+    }
+    return kind;
+  }
+
   // 지금 서 있는 곳이 어느 구역인가 (이름 표시용)
   regionNameAt(tx, ty) {
     let found = '';

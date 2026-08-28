@@ -5,7 +5,7 @@ import { UI_COLOR, INTERIOR_COLOR, shade } from './palette.js';
 import {
   makeCanvas, groundTile, groundVariantAt, propSprite, PROP_H,
   buildingSprite, wallHeight, doorMatSprite, playerSheet_, npcSheet, catSprite,
-  interiorTile, gizmoSprite, carSprite, carDirIndex,
+  interiorTile, gizmoSprite, carSprite, carDirIndex, eventPropSprite,
 } from './sprites.js';
 
 const S = TILE.size;
@@ -286,6 +286,15 @@ export class Scene {
   }
 
   drawActor(ctx, a) {
+    if (a.kind === undefined) {   // 실내 사람
+      drawFromSheet(ctx, npcSheet(a.seed), a.x, a.y, a.dir, 0);
+      return;
+    }
+    if (a.kind === 'prop') {   // 길 위 사건의 흔적
+      const sprite = eventPropSprite(a.icon);
+      ctx.drawImage(sprite, Math.round(a.x - S / 2), Math.round(a.y - sprite.height + 8));
+      return;
+    }
     const sheet = a.kind === 'cat' ? null : npcSheet(a.seed);
     if (!sheet) {
       ctx.drawImage(catSprite(a.seed % 3), Math.round(a.x - 7), Math.round(a.y - 10));
@@ -337,7 +346,14 @@ export class Scene {
       ctx.drawImage(gizmoSprite(g.icon, state.game.used.has(g.id)), g.tx * S, g.ty * S - 4);
     }
 
-    this.drawPlayer(ctx, state.player);
+    // 실내 사람들과 플레이어를 발밑 높이 순으로
+    const inside = [{ base: state.player.y, draw: () => this.drawPlayer(ctx, state.player) }];
+    for (const person of state.indoorPeople) {
+      if (!it.visibleAt(person.tx, person.ty)) continue;   // 어두운 방 안은 안 보인다
+      inside.push({ base: person.y, draw: () => this.drawActor(ctx, person) });
+    }
+    inside.sort((a, b) => a.base - b.base);
+    for (const item of inside) item.draw();
 
     // 방 이름 — 방 한가운데 옅게
     ctx.font = `${8}px ${'monospace'}`;

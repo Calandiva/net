@@ -71,7 +71,10 @@ sy/
 │   │   ├── map.js       지역 데이터 → 타일 그리드 (청크 단위)
 │   │   ├── actors.js    지나가는 사람과 고양이
 │   │   ├── traffic.js   도로 위의 차
+│   │   ├── indoor.js    건물 안의 사람과 사건
 │   │   └── data/        구래동 지역 데이터 (JS 모듈) — data/README.md 참고
+│   │       ├── npcs.js    사람들의 역할과 대사
+│   │       └── events.js  건물·길에서 벌어지는 일
 │   ├── render/
 │   │   ├── camera.js
 │   │   ├── scene.js     청크 굽기, 그리는 순서
@@ -81,6 +84,7 @@ sy/
 │   │   ├── labels.js    건물·방 이름 표기
 │   │   ├── hud.js       시계, 미니맵, 목적지 표시, 안내, 알림
 │   │   ├── worldmap.js  전체지도 (구역·랜드마크·목적지 찍기)
+│   │   ├── dialogue.js  대화창
 │   │   ├── touch.js     모바일 조이스틱과 버튼
 │   │   ├── ending.js    결말 화면과 엔딩 목록
 │   │   └── fullscreen.js
@@ -188,6 +192,17 @@ Nominatim·Geofabrik)를 막아 데이터를 받을 수 없었다. 대신 **검�
 - 단지에는 관리사무소·경비실·어린이집·단지내상가가 함께 생기고, 마당에는 놀이터와
   주차 한 줄이 들어간다.
 
+### 사람과 사건
+
+- **사람**: `world/data/npcs.js` 에 건물 종류별 역할과 대사를 적는다. 실내 인물은
+  `world/indoor.js` 가 층마다 시드로 세우고, 길 위 사람은 `world/actors.js` 가 그 동네
+  성격(city·industrial·field·forest)에 맞춰 세운다. 말을 걸면 `ui/dialogue.js` 가 뜬다.
+- **사건**: `world/data/events.js` 에 적는다. 건물 한 층마다 시드로 하나 정해지고
+  (`LIFE.eventChance`), 눈에 보이는 흔적(연기·상자·물웅덩이·안전콘)과 사람들의 말로
+  드러난다. 길 위 사건은 청크마다 정해져 소품과 목격자가 함께 생긴다.
+- 실제 지리만 사실이고 사람과 사건은 전부 지어낸 것이다. 실제 인물·업체·사고와 무관하다.
+- 사건을 여섯 가지 넘게 보거나 여덟 명 넘게 말을 걸면 그 자체로 결말이 갈린다 (E29 · E30).
+
 ### 뭔가를 추가하려면
 
 | 하고 싶은 것 | 고칠 파일 |
@@ -197,6 +212,8 @@ Nominatim·Geofabrik)를 막아 데이터를 받을 수 없었다. 대신 **검�
 | 도로·지면·하천 | `world/data/roads.js`, `regions.js` |
 | 만질 물건(선택지) 추가 | `game/gizmos.js` 에 한 항목. 실내는 `{place, floor, slot}` |
 | 결말 추가 | `game/endings.js` 배열에 한 항목 (조건 함수 + 본문) |
+| 사람·대사 추가 | `world/data/npcs.js` |
+| 사건 추가 | `world/data/events.js` (실내는 kinds, 길은 where 로 장소를 정한다) |
 | 상호명 재료 | `world/data/names.js` |
 | 색·톤 | `render/palette.js` |
 | 속도·거리·시간 | `config.js` |

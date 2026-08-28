@@ -177,13 +177,25 @@ export const IN = {
   WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
   CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
   DOOR: 21, DOOR_OPEN: 22, LOCKER: 23,
+  SMOKE: 24, BOX: 25, PUDDLE: 26, CONE: 27,
 };
 export const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
   IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
-  IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER];
+  IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER,
+  IN.BOX, IN.CONE];
 
 // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
 export const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
+
+// ── 사람과 사건 ─────────────────────────────────────────────────────────
+export const LIFE = {
+  indoorPerRoom: 0.42,     // 방 하나에 사람이 있을 확률
+  indoorMax: 10,           // 한 층에 최대 몇 명
+  eventChance: 0.78,       // 건물 한 층에 사건이 있을 확률 (없으면 '평소와 같음')
+  outdoorEventChance: 0.3, // 청크마다 길 위에 사건이 있을 확률
+  talkRadius: 30,          // 말 걸 수 있는 거리(픽셀)
+  noticeRadius: 120,       // 길 위 사건이 눈에 들어오는 거리(픽셀)
+};
 
 // ── NPC ────────────────────────────────────────────────────────────────
 export const NPC = {

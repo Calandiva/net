@@ -744,6 +744,55 @@ export function catSprite(variant) {
   return catSprites[variant % catSprites.length];
 }
 
+// ── 길 위 사건 소품 ─────────────────────────────────────────────────────
+const eventPropCache = new Map();
+
+export function eventPropSprite(icon) {
+  let hit = eventPropCache.get(icon);
+  if (hit) return hit;
+  const { canvas, ctx } = makeCanvas(S, 24);
+  const base = 24;
+  switch (icon) {
+    case 'cone':
+      px(ctx, 3, base - 4, 10, 3, '#c85a2a');
+      px(ctx, 5, base - 12, 6, 8, '#e2703a');
+      px(ctx, 6, base - 16, 4, 4, '#e2703a');
+      px(ctx, 5, base - 9, 6, 2, '#f2f2ee');
+      break;
+    case 'stall':   // 좌판
+      px(ctx, 1, base - 9, 14, 6, '#b98f5c');
+      px(ctx, 1, base - 10, 14, 2, '#d8a86a');
+      px(ctx, 2, base - 3, 2, 3, '#7a5a3a');
+      px(ctx, 12, base - 3, 2, 3, '#7a5a3a');
+      px(ctx, 0, base - 17, S, 5, '#d8564a');   // 차양
+      px(ctx, 0, base - 13, S, 1, '#a8382c');
+      break;
+    case 'bowl':
+      px(ctx, 4, base - 6, 8, 4, '#c98f6a');
+      px(ctx, 5, base - 7, 6, 2, '#e8d8a8');
+      break;
+    case 'boxes':
+      px(ctx, 2, base - 10, 7, 7, '#b98f5c');
+      px(ctx, 8, base - 7, 6, 5, '#a87f4c');
+      px(ctx, 2, base - 10, 7, 1, '#d8a86a');
+      break;
+    case 'puddle':
+      ctx.globalAlpha = 0.75;
+      blob(ctx, 8, base - 4, 5, '#7fa8bd', null);
+      ctx.globalAlpha = 1;
+      break;
+    case 'crowd':   // 사람 많음 — 발자국 표시만
+      px(ctx, 4, base - 5, 3, 2, '#8a8477');
+      px(ctx, 9, base - 8, 3, 2, '#8a8477');
+      break;
+    default:
+      px(ctx, 5, base - 10, 6, 10, '#8a919c');
+  }
+  hit = canvas;
+  eventPropCache.set(icon, hit);
+  return hit;
+}
+
 // ── 자동차 ──────────────────────────────────────────────────────────────
 // 방향마다 미리 돌려서 구워 둔다. 매 프레임 회전시키면 도트가 지저분해진다.
 const CAR_DIRS = 16;
@@ -929,6 +978,39 @@ export function interiorTile(kind, variant) {
       for (let x = 1; x < S; x += 5) px(ctx, x + 1, 7, 2, 1, shade(base, -0.35));
       break;
     }
+    case IN.SMOKE: { // 연기 — 반쯤 비친다
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i < 7; i++) {
+        blob(ctx, rng.int(3, 13), rng.int(3, 13), rng.int(2, 4), base, rng);
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case IN.BOX: { // 쏟아진 상자
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 1, 4, 9, 8, base);
+      px(ctx, 1, 4, 9, 1, shade(base, 0.2));
+      px(ctx, 5, 4, 1, 8, shade(base, -0.25));
+      px(ctx, 9, 1, 6, 6, shade(base, -0.1));
+      break;
+    }
+    case IN.PUDDLE: { // 물웅덩이
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      ctx.globalAlpha = 0.7;
+      blob(ctx, 8, 9, 5, base, rng);
+      ctx.globalAlpha = 1;
+      px(ctx, 5, 6, 4, 1, shade(base, 0.35));
+      break;
+    }
+    case IN.CONE: { // 안전콘
+      px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+      px(ctx, 4, 12, 9, 3, shade(base, -0.2));
+      px(ctx, 6, 5, 5, 7, base);
+      px(ctx, 7, 2, 3, 3, base);
+      px(ctx, 6, 8, 5, 2, '#f2f2ee');
+      break;
+    }
     case IN.CAR: { // 주차된 차 (위에서 본 모습)
       px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
       px(ctx, 2, 1, 12, 14, base);
@@ -1034,6 +1116,7 @@ export function gizmoSprite(icon, active) {
 // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
 export function clearSpriteCaches() {
   groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
+  eventPropCache.clear();
   buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
   npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
 }

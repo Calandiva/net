@@ -1,7 +1,9 @@
 // 길에 사는 것들 — 지나가는 사람과 고양이.
 // 청크 단위로 시드에서 태어나고, 화면에서 멀어지면 사라진다.
 
-import { SEED, NPC, TILE, GROUND } from '../config.js';
+import { SEED, NPC, TILE, GROUND, LIFE } from '../config.js';
+import { OUTDOOR_ROLES } from './data/npcs.js';
+import { OUTDOOR_EVENTS } from './data/events.js';
 import { makeRng } from '../util/rng.js';
 
 const CH = TILE.chunk;
@@ -12,6 +14,7 @@ export class Actors {
   constructor(map) {
     this.map = map;
     this.chunks = new Map();   // 청크키 → 액터 배열
+    this.events = new Map();   // 청크키 → 그 자리에서 벌어지는 일
   }
 
   // 보이는 범위의 청크에 사는 것들을 준비한다
@@ -29,6 +32,7 @@ export class Actors {
       if (cx < cx0 - DESPAWN_CHUNKS || cx > cx1 + DESPAWN_CHUNKS ||
           cy < cy0 - DESPAWN_CHUNKS || cy > cy1 + DESPAWN_CHUNKS) {
         this.chunks.delete(key);
+        this.events.delete(key);
       }
     }
   }
@@ -43,14 +47,58 @@ export class Actors {
     }
     if (!spots.length) return [];
 
+    // 이 동네가 어떤 곳인지에 따라 다니는 사람이 다르다
+    const kind = this.map.regionKindAt(cx * CH + CH / 2, cy * CH + CH / 2);
+    const roles = OUTDOOR_ROLES[kind] || OUTDOOR_ROLES.city;
+
     const out = [];
     const count = Math.min(NPC.perChunk, Math.floor(spots.length / 40));
     for (let i = 0; i < count; i++) {
       const idx = rng.pick(spots);
-      out.push(this._make(cx, cy, idx, rng, 'npc'));
+      const actor = this._make(cx, cy, idx, rng, 'npc');
+      const role = rng.pick(roles);
+      actor.role = role.name;
+      actor.lines = role.lines.slice();
+      out.push(actor);
     }
     if (rng.chance(CAT_CHANCE)) {
       out.push(this._make(cx, cy, rng.pick(spots), rng, 'cat'));
+    }
+
+    // 길 위의 사건 — 소품과, 그 이야기를 하는 사람 한둘
+    if (rng.chance(LIFE.outdoorEventChance)) {
+      const pool = OUTDOOR_EVENTS.filter((e) => e.where === kind);
+      if (pool.length) {
+        const total = pool.reduce((sum, e) => sum + e.weight, 0);
+        let roll = rng() * total;
+        let event = pool[0];
+        for (const e of pool) { roll -= e.weight; if (roll <= 0) { event = e; break; } }
+
+        const idx = rng.pick(spots);
+        const tx = cx * CH + (idx % CH), ty = cy * CH + Math.floor(idx / CH);
+        this.events.set(cx * 100000 + cy, {
+          event, x: tx * TILE.size + TILE.size / 2, y: ty * TILE.size + TILE.size / 2,
+        });
+        if (event.prop) {
+          for (let i = 0; i < (event.prop === 'crowd' ? 1 : 3); i++) {
+            out.push({ kind: 'prop', icon: event.prop,
+              x: (tx + rng.int(-1, 1)) * TILE.size + TILE.size / 2,
+              y: (ty + rng.int(-1, 1)) * TILE.size + TILE.size / 2 });
+          }
+        }
+        const witnesses = event.prop === 'crowd' ? 3 : 2;
+        for (let i = 0; i < witnesses; i++) {
+          const actor = this._make(cx, cy, rng.pick(spots), rng, 'npc');
+          actor.x = (tx + rng.int(-2, 2)) * TILE.size;
+          actor.y = (ty + rng.int(-2, 2)) * TILE.size;
+          actor.homeX = actor.x; actor.homeY = actor.y;
+          const role = rng.pick(roles);
+          actor.role = role.name;
+          actor.lines = [rng.pick(event.lines.length ? event.lines : role.lines),
+            ...role.lines].slice(0, 3);
+          out.push(actor);
+        }
+      }
     }
     return out;
   }
@@ -79,6 +127,7 @@ export class Actors {
 
   update(dt, cx0, cy0, cx1, cy1) {
     for (const a of this.visible(cx0, cy0, cx1, cy1)) {
+      if (a.kind === 'prop') continue;
       a.anim += dt;
       if (a.wait > 0) { a.wait -= dt; a.moving = false; continue; }
 
@@ -106,6 +155,29 @@ export class Actors {
       a.x = nx; a.y = ny; a.moving = true;
       a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
     }
+  }
+
+  // 말 걸 수 있는 사람
+  nearestPerson(x, y, radius) {
+    let best = null, bestD = radius;
+    for (const list of this.chunks.values()) {
+      for (const a of list) {
+        if (a.kind !== 'npc') continue;
+        const d = Math.hypot(a.x - x, a.y - y);
+        if (d < bestD) { bestD = d; best = a; }
+      }
+    }
+    return best;
+  }
+
+  // 근처에서 벌어지는 일 (알림용)
+  nearestEvent(x, y, radius) {
+    let best = null, bestD = radius;
+    for (const [key, e] of this.events) {
+      const d = Math.hypot(e.x - x, e.y - y);
+      if (d < bestD) { bestD = d; best = { key, ...e }; }
+    }
+    return best;
   }
 
   // 플레이어 근처의 고양이 (쓰다듬기용)

@@ -2,12 +2,13 @@
 // 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
 
 import {
-  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
+  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE,
 } from './config.js';
 import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
 import { buildBuildings, doorOutside, floorLabel, floorUse } from './world/buildings.js';
 import { WorldMap, buildOverview } from './world/map.js';
 import { makeInterior, floorList } from './world/interior.js';
+import { pickIndoorEvent, applyEventProps, makeIndoorPeople } from './world/indoor.js';
 import { Actors } from './world/actors.js';
 import { Traffic } from './world/traffic.js';
 import { Camera } from './render/camera.js';
@@ -17,6 +18,7 @@ import { drawBuildingLabels, drawRoomLabels, drawText } from './ui/labels.js';
 import { drawHud, bakeOverview, panel } from './ui/hud.js';
 import { drawEnding, drawGallery } from './ui/ending.js';
 import { drawWorldMap, buildMapMarks, pickOnMap } from './ui/worldmap.js';
+import { drawDialogue, startDialogue, advanceDialogue } from './ui/dialogue.js';
 import { toggleFullscreen, onFullscreenChange } from './ui/fullscreen.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { GameState } from './game/state.js';
@@ -30,6 +32,7 @@ const state = {
   prompt: '', toasts: [],
   showHelp: true, showMinimap: true, showGallery: false, showWorldMap: false,
   interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
+  indoorPeople: [], indoorEvent: null, dialogue: null,
   picker: null, placeName: '', startPos: { x: 0, y: 0 },
 };
 
@@ -113,7 +116,7 @@ function init() {
   if (isTouchDevice()) {
     state.isTouch = true;
     touch = new TouchControls({
-      interact: () => interact(),
+      interact: () => { if (state.dialogue) advanceDialogue(state); else interact(); },
       worldmap: () => { state.showWorldMap = !state.showWorldMap; },
       help: () => { state.showHelp = !state.showHelp; },
     });
@@ -186,6 +189,7 @@ function bindTouchEvents() {
 
 // 열려 있는 화면(도움말·지도·층 선택·결말)에서의 터치 처리
 function handleTouchUi(x, y) {
+  if (state.dialogue) { advanceDialogue(state); return true; }
   if (state.showHelp) { state.showHelp = false; return true; }
   if (state.game.ending) { restart(); return true; }
   if (state.showGallery) { state.showGallery = false; return true; }
@@ -267,7 +271,11 @@ function onKeyDown(e) {
     return;
   }
 
-  if (KEYS.interact.includes(e.code)) { interact(); e.preventDefault(); }
+  if (KEYS.interact.includes(e.code)) {
+    if (state.dialogue) advanceDialogue(state);
+    else interact();
+    e.preventDefault();
+  }
 }
 
 function axis(negKeys, posKeys) {
@@ -290,6 +298,7 @@ function update(dt) {
   const g = state.game;
   if (g.ending) return;
   if (state.showHelp || state.showGallery || state.picker || state.showWorldMap) return;
+  if (state.dialogue) return;   // 말하는 동안에는 멈춘다
 
   g.tick(dt);
   if (state.exitCooldown > 0) state.exitCooldown -= dt;
@@ -309,6 +318,7 @@ function update(dt) {
     });
     cam.follow(state.player.x, state.player.y, dt);
     updatePlaceName();
+    noticeOutdoorEvent();
     checkGoal();
   } else {
     cam.follow(state.player.x, state.player.y, dt,
@@ -378,6 +388,10 @@ function nearestOutdoorTarget() {
       return { type: 'gizmo', gizmo: g, label: g.name };
     }
   }
+  // 길에서 만난 사람
+  const person = actors.nearestPerson(p.x, p.y, LIFE.talkRadius);
+  if (person) return { type: 'talk', person, label: person.role || '주민' };
+
   // 고양이
   const cat = actors.nearestCat(p.x, p.y, GAME.petRadius);
   if (cat && !state.game.used.has('cat:' + cat.id)) {
@@ -414,6 +428,14 @@ function nearestInteriorTarget() {
     }
   }
 
+  // 옆에 사람이 있으면 말을 걸 수 있다 (어두운 방 안 사람은 안 보인다)
+  for (const person of state.indoorPeople) {
+    if (!it.visibleAt(person.tx, person.ty)) continue;
+    if (Math.hypot(person.x - p.x, person.y - p.y) < LIFE.talkRadius) {
+      return { type: 'talk', person, label: person.role };
+    }
+  }
+
   const here = it.tileAt(tx, ty);
   if (here === IN.EXIT) return { type: 'exit', label: '나가기' };
   if (here === IN.STAIR_UP) return { type: 'stair', delta: 1, label: '올라가기' };
@@ -426,7 +448,8 @@ function updatePrompt() {
   const t = state.mode === 'outdoor' ? nearestOutdoorTarget() : nearestInteriorTarget();
   state.target = t;
   if (!t) { state.prompt = ''; return; }
-  const verb = t.type === 'door' ? '문 열기'
+  const verb = t.type === 'talk' ? '말 걸기'
+    : t.type === 'door' ? '문 열기'
     : t.type === 'enter' ? '들어가기'
     : t.type === 'exit' ? '나가기'
     : t.type === 'cat' ? '쓰다듬기'
@@ -446,8 +469,15 @@ function interact() {
     case 'elevator': return openPicker();
     case 'cat': return petCat(t.cat);
     case 'door': return openDoor(t);
+    case 'talk': return talkTo(t.person);
     case 'gizmo': return useGizmo(t.gizmo);
   }
+}
+
+// 사람에게 말 걸기
+function talkTo(person) {
+  startDialogue(state, person.role || '주민', person.lines);
+  state.game.bump('talked');
 }
 
 // 문을 열면 그 방이 보인다
@@ -498,6 +528,14 @@ function enterBuilding(b) {
 function setFloor(b, floor, place) {
   state.floor = floor;
   state.interior = makeInterior(b, floor);
+  // 오늘 이 층에 무슨 일이 있는가
+  state.indoorEvent = pickIndoorEvent(b, floor);
+  applyEventProps(state.interior, state.indoorEvent);
+  state.indoorPeople = makeIndoorPeople(b, floor, state.interior, state.indoorEvent);
+  if (state.indoorEvent && state.indoorEvent.notice) {
+    toast(state.indoorEvent.notice);
+    state.game.bump('seen_event');
+  }
   state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
     const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
       || state.interior.spawn;
@@ -551,6 +589,8 @@ function exitBuilding() {
   state.player.y = (out.y + 0.7) * S;
   state.interior = null;
   state.interiorGizmos = [];
+  state.indoorPeople = [];
+  state.indoorEvent = null;
   state.floor = 1;
   state.exitCooldown = INTERIOR.exitPause;
   cam.snap(state.player.x, state.player.y);
@@ -575,6 +615,18 @@ function rideTo(stationName) {
 }
 
 // ── 결말 ────────────────────────────────────────────────────────────────
+// 길에서 벌어지는 일이 눈에 들어오면 한 번 알려 준다
+const seenOutdoorEvents = new Set();
+function noticeOutdoorEvent() {
+  const near = actors.nearestEvent(state.player.x, state.player.y, LIFE.noticeRadius);
+  if (!near || seenOutdoorEvents.has(near.key)) return;
+  seenOutdoorEvents.add(near.key);
+  if (near.event.notice) {
+    toast(near.event.notice);
+    state.game.bump('seen_event');
+  }
+}
+
 function updatePlaceName() {
   const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
   state.placeName = map.regionNameAt(tx, ty) || '김포 들녘';
@@ -638,6 +690,7 @@ function draw() {
   }
 
   drawHud(ctx, state);
+  drawDialogue(ctx, state);
   if (state.picker) drawPicker();
   if (touch && !state.showWorldMap && !state.showGallery && !state.game.ending) {
     touch.draw(ctx, window.innerWidth, window.innerHeight);

@@ -223,13 +223,25 @@ const __M = Object.create(null);
     WINDOW: 12, BED: 13, TABLE: 14, MACHINE: 15,
     CAR: 16, PILLAR: 17, SEAT: 18, SCREEN: 19, CART: 20,
     DOOR: 21, DOOR_OPEN: 22, LOCKER: 23,
+    SMOKE: 24, BOX: 25, PUDDLE: 26, CONE: 27,
   };
   const IN_SOLID = [IN.VOID, IN.WALL, IN.COUNTER, IN.SHELF, IN.DESK,
     IN.PLANT, IN.WINDOW, IN.BED, IN.TABLE, IN.MACHINE,
-    IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER];
+    IN.CAR, IN.PILLAR, IN.SEAT, IN.SCREEN, IN.CART, IN.DOOR, IN.LOCKER,
+    IN.BOX, IN.CONE];
 
   // 엘리베이터가 있는 건물 — 층수가 많거나, 사람이 많이 드나드는 곳
   const ELEVATOR_KINDS = ['mart', 'tower', 'public', 'station', 'hospital'];
+
+  // ── 사람과 사건 ─────────────────────────────────────────────────────────
+  const LIFE = {
+    indoorPerRoom: 0.42,     // 방 하나에 사람이 있을 확률
+    indoorMax: 10,           // 한 층에 최대 몇 명
+    eventChance: 0.78,       // 건물 한 층에 사건이 있을 확률 (없으면 '평소와 같음')
+    outdoorEventChance: 0.3, // 청크마다 길 위에 사건이 있을 확률
+    talkRadius: 30,          // 말 걸 수 있는 거리(픽셀)
+    noticeRadius: 120,       // 길 위 사건이 눈에 들어오는 거리(픽셀)
+  };
 
   // ── NPC ────────────────────────────────────────────────────────────────
   const NPC = {
@@ -295,7 +307,7 @@ const __M = Object.create(null);
     intervalSeconds: 5,
   };
 
-  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.ELEVATOR_KINDS = ELEVATOR_KINDS; __M.NPC = NPC; __M.TRAFFIC = TRAFFIC; __M.UI = UI; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
+  __M.SEED = SEED; __M.GEO = GEO; __M.TILE = TILE; __M.GROUND = GROUND; __M.GROUND_SOLID = GROUND_SOLID; __M.PROP = PROP; __M.PROP_SOLID = PROP_SOLID; __M.PROP_RULES = PROP_RULES; __M.ROAD_CLASS = ROAD_CLASS; __M.PLAYER = PLAYER; __M.CAMERA = CAMERA; __M.RENDER = RENDER; __M.BUILDING = BUILDING; __M.KIND = KIND; __M.INTERIOR = INTERIOR; __M.IN = IN; __M.IN_SOLID = IN_SOLID; __M.ELEVATOR_KINDS = ELEVATOR_KINDS; __M.LIFE = LIFE; __M.NPC = NPC; __M.TRAFFIC = TRAFFIC; __M.UI = UI; __M.KEYS = KEYS; __M.GAME = GAME; __M.SAVE = SAVE;
 })();
 
 // ── util/rng.js ─────────────────────────────
@@ -580,6 +592,10 @@ const __M = Object.create(null);
     [IN.DOOR]: '#8a6a45',
     [IN.DOOR_OPEN]: '#8a6a45',
     [IN.LOCKER]: '#7f8f9c',
+    [IN.SMOKE]: '#8c8c94',
+    [IN.BOX]: '#b98f5c',
+    [IN.PUDDLE]: '#7fa8bd',
+    [IN.CONE]: '#e2703a',
   };
 
   // ── 인물 ────────────────────────────────────────────────────────────────
@@ -1344,6 +1360,555 @@ const __M = Object.create(null);
   ];
 
   __M.PLACES = PLACES;
+})();
+
+// ── world/data/npcs.js ─────────────────────────────
+(function () {
+  // 건물 안팎에 사는 사람들. 역할과 대사.
+  //
+  // 지리만 실제이고 사람·사건은 전부 지어낸 것이다. 실제 인물이나 업체를 가리키지 않는다.
+  // 대사는 짧게. 한 사람이 두세 줄 하고 끝난다.
+  //
+  // where 는 어디에 세울지 힌트다.
+  //   counter 카운터 옆 · machine 기계 옆 · room 방 안 · corridor 복도 · any 아무 데나
+
+  const { KIND } = __M;
+
+  // 건물 종류별 실내 인물
+  const INDOOR_ROLES = {
+    [KIND.MART]: [
+      { id: 'cashier', name: '캐셔', where: 'counter', lines: [
+        '봉투 필요하세요?',
+        '적립 카드 있으신가요?',
+        '오늘은 이상하게 사람이 없네요.',
+      ] },
+      { id: 'clerk', name: '판매사원', where: 'any', lines: [
+        '행사 상품은 저 안쪽 매대에 있습니다.',
+        '재고 확인해 드릴까요?',
+        '이거 오늘 들어온 겁니다.',
+      ] },
+      { id: 'sampler', many: true, name: '시식 코너 직원', where: 'any', lines: [
+        '한번 드셔 보세요. 오늘 것 잘 나왔어요.',
+        '두 개 사시면 하나 더 드립니다.',
+      ] },
+      { id: 'cartman', name: '카트 정리 직원', where: 'any', lines: [
+        '카트는 저쪽에 두시면 됩니다.',
+        '아침마다 카트가 어디론가 사라져요.',
+      ] },
+      { id: 'shopper', many: true, name: '장 보는 사람', where: 'any', lines: [
+        '만두를 사러 왔는데 어디 있는지 모르겠네.',
+        '이 시간에 장 보면 한산해서 좋아요.',
+        '애 학원 보내고 잠깐 나왔어요.',
+      ] },
+    ],
+
+    [KIND.APARTMENT]: [
+      { id: 'gamer', name: '컴퓨터 하는 사람', where: 'room', lines: [
+        '오늘은 재택이라 안 나가요.',
+        '한 판만 더 하고 자려고요.',
+      ] },
+      { id: 'sleeper', name: '자는 사람', where: 'room', lines: [
+        '...',
+        '(깊이 잠들어 있다)',
+        '으음... 다섯 시에 깨워 주세요...',
+      ] },
+      { id: 'cook', name: '밥 하는 사람', where: 'room', lines: [
+        '국이 넘칠 것 같은데.',
+        '점심 드시고 가실래요?',
+      ] },
+      { id: 'delivery', name: '택배 기사', where: 'corridor', lines: [
+        '문 앞에 두고 갑니다.',
+        '이 동은 엘리베이터가 느려요.',
+      ] },
+      { id: 'grandma', name: '어르신', where: 'corridor', lines: [
+        '이 단지 생길 때부터 살았어요.',
+        '여기 예전에는 다 논이었지.',
+      ] },
+    ],
+
+    [KIND.HOUSE]: [
+      { id: 'tv', name: 'TV 보는 사람', where: 'room', lines: [
+        '뉴스에 우리 동네 나왔어요.',
+        '조용히 좀 부탁해요.',
+      ] },
+      { id: 'student', name: '공부하는 학생', where: 'room', lines: [
+        '내일 시험이라서요.',
+        '집중이 안 되네.',
+      ] },
+      { id: 'landlord', name: '집주인', where: 'any', lines: [
+        '방 보러 오셨어요?',
+        '보일러는 작년에 갈았습니다.',
+      ] },
+    ],
+
+    [KIND.SCHOOL]: [
+      { id: 'guard', name: '수위 아저씨', where: 'corridor', lines: [
+        '방학이라 안에는 아무도 없어요.',
+        '들어오려면 명부에 적고 들어가세요.',
+        '종 치는 스위치, 그거 함부로 만지면 안 됩니다.',
+      ] },
+      { id: 'teacher', name: '선생님', where: 'room', lines: [
+        '방학인데도 일이 많네요.',
+        '복도에서 뛰지 마세요.',
+        '급식실은 1층 끝입니다.',
+      ] },
+      { id: 'pupil', many: true, name: '학생', where: 'any', lines: [
+        '보충수업 왔어요.',
+        '오늘 급식 뭐예요?',
+        '아저씨 누구세요?',
+      ] },
+      { id: 'cook2', name: '조리원', where: 'room', lines: [
+        '오늘은 백 명분만 합니다.',
+        '국 냄비가 하나 부족해요.',
+      ] },
+    ],
+
+    [KIND.FACTORY]: [
+      { id: 'worker', name: '근로자', where: 'machine', lines: [
+        '여기 안전모 없이 들어오시면 안 됩니다.',
+        '오전 물량은 다 뺐어요.',
+        '기계가 아침부터 이상한 소리를 내요.',
+      ] },
+      { id: 'foreman', name: '반장', where: 'any', lines: [
+        '어디서 오셨습니까?',
+        '오늘 라인 두 개만 돌립니다.',
+        '출입증 보여 주세요.',
+      ] },
+      { id: 'inspector', name: '검사원', where: 'any', lines: [
+        '치수가 0.2 밀리 나갔어요.',
+        '이 로트는 다시 봐야 합니다.',
+      ] },
+    ],
+
+    [KIND.WAREHOUSE]: [
+      { id: 'forklift', name: '지게차 기사', where: 'machine', lines: [
+        '뒤로 좀 물러나 주세요.',
+        '이 파렛트만 옮기고 쉬려고요.',
+      ] },
+      { id: 'picker', name: '피킹 담당', where: 'any', lines: [
+        '오늘 나갈 물량이 삼백 건입니다.',
+        '스캐너 배터리가 또 나갔네.',
+      ] },
+    ],
+
+    [KIND.PUBLIC]: [
+      { id: 'officer', name: '주무관', where: 'counter', lines: [
+        '무슨 일로 오셨어요?',
+        '전입신고는 이쪽에서 하시면 됩니다.',
+        '번호표 뽑고 기다려 주세요.',
+      ] },
+      { id: 'visitor', many: true, name: '민원인', where: 'any', lines: [
+        '서류 하나 떼러 왔는데 한참 기다리네요.',
+        '아침에 오면 빨리 끝나요.',
+      ] },
+      { id: 'helper', name: '안내 도우미', where: 'corridor', lines: [
+        '민원실은 1층입니다.',
+        '무인발급기는 저쪽에 있어요.',
+      ] },
+    ],
+
+    [KIND.STATION]: [
+      { id: 'staff', name: '역무원', where: 'counter', lines: [
+        '표는 발매기에서 뽑으시면 됩니다.',
+        '양촌 방면은 반대쪽 승강장이에요.',
+        '유실물은 하루 지나면 본사로 갑니다.',
+      ] },
+      { id: 'commuter', many: true, name: '출근하는 사람', where: 'any', lines: [
+        '이 시간 열차가 제일 붐벼요.',
+        '지각인데 열차가 안 와요.',
+      ] },
+      { id: 'cleaner', name: '청소 담당', where: 'any', lines: [
+        '방금 닦았으니 조심하세요.',
+        '아침마다 이 정도는 나와요.',
+      ] },
+    ],
+
+    [KIND.TOWER]: [
+      { id: 'tutor', name: '학원 강사', where: 'room', lines: [
+        '수업 십 분 뒤에 시작합니다.',
+        '여기 층마다 학원이 하나씩 있어요.',
+      ] },
+      { id: 'officeworker', name: '사무직', where: 'room', lines: [
+        '엘리베이터가 아침엔 정말 안 와요.',
+        '점심 뭐 드실지 정하셨어요?',
+      ] },
+      { id: 'usher', name: '영화관 직원', where: 'any', lines: [
+        '상영관은 저쪽입니다.',
+        '조조는 사람이 거의 없어요.',
+      ] },
+    ],
+
+    [KIND.SHOP]: [
+      { id: 'owner', name: '가게 주인', where: 'counter', lines: [
+        '아직 준비 중이에요.',
+        '점심때 오시면 자리 없어요.',
+        '이 건물은 오래됐지만 튼튼합니다.',
+      ] },
+      { id: 'parttime', name: '아르바이트생', where: 'any', lines: [
+        '사장님 잠깐 나가셨어요.',
+        '오늘 첫 손님이세요.',
+      ] },
+      { id: 'customer', many: true, name: '손님', where: 'any', lines: [
+        '여기 김밥이 괜찮아요.',
+        '이 골목은 저녁에 사람이 많아요.',
+      ] },
+    ],
+
+    [KIND.HOSPITAL]: [
+      { id: 'nurse', name: '간호사', where: 'counter', lines: [
+        '접수 도와드릴까요?',
+        '진료는 아홉 시부터입니다.',
+      ] },
+      { id: 'patient', many: true, name: '환자', where: 'any', lines: [
+        '어제부터 목이 아파서요.',
+        '조금만 기다리면 부른대요.',
+      ] },
+    ],
+
+    [KIND.CHURCH]: [
+      { id: 'keeper', name: '관리 집사', where: 'any', lines: [
+        '예배는 주말에 있습니다.',
+        '종은 정오에 한 번 칩니다.',
+      ] },
+    ],
+
+    [KIND.PARK_FACILITY]: [
+      { id: 'manager', name: '관리소 직원', where: 'counter', lines: [
+        '단지 방송은 여기서 나갑니다.',
+        '분리수거는 화요일입니다.',
+      ] },
+    ],
+
+    [KIND.FARMHOUSE]: [
+      { id: 'farmer', name: '농부', where: 'any', lines: [
+        '이맘때가 제일 바빠요.',
+        '올해는 비가 잦네.',
+      ] },
+    ],
+  };
+
+  // 길에서 만나는 사람들 — 어느 동네냐에 따라 말이 다르다
+  const OUTDOOR_ROLES = {
+    city: [
+      { id: 'resident', name: '주민', lines: [
+        '구래역까지는 이 길로 쭉 가시면 돼요.',
+        '이 동네는 밤에도 밝아요.',
+        '상가가 많아서 없는 게 없어요.',
+      ] },
+      { id: 'rider', name: '배달 기사', lines: [
+        '지금 세 건 밀렸어요.',
+        '이 골목은 일방통행이라 돌아가야 해요.',
+      ] },
+      { id: 'student2', name: '학생', lines: [
+        '학원 가는 길이에요.',
+        '버스가 방금 갔어요.',
+      ] },
+      { id: 'walker', name: '산책하는 사람', lines: [
+        '아침 공기가 좋네요.',
+        '저쪽 공원까지 한 바퀴 돌고 옵니다.',
+      ] },
+    ],
+    industrial: [
+      { id: 'shift', name: '교대 근무자', lines: [
+        '야간 끝나고 집에 가는 길입니다.',
+        '정문은 저쪽으로 돌아가야 해요.',
+      ] },
+      { id: 'driver', name: '화물차 기사', lines: [
+        '여기 주차할 데가 없어요.',
+        '상차 기다리는 중입니다.',
+      ] },
+    ],
+    field: [
+      { id: 'elder', name: '동네 어르신', lines: [
+        '여기는 예전 그대로예요.',
+        '저 앞 수로 따라가면 큰길 나와요.',
+      ] },
+      { id: 'farmer2', name: '농부', lines: [
+        '물 대러 나왔어요.',
+        '올해 모는 잘 자랐습니다.',
+      ] },
+    ],
+    forest: [
+      { id: 'hiker', name: '등산객', lines: [
+        '정상까지 이십 분이면 갑니다.',
+        '여기서 보면 신도시가 다 보여요.',
+      ] },
+    ],
+  };
+
+  __M.INDOOR_ROLES = INDOOR_ROLES; __M.OUTDOOR_ROLES = OUTDOOR_ROLES;
+})();
+
+// ── world/data/events.js ─────────────────────────────
+(function () {
+  // 그날 그 건물, 그 길에서 벌어지는 일.
+  //
+  // 지리만 실제이고 여기 적힌 사건은 전부 지어낸 것이다. 실제 사고나 업체와 무관하다.
+  // 사건은 시드에서 정해지므로 같은 판에서는 같은 자리에서 같은 일이 벌어진다.
+  //
+  // 필드
+  //   kinds  이 사건이 일어날 건물 종류 (없으면 아무 데나)
+  //   floors 'ground' 1층만 · 'any' 아무 층
+  //   weight 뽑힐 가중치
+  //   notice 들어서자마자 눈에 띄는 것 (알림으로 뜬다)
+  //   lines  안에 있는 사람들이 하는 말 (대화로 알아낸다)
+  //   prop   실내에 흩뿌릴 것 — smoke 연기 · boxes 쏟아진 상자 · puddle 물 · cone 안전콘
+  //          · dark 어두움 · crowd 사람 많음
+
+  const { KIND } = __M;
+
+  const INDOOR_EVENTS = [
+    // ── 마트 ────────────────────────────────────────────────────────
+    { id: 'mart-tasting', name: '시식 행사', kinds: [KIND.MART], weight: 6, prop: 'crowd',
+      notice: '시식 코너에 사람이 몰려 있다.',
+      lines: ['오늘 만두 시식 있어요. 두 개까지만요.',
+        '아침부터 줄이 이만큼이었어요.', '이거 먹고 가면 점심 안 먹어도 돼요.'] },
+    { id: 'mart-theft', name: '도난 소동', kinds: [KIND.MART], weight: 2,
+      notice: '직원 두 사람이 매대 사이를 빠르게 지나간다.',
+      lines: ['방금 누가 계산대 지나쳐 나갔대요.',
+        '보안 아저씨가 뛰어가는 거 보셨죠?', '없어진 게 뭔지도 아직 몰라요.'] },
+    { id: 'mart-freezer', name: '냉동고 고장', kinds: [KIND.MART], weight: 3, prop: 'puddle',
+      notice: '냉동 매대 앞 바닥이 젖어 있다.',
+      lines: ['냉동고 하나가 새벽부터 안 돌아요.',
+        '아이스크림은 오늘 다 반값입니다.', '기사님 부르긴 했는데 오후에나 온대요.'] },
+    { id: 'mart-cart', name: '카트 대란', kinds: [KIND.MART], weight: 3, prop: 'boxes',
+      notice: '통로 한가운데 카트가 엉켜 있다.',
+      lines: ['누가 카트를 여기다 스무 대를 몰아넣었어요.',
+        '정리하는 데만 한 시간 걸립니다.'] },
+    { id: 'mart-sale', name: '마감 세일', kinds: [KIND.MART], weight: 5, prop: 'crowd',
+      notice: '가격표에 빨간 스티커가 잔뜩 붙어 있다.',
+      lines: ['30% 붙은 건 저쪽 매대예요.', '이 시간에 오면 항상 이래요.'] },
+    { id: 'mart-lost', name: '미아 방송', kinds: [KIND.MART], weight: 3,
+      notice: '천장 스피커에서 아이 이름이 흘러나온다.',
+      lines: ['아이 찾는 방송이 벌써 세 번째예요.',
+        '보통은 장난감 코너에 있어요.', '금방 찾을 거예요. 늘 그래요.'] },
+
+    // ── 아파트 · 주택 ───────────────────────────────────────────────
+    { id: 'apt-noise', name: '층간소음 분쟁', kinds: [KIND.APARTMENT], weight: 4,
+      notice: '복도에서 누가 언성을 높이고 있다.',
+      lines: ['윗집이 새벽 두 시에 뭘 옮겨요.',
+        '관리사무소에 세 번 말했는데도 그대로예요.', '오늘은 그냥 넘어가려고요.'] },
+    { id: 'apt-moving', name: '이사', kinds: [KIND.APARTMENT, KIND.HOUSE], weight: 5, prop: 'boxes',
+      notice: '복도에 짐 상자가 줄지어 놓여 있다.',
+      lines: ['오늘 아침부터 사다리차가 와 있어요.',
+        '엘리베이터는 오후까지 못 씁니다.', '이 집 이사 나가는 거 다들 아쉬워해요.'] },
+    { id: 'apt-elevator', name: '엘리베이터 고장', kinds: [KIND.APARTMENT, KIND.TOWER], weight: 4,
+      notice: '엘리베이터 문에 안내문이 붙어 있다.',
+      lines: ['오늘은 계단으로 다녀야 해요.',
+        '점검 기사가 아침에 왔다가 부품 없다고 갔어요.'] },
+    { id: 'apt-leak', name: '누수', kinds: [KIND.APARTMENT, KIND.HOUSE, KIND.SHOP], weight: 3,
+      prop: 'puddle',
+      notice: '천장에서 물이 한 방울씩 떨어진다.',
+      lines: ['위층에서 물이 새요. 어제부터요.',
+        '벽지가 저렇게 부풀었어요.', '보험 처리 된다고는 하는데.'] },
+    { id: 'apt-parcel', name: '택배 분실', kinds: [KIND.APARTMENT], weight: 4,
+      notice: '무인택배함 앞에 사람이 서 있다.',
+      lines: ['분명 도착했다고 문자가 왔는데 없어요.',
+        'CCTV 돌려 보자고 했어요.', '지난주에도 한 건 있었대요.'] },
+    { id: 'apt-drill', name: '소방 점검', kinds: [KIND.APARTMENT, KIND.PUBLIC, KIND.SCHOOL],
+      weight: 4, prop: 'cone',
+      notice: '복도에 점검 표시가 세워져 있다.',
+      lines: ['세대마다 감지기 확인하고 있습니다.',
+        '잠깐만 문 열어 주시면 됩니다.'] },
+    { id: 'apt-cat', name: '고양이 소동', kinds: [KIND.APARTMENT, KIND.SHOP], weight: 3,
+      notice: '어디선가 고양이 우는 소리가 난다.',
+      lines: ['고양이가 어디 갇혔대요. 소리는 나는데 안 보여요.',
+        '지하 어디쯤인 것 같은데.', '사료 놔두면 나온대요.'] },
+    { id: 'house-quiet', name: '아무도 없음', kinds: [KIND.HOUSE, KIND.FARMHOUSE], weight: 6,
+      notice: '집 안이 조용하다. 아무도 없는 모양이다.',
+      lines: [] },
+
+    // ── 학교 ────────────────────────────────────────────────────────
+    { id: 'school-summer', name: '방학 보충수업', kinds: [KIND.SCHOOL], weight: 6,
+      notice: '교실 하나에만 불이 켜져 있다.',
+      lines: ['방학인데도 나오는 애들이 있어요.',
+        '오전 두 시간만 하고 끝납니다.'] },
+    { id: 'school-drill', name: '대피 훈련', kinds: [KIND.SCHOOL], weight: 3, prop: 'crowd',
+      notice: '복도에 줄이 서 있다.',
+      lines: ['이따 종 울리면 다 운동장으로 나갑니다.',
+        '작년엔 진짜인 줄 알고 울었어요.'] },
+    { id: 'school-bee', name: '벌집 제거', kinds: [KIND.SCHOOL], weight: 2, prop: 'cone',
+      notice: '창가 쪽이 통제되어 있다.',
+      lines: ['처마에 벌집이 생겼어요. 이만해요.',
+        '소방서에서 온다고 했는데 아직이에요.'] },
+    { id: 'school-window', name: '창문 파손', kinds: [KIND.SCHOOL], weight: 2, prop: 'boxes',
+      notice: '유리 조각이 쓸려 한쪽에 모여 있다.',
+      lines: ['어제 축구공이 날아왔어요.',
+        '누가 찼는지는 다들 안대요.'] },
+    { id: 'school-fest', name: '학예회 준비', kinds: [KIND.SCHOOL], weight: 3, prop: 'boxes',
+      notice: '강당 쪽에서 음악이 들린다.',
+      lines: ['다음 주가 발표회예요.',
+        '무대 옮기는 것 좀 도와주실래요?'] },
+
+    // ── 공장 · 창고 ─────────────────────────────────────────────────
+    { id: 'factory-spill', name: '화물 전복', kinds: [KIND.FACTORY, KIND.WAREHOUSE], weight: 3,
+      prop: 'boxes',
+      notice: '파렛트 하나가 통째로 쏟아져 있다.',
+      lines: ['지게차가 돌다가 걸렸어요. 다친 사람은 없습니다.',
+        '오늘 출하는 두 시간 밀렸어요.', '이거 다시 쌓는 게 일이죠.'] },
+    { id: 'factory-stop', name: '라인 정지', kinds: [KIND.FACTORY], weight: 4,
+      notice: '기계가 전부 멈춰 있다.',
+      lines: ['설비가 아침부터 말썽이에요.',
+        '부품 하나 때문에 라인 전체가 섰습니다.', '기사 오면 삼십 분이면 돌아요.'] },
+    { id: 'factory-check', name: '정기 점검', kinds: [KIND.FACTORY, KIND.WAREHOUSE], weight: 4,
+      prop: 'cone',
+      notice: '점검 중 표시가 곳곳에 붙어 있다.',
+      lines: ['오늘은 안전점검이라 물량이 적어요.',
+        '이쪽은 잠깐 못 지나갑니다.'] },
+    { id: 'factory-party', name: '회식 공지', kinds: [KIND.FACTORY, KIND.WAREHOUSE], weight: 3,
+      notice: '게시판에 손글씨 공지가 붙어 있다.',
+      lines: ['오늘 저녁에 회식이래요.',
+        '작년에 갔던 그 집이라던데.'] },
+    { id: 'factory-delay', name: '납품 지연', kinds: [KIND.FACTORY], weight: 3,
+      notice: '사무실 쪽 전화가 계속 울린다.',
+      lines: ['원자재가 안 들어와서요.',
+        '이번 주 안에는 맞춘다고 했는데.'] },
+    { id: 'ware-count', name: '재고 실사', kinds: [KIND.WAREHOUSE], weight: 4,
+      notice: '선반마다 노란 표가 붙어 있다.',
+      lines: ['오늘 하루 종일 세고 있습니다.',
+        '숫자가 자꾸 하나씩 안 맞아요.'] },
+    { id: 'ware-scanner', name: '스캐너 먹통', kinds: [KIND.WAREHOUSE], weight: 3,
+      notice: '직원들이 종이에 손으로 적고 있다.',
+      lines: ['전산이 아침부터 안 돼요.',
+        '손으로 적다 보면 꼭 틀리죠.'] },
+
+    // ── 관공서 · 역 ─────────────────────────────────────────────────
+    { id: 'public-rush', name: '민원 폭주', kinds: [KIND.PUBLIC], weight: 4, prop: 'crowd',
+      notice: '대기 번호가 예순 번대까지 밀려 있다.',
+      lines: ['오늘 무슨 날인지 사람이 많네요.',
+        '무인발급기 쓰시면 빨라요.'] },
+    { id: 'public-lost', name: '서류 분실', kinds: [KIND.PUBLIC], weight: 2,
+      notice: '창구 뒤에서 서류함을 뒤지고 있다.',
+      lines: ['어제 접수한 게 안 보인대요.',
+        '다시 써 주셔야 할 것 같아요. 죄송합니다.'] },
+    { id: 'station-delay', name: '열차 지연', kinds: [KIND.STATION], weight: 5, prop: 'crowd',
+      notice: '전광판에 지연 안내가 떠 있다.',
+      lines: ['앞차에 사람이 끼어서 늦어졌대요.',
+        '십 분째 이러고 있어요.', '이럴 줄 알고 일찍 나왔어요.'] },
+    { id: 'station-lost', name: '유실물 대소동', kinds: [KIND.STATION], weight: 3,
+      notice: '역무실 앞에 사람들이 서 있다.',
+      lines: ['가방을 열차에 두고 내렸대요.',
+        '종점까지 가면 나온다니까 기다려 보세요.'] },
+    { id: 'station-gate', name: '개찰구 고장', kinds: [KIND.STATION], weight: 3, prop: 'cone',
+      notice: '개찰구 하나에 고장 표시가 붙어 있다.',
+      lines: ['저쪽 통로로 돌아가세요.',
+        '아침마다 한 대씩 이래요.'] },
+
+    // ── 상가 · 타워 ─────────────────────────────────────────────────
+    { id: 'shop-open', name: '오픈 준비', kinds: [KIND.SHOP], weight: 6,
+      notice: '의자가 아직 테이블 위에 올라가 있다.',
+      lines: ['열한 시부터 영업합니다.',
+        '재료 손질만 끝나면 바로 열어요.'] },
+    { id: 'shop-sign', name: '간판 교체', kinds: [KIND.SHOP], weight: 3, prop: 'cone',
+      notice: '입구 앞에 사다리가 세워져 있다.',
+      lines: ['간판 글씨가 하나 떨어졌어요.',
+        '오늘 새로 답니다.'] },
+    { id: 'tower-exam', name: '학원 시험', kinds: [KIND.TOWER], weight: 4,
+      notice: '복도가 지나치게 조용하다.',
+      lines: ['지금 시험 중이라 조용히 부탁드려요.',
+        '한 시간 뒤면 다 나옵니다.'] },
+    { id: 'tower-preview', name: '시사회', kinds: [KIND.TOWER], weight: 2, prop: 'crowd',
+      notice: '상영관 앞에 줄이 길다.',
+      lines: ['오늘 시사회라 예매가 다 찼어요.',
+        '표 없으면 못 들어갑니다.'] },
+
+    // ── 어디서나 (드물게) ───────────────────────────────────────────
+    { id: 'any-fire', name: '화재', weight: 1, prop: 'smoke',
+      notice: '어디선가 탄 냄새가 나고, 위쪽이 뿌옇다.',
+      lines: ['방금 경보가 울렸어요. 다들 나가는 중입니다.',
+        '연기는 저 안쪽에서 나요.', '소방차 불렀어요. 나가시는 게 좋겠어요.'] },
+    { id: 'any-blackout', name: '정전', weight: 2, prop: 'dark',
+      notice: '불이 나가 있다. 비상등만 켜져 있다.',
+      lines: ['한 시간째 이러고 있어요.',
+        '이 건물만 그렇대요.', '차단기를 누가 내렸다는 말도 있고요.'] },
+    { id: 'any-clean', name: '청소 중', weight: 5, prop: 'cone',
+      notice: '바닥이 젖어 있고 안전콘이 서 있다.',
+      lines: ['미끄러우니 천천히 지나가세요.',
+        '금방 마릅니다.'] },
+    { id: 'any-repair', name: '공사 중', weight: 4, prop: 'cone',
+      notice: '한쪽 벽이 뜯겨 있고 공구가 널려 있다.',
+      lines: ['배관 바꾸는 중입니다.',
+        '이번 주까지는 이래요.'] },
+    { id: 'any-rat', name: '쥐 소동', weight: 2, prop: 'boxes',
+      notice: '구석에 덫이 놓여 있다.',
+      lines: ['어젯밤에 뭔가 지나갔대요.',
+        '이 건물 지은 지 오래돼서요.'] },
+    { id: 'any-sound', name: '정체불명의 소리', weight: 2,
+      notice: '어디선가 규칙적인 소리가 난다. 발밑에서 나는 것 같기도 하다.',
+      lines: ['이 소리 들리세요? 저만 들리는 게 아니었네요.',
+        '설비실 쪽이라는데 열쇠가 없어요.', '며칠 됐어요. 이제 익숙해요.'] },
+    { id: 'any-quiet', name: '평소와 같음', weight: 7,
+      notice: '', lines: [] },
+  ];
+
+  // 길 위에서 벌어지는 일. where 는 어느 지역에서 벌어지는가.
+  const OUTDOOR_EVENTS = [
+    { id: 'road-work', name: '도로 공사', where: 'city', prop: 'cone', weight: 5,
+      notice: '한 차로가 막혀 있다.',
+      lines: ['상수도 관 교체 중입니다.', '이번 주말까지 이래요.'] },
+    { id: 'street-stall', name: '노점', where: 'city', prop: 'stall', weight: 5,
+      notice: '길가에 좌판이 펼쳐져 있다.',
+      lines: ['오늘 뽑기 잘 나와요.', '이 자리에서 십 년 했어요.'] },
+    { id: 'accident', name: '접촉 사고', where: 'city', prop: 'cone', weight: 3,
+      notice: '차 두 대가 비상등을 켜고 서 있다.',
+      lines: ['다친 사람은 없대요.', '보험사 기다리는 중이에요.'] },
+    { id: 'fire-truck', name: '소방차 출동', where: 'city', prop: 'cone', weight: 2,
+      notice: '멀리서 사이렌이 가까워진다.',
+      lines: ['저쪽 상가에서 연기가 났대요.', '별일 아니었으면 좋겠네요.'] },
+    { id: 'kids-walk', name: '어린이집 산책', where: 'city', prop: 'crowd', weight: 4,
+      notice: '노란 조끼를 입은 아이들이 줄지어 지나간다.',
+      lines: ['한 줄로 가자, 한 줄로.', '저기 아저씨한테 인사해야지.'] },
+    { id: 'cat-feed', name: '길고양이 밥주기', where: 'city', prop: 'bowl', weight: 4,
+      notice: '화단 옆에 사료 그릇이 놓여 있다.',
+      lines: ['이 근처에 네 마리가 살아요.', '밤에 오면 다 나와요.'] },
+    { id: 'bus-broken', name: '버스 고장', where: 'city', prop: 'cone', weight: 2,
+      notice: '버스 한 대가 비상등을 켜고 서 있다.',
+      lines: ['다음 차 타라고 해서 내렸어요.', '기사님이 계속 전화 중이에요.'] },
+    { id: 'moving-truck', name: '이삿짐 사다리차', where: 'city', prop: 'cone', weight: 3,
+      notice: '사다리차가 위층까지 뻗어 있다.',
+      lines: ['오늘 하루 종일 걸린대요.', '이 밑으로는 지나가지 마세요.'] },
+    { id: 'flyer', name: '전단지 배포', where: 'city', prop: null, weight: 4,
+      notice: '누가 전단지를 내민다.',
+      lines: ['새로 연 가게예요. 한번 와 보세요.', '오픈 기념으로 커피 드려요.'] },
+    { id: 'tree-cut', name: '가로수 전지', where: 'city', prop: 'cone', weight: 3,
+      notice: '잘린 가지가 인도에 쌓여 있다.',
+      lines: ['가지가 신호등을 가려서요.', '오늘 이 구간만 합니다.'] },
+    { id: 'water-clean', name: '노면 물청소', where: 'city', prop: 'puddle', weight: 3,
+      notice: '길이 젖어 있고 물차가 지나간 자국이 있다.',
+      lines: ['방금 지나갔어요.', '여름엔 매일 합니다.'] },
+    { id: 'lost-dog', name: '강아지를 찾습니다', where: 'city', prop: null, weight: 3,
+      notice: '전봇대마다 같은 종이가 붙어 있다.',
+      lines: ['어제 저녁에 없어졌어요.', '흰색이고 목줄이 파란색이에요.'] },
+    { id: 'night-market', name: '야시장 준비', where: 'city', prop: 'stall', weight: 2,
+      notice: '천막을 세우는 중이다.',
+      lines: ['저녁 여섯 시부터 엽니다.', '작년보다 자리가 늘었어요.'] },
+    { id: 'truck-queue', name: '화물차 대기 줄', where: 'industrial', prop: null, weight: 5,
+      notice: '화물차가 길가에 줄지어 서 있다.',
+      lines: ['상차 순번 기다리는 중입니다.', '아침엔 늘 이래요.'] },
+    { id: 'shift-change', name: '교대 시간', where: 'industrial', prop: 'crowd', weight: 4,
+      notice: '정문 쪽으로 사람들이 몰려 나온다.',
+      lines: ['지금이 교대 시간이에요.', '조금 있다 오면 한산해요.'] },
+    { id: 'spill-road', name: '적재물 낙하', where: 'industrial', prop: 'boxes', weight: 2,
+      notice: '길 위에 상자가 흩어져 있다.',
+      lines: ['앞차에서 떨어졌어요.', '치우는 중이니 돌아가세요.'] },
+    { id: 'rice-work', name: '논일', where: 'field', prop: null, weight: 5,
+      notice: '논 가운데에서 누가 일하고 있다.',
+      lines: ['물꼬 보러 나왔어요.', '올해는 비가 알맞게 왔어요.'] },
+    { id: 'heron', name: '왜가리', where: 'field', prop: null, weight: 4,
+      notice: '수로 옆에 큰 새가 서 있다.',
+      lines: ['저 새는 여기 늘 있어요.', '사람 와도 안 도망가요.'] },
+    { id: 'tractor', name: '트랙터 이동', where: 'field', prop: null, weight: 3,
+      notice: '트랙터가 천천히 길을 막고 간다.',
+      lines: ['금방 비켜 드릴게요.', '이 길로 다니는 게 제일 빨라요.'] },
+    { id: 'hiker-group', name: '등산 모임', where: 'forest', prop: 'crowd', weight: 4,
+      notice: '등산복 차림 사람들이 모여 있다.',
+      lines: ['정상에서 사진 찍고 내려갑니다.', '같이 가실래요?'] },
+    { id: 'wild-boar', name: '멧돼지 주의', where: 'forest', prop: 'cone', weight: 2,
+      notice: '경고 현수막이 걸려 있다.',
+      lines: ['어제 새벽에 봤다는 사람이 있어요.', '혼자 다니지 마세요.'] },
+  ];
+
+  __M.INDOOR_EVENTS = INDOOR_EVENTS; __M.OUTDOOR_EVENTS = OUTDOOR_EVENTS;
 })();
 
 // ── world/data/index.js ─────────────────────────────
@@ -2266,6 +2831,15 @@ const __M = Object.create(null);
       return t ? t.ground : GROUND.FIELD;
     }
 
+    // 지금 서 있는 곳이 어떤 성격의 땅인가 (사람·사건을 고를 때 쓴다)
+    regionKindAt(tx, ty) {
+      let kind = 'field';
+      for (const r of this.regionIndex.queryPoint(tx, ty)) {
+        if (pointInPath(tx, ty, r.path)) kind = r.kind;
+      }
+      return kind;
+    }
+
     // 지금 서 있는 곳이 어느 구역인가 (이름 표시용)
     regionNameAt(tx, ty) {
       let found = '';
@@ -2749,12 +3323,146 @@ const __M = Object.create(null);
   __M.floorList = floorList; __M.makeInterior = makeInterior; __M.groundFloorOf = groundFloorOf;
 })();
 
+// ── world/indoor.js ─────────────────────────────
+(function () {
+  // 건물 안의 사람과 사건.
+  //
+  // 층마다 시드로 정해진다. 같은 판에서 같은 건물에 다시 들어가면 같은 사람, 같은 사건이다.
+  // 사건은 눈에 보이는 것(연기·상자·물웅덩이)과 사람들의 말로 알 수 있다.
+
+  const { SEED, LIFE, IN, KIND } = __M;
+  const { makeRng } = __M;
+  const { INDOOR_ROLES } = __M;
+  const { INDOOR_EVENTS } = __M;
+
+  // 이 건물, 이 층에 오늘 무슨 일이 있는가
+  function pickIndoorEvent(b, floor) {
+    const rng = makeRng(SEED, 'event', b.seed, b.name, floor);
+    if (!rng.chance(LIFE.eventChance)) return null;
+    const pool = INDOOR_EVENTS.filter((e) => !e.kinds || e.kinds.includes(b.kind));
+    const total = pool.reduce((sum, e) => sum + e.weight, 0);
+    let roll = rng() * total;
+    for (const e of pool) {
+      roll -= e.weight;
+      if (roll <= 0) return e.id === 'any-quiet' ? null : e;
+    }
+    return null;
+  }
+
+  // 사건이 남긴 흔적을 실내에 흩뿌린다
+  function applyEventProps(interior, event) {
+    if (!event || !event.prop) return;
+    const rng = makeRng(SEED, 'eventprop', interior.building.seed, interior.floor, event.id);
+    const { w, h } = interior;
+    const put = (x, y, tile) => {
+      if (interior.tileAt(x, y) !== IN.FLOOR) return;
+      interior.setTile(x, y, tile);
+    };
+    const scatter = (tile, count) => {
+      for (let i = 0; i < count; i++) put(rng.int(1, w - 2), rng.int(1, h - 2), tile);
+    };
+    switch (event.prop) {
+      case 'smoke': scatter(IN.SMOKE, Math.floor(w * h * 0.05)); break;
+      case 'boxes': scatter(IN.BOX, Math.floor(w * h * 0.03)); break;
+      case 'puddle': scatter(IN.PUDDLE, Math.floor(w * h * 0.02)); break;
+      case 'cone': scatter(IN.CONE, Math.max(3, Math.floor(w * h * 0.008))); break;
+      default: break;   // dark, crowd 는 사람 수와 밝기로 표현한다
+    }
+  }
+
+  // 이 층에 있는 사람들
+  function makeIndoorPeople(b, floor, interior, event) {
+    const roles = INDOOR_ROLES[b.kind];
+    if (!roles || !roles.length) return [];
+    const rng = makeRng(SEED, 'people', b.seed, b.name, floor);
+    const crowded = event && event.prop === 'crowd';
+    const people = [];
+
+    // 카운터·기계 옆에 설 사람부터
+    const spots = collectSpots(interior);
+    // 방이 많으면 방 수대로, 통짜 공간(마트·주차장)이면 넓이대로
+    const byRooms = Math.round(interior.rooms.length * LIFE.indoorPerRoom);
+    const byArea = Math.round((interior.w * interior.h) / 260);
+    const max = Math.min(LIFE.indoorMax,
+      Math.max(2, Math.max(byRooms, byArea) + (crowded ? 4 : 0)));
+
+    // 역할은 되도록 겹치지 않게 (손님·학생처럼 여럿이어도 되는 역할만 반복한다)
+    let deck = rng.shuffle(roles);
+    for (let i = 0; i < max; i++) {
+      if (!deck.length) deck = rng.shuffle(roles.filter((r) => r.many)).concat(rng.shuffle(roles));
+      const role = deck.shift();
+      const spot = pickSpot(spots, role.where, rng);
+      if (!spot) break;
+      const lines = role.lines.slice();
+      // 사건을 아는 사람은 그 이야기를 한다
+      if (event && event.lines.length && rng.chance(0.62)) {
+        lines.unshift(rng.pick(event.lines));
+      }
+      people.push({
+        x: (spot.x + 0.5) * 16, y: (spot.y + 0.9) * 16,
+        tx: spot.x, ty: spot.y,
+        role: role.name, lines, seed: rng.int(0, 9999),
+        dir: rng.pick(['down', 'left', 'right', 'up']),
+        anim: rng.range(0, 3), moving: false,
+      });
+    }
+    return people;
+  }
+
+  // 사람을 세울 만한 자리들을 모아 둔다
+  function collectSpots(interior) {
+    const { w, h, tiles } = interior;
+    const near = (x, y, kind) => {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (interior.tileAt(x + dx, y + dy) === kind) return true;
+      }
+      return false;
+    };
+    const spots = { counter: [], machine: [], room: [], corridor: [], any: [] };
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (tiles[y * w + x] !== IN.FLOOR) continue;
+        const idx = interior.roomIndexAt(x, y);
+        const spot = { x, y, room: idx };
+        if (near(x, y, IN.COUNTER)) spots.counter.push(spot);
+        else if (near(x, y, IN.MACHINE) || near(x, y, IN.SHELF)) spots.machine.push(spot);
+        else if (idx >= 0) spots.room.push(spot);
+        else spots.corridor.push(spot);
+        spots.any.push(spot);
+      }
+    }
+    return spots;
+  }
+
+  function pickSpot(spots, where, rng) {
+    const order = where === 'counter' ? ['counter', 'corridor', 'any']
+      : where === 'machine' ? ['machine', 'room', 'any']
+      : where === 'room' ? ['room', 'any']
+      : where === 'corridor' ? ['corridor', 'any']
+      : ['any'];
+    for (const key of order) {
+      const list = spots[key];
+      if (list && list.length) {
+        const i = rng.int(0, list.length - 1);
+        const spot = list[i];
+        list.splice(i, 1);                       // 같은 자리에 둘이 서지 않게
+        return spot;
+      }
+    }
+    return null;
+  }
+
+  __M.pickIndoorEvent = pickIndoorEvent; __M.applyEventProps = applyEventProps; __M.makeIndoorPeople = makeIndoorPeople;
+})();
+
 // ── world/actors.js ─────────────────────────────
 (function () {
   // 길에 사는 것들 — 지나가는 사람과 고양이.
   // 청크 단위로 시드에서 태어나고, 화면에서 멀어지면 사라진다.
 
-  const { SEED, NPC, TILE, GROUND } = __M;
+  const { SEED, NPC, TILE, GROUND, LIFE } = __M;
+  const { OUTDOOR_ROLES } = __M;
+  const { OUTDOOR_EVENTS } = __M;
   const { makeRng } = __M;
 
   const CH = TILE.chunk;
@@ -2765,6 +3473,7 @@ const __M = Object.create(null);
     constructor(map) {
       this.map = map;
       this.chunks = new Map();   // 청크키 → 액터 배열
+      this.events = new Map();   // 청크키 → 그 자리에서 벌어지는 일
     }
 
     // 보이는 범위의 청크에 사는 것들을 준비한다
@@ -2782,6 +3491,7 @@ const __M = Object.create(null);
         if (cx < cx0 - DESPAWN_CHUNKS || cx > cx1 + DESPAWN_CHUNKS ||
             cy < cy0 - DESPAWN_CHUNKS || cy > cy1 + DESPAWN_CHUNKS) {
           this.chunks.delete(key);
+          this.events.delete(key);
         }
       }
     }
@@ -2796,14 +3506,58 @@ const __M = Object.create(null);
       }
       if (!spots.length) return [];
 
+      // 이 동네가 어떤 곳인지에 따라 다니는 사람이 다르다
+      const kind = this.map.regionKindAt(cx * CH + CH / 2, cy * CH + CH / 2);
+      const roles = OUTDOOR_ROLES[kind] || OUTDOOR_ROLES.city;
+
       const out = [];
       const count = Math.min(NPC.perChunk, Math.floor(spots.length / 40));
       for (let i = 0; i < count; i++) {
         const idx = rng.pick(spots);
-        out.push(this._make(cx, cy, idx, rng, 'npc'));
+        const actor = this._make(cx, cy, idx, rng, 'npc');
+        const role = rng.pick(roles);
+        actor.role = role.name;
+        actor.lines = role.lines.slice();
+        out.push(actor);
       }
       if (rng.chance(CAT_CHANCE)) {
         out.push(this._make(cx, cy, rng.pick(spots), rng, 'cat'));
+      }
+
+      // 길 위의 사건 — 소품과, 그 이야기를 하는 사람 한둘
+      if (rng.chance(LIFE.outdoorEventChance)) {
+        const pool = OUTDOOR_EVENTS.filter((e) => e.where === kind);
+        if (pool.length) {
+          const total = pool.reduce((sum, e) => sum + e.weight, 0);
+          let roll = rng() * total;
+          let event = pool[0];
+          for (const e of pool) { roll -= e.weight; if (roll <= 0) { event = e; break; } }
+
+          const idx = rng.pick(spots);
+          const tx = cx * CH + (idx % CH), ty = cy * CH + Math.floor(idx / CH);
+          this.events.set(cx * 100000 + cy, {
+            event, x: tx * TILE.size + TILE.size / 2, y: ty * TILE.size + TILE.size / 2,
+          });
+          if (event.prop) {
+            for (let i = 0; i < (event.prop === 'crowd' ? 1 : 3); i++) {
+              out.push({ kind: 'prop', icon: event.prop,
+                x: (tx + rng.int(-1, 1)) * TILE.size + TILE.size / 2,
+                y: (ty + rng.int(-1, 1)) * TILE.size + TILE.size / 2 });
+            }
+          }
+          const witnesses = event.prop === 'crowd' ? 3 : 2;
+          for (let i = 0; i < witnesses; i++) {
+            const actor = this._make(cx, cy, rng.pick(spots), rng, 'npc');
+            actor.x = (tx + rng.int(-2, 2)) * TILE.size;
+            actor.y = (ty + rng.int(-2, 2)) * TILE.size;
+            actor.homeX = actor.x; actor.homeY = actor.y;
+            const role = rng.pick(roles);
+            actor.role = role.name;
+            actor.lines = [rng.pick(event.lines.length ? event.lines : role.lines),
+              ...role.lines].slice(0, 3);
+            out.push(actor);
+          }
+        }
       }
       return out;
     }
@@ -2832,6 +3586,7 @@ const __M = Object.create(null);
 
     update(dt, cx0, cy0, cx1, cy1) {
       for (const a of this.visible(cx0, cy0, cx1, cy1)) {
+        if (a.kind === 'prop') continue;
         a.anim += dt;
         if (a.wait > 0) { a.wait -= dt; a.moving = false; continue; }
 
@@ -2859,6 +3614,29 @@ const __M = Object.create(null);
         a.x = nx; a.y = ny; a.moving = true;
         a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
       }
+    }
+
+    // 말 걸 수 있는 사람
+    nearestPerson(x, y, radius) {
+      let best = null, bestD = radius;
+      for (const list of this.chunks.values()) {
+        for (const a of list) {
+          if (a.kind !== 'npc') continue;
+          const d = Math.hypot(a.x - x, a.y - y);
+          if (d < bestD) { bestD = d; best = a; }
+        }
+      }
+      return best;
+    }
+
+    // 근처에서 벌어지는 일 (알림용)
+    nearestEvent(x, y, radius) {
+      let best = null, bestD = radius;
+      for (const [key, e] of this.events) {
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d < bestD) { bestD = d; best = { key, ...e }; }
+      }
+      return best;
     }
 
     // 플레이어 근처의 고양이 (쓰다듬기용)
@@ -3762,6 +4540,55 @@ const __M = Object.create(null);
     return catSprites[variant % catSprites.length];
   }
 
+  // ── 길 위 사건 소품 ─────────────────────────────────────────────────────
+  const eventPropCache = new Map();
+
+  function eventPropSprite(icon) {
+    let hit = eventPropCache.get(icon);
+    if (hit) return hit;
+    const { canvas, ctx } = makeCanvas(S, 24);
+    const base = 24;
+    switch (icon) {
+      case 'cone':
+        px(ctx, 3, base - 4, 10, 3, '#c85a2a');
+        px(ctx, 5, base - 12, 6, 8, '#e2703a');
+        px(ctx, 6, base - 16, 4, 4, '#e2703a');
+        px(ctx, 5, base - 9, 6, 2, '#f2f2ee');
+        break;
+      case 'stall':   // 좌판
+        px(ctx, 1, base - 9, 14, 6, '#b98f5c');
+        px(ctx, 1, base - 10, 14, 2, '#d8a86a');
+        px(ctx, 2, base - 3, 2, 3, '#7a5a3a');
+        px(ctx, 12, base - 3, 2, 3, '#7a5a3a');
+        px(ctx, 0, base - 17, S, 5, '#d8564a');   // 차양
+        px(ctx, 0, base - 13, S, 1, '#a8382c');
+        break;
+      case 'bowl':
+        px(ctx, 4, base - 6, 8, 4, '#c98f6a');
+        px(ctx, 5, base - 7, 6, 2, '#e8d8a8');
+        break;
+      case 'boxes':
+        px(ctx, 2, base - 10, 7, 7, '#b98f5c');
+        px(ctx, 8, base - 7, 6, 5, '#a87f4c');
+        px(ctx, 2, base - 10, 7, 1, '#d8a86a');
+        break;
+      case 'puddle':
+        ctx.globalAlpha = 0.75;
+        blob(ctx, 8, base - 4, 5, '#7fa8bd', null);
+        ctx.globalAlpha = 1;
+        break;
+      case 'crowd':   // 사람 많음 — 발자국 표시만
+        px(ctx, 4, base - 5, 3, 2, '#8a8477');
+        px(ctx, 9, base - 8, 3, 2, '#8a8477');
+        break;
+      default:
+        px(ctx, 5, base - 10, 6, 10, '#8a919c');
+    }
+    hit = canvas;
+    eventPropCache.set(icon, hit);
+    return hit;
+  }
+
   // ── 자동차 ──────────────────────────────────────────────────────────────
   // 방향마다 미리 돌려서 구워 둔다. 매 프레임 회전시키면 도트가 지저분해진다.
   const CAR_DIRS = 16;
@@ -3947,6 +4774,39 @@ const __M = Object.create(null);
         for (let x = 1; x < S; x += 5) px(ctx, x + 1, 7, 2, 1, shade(base, -0.35));
         break;
       }
+      case IN.SMOKE: { // 연기 — 반쯤 비친다
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        ctx.globalAlpha = 0.55;
+        for (let i = 0; i < 7; i++) {
+          blob(ctx, rng.int(3, 13), rng.int(3, 13), rng.int(2, 4), base, rng);
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case IN.BOX: { // 쏟아진 상자
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 1, 4, 9, 8, base);
+        px(ctx, 1, 4, 9, 1, shade(base, 0.2));
+        px(ctx, 5, 4, 1, 8, shade(base, -0.25));
+        px(ctx, 9, 1, 6, 6, shade(base, -0.1));
+        break;
+      }
+      case IN.PUDDLE: { // 물웅덩이
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        ctx.globalAlpha = 0.7;
+        blob(ctx, 8, 9, 5, base, rng);
+        ctx.globalAlpha = 1;
+        px(ctx, 5, 6, 4, 1, shade(base, 0.35));
+        break;
+      }
+      case IN.CONE: { // 안전콘
+        px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
+        px(ctx, 4, 12, 9, 3, shade(base, -0.2));
+        px(ctx, 6, 5, 5, 7, base);
+        px(ctx, 7, 2, 3, 3, base);
+        px(ctx, 6, 8, 5, 2, '#f2f2ee');
+        break;
+      }
       case IN.CAR: { // 주차된 차 (위에서 본 모습)
         px(ctx, 0, 0, S, S, INTERIOR_COLOR[IN.FLOOR]);
         px(ctx, 2, 1, 12, 14, base);
@@ -4052,11 +4912,12 @@ const __M = Object.create(null);
   // 캐시를 비운다 (시드를 바꿔 다시 만들 때)
   function clearSpriteCaches() {
     groundCache.clear(); propCache.clear(); buildingCache.clear(); carCache.clear();
+    eventPropCache.clear();
     buildingOrder.length = 0; interiorCache.clear(); gizmoCache.clear();
     npcSheets.clear(); playerSheet = null; catSprites = null; doorMat = null;
   }
 
-  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.carSprite = carSprite; __M.carDirIndex = carDirIndex; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
+  __M.makeCanvas = makeCanvas; __M.groundTile = groundTile; __M.groundVariantAt = groundVariantAt; __M.PROP_H = PROP_H; __M.propSprite = propSprite; __M.wallHeight = wallHeight; __M.buildingSprite = buildingSprite; __M.doorMatSprite = doorMatSprite; __M.makeCharacterSheet = makeCharacterSheet; __M.playerSheet_ = playerSheet_; __M.npcSheet = npcSheet; __M.catSprite = catSprite; __M.eventPropSprite = eventPropSprite; __M.carSprite = carSprite; __M.carDirIndex = carDirIndex; __M.interiorTile = interiorTile; __M.gizmoSprite = gizmoSprite; __M.clearSpriteCaches = clearSpriteCaches;
 })();
 
 // ── render/camera.js ─────────────────────────────
@@ -4139,7 +5000,7 @@ const __M = Object.create(null);
   const {
     makeCanvas, groundTile, groundVariantAt, propSprite, PROP_H,
     buildingSprite, wallHeight, doorMatSprite, playerSheet_, npcSheet, catSprite,
-    interiorTile, gizmoSprite, carSprite, carDirIndex,
+    interiorTile, gizmoSprite, carSprite, carDirIndex, eventPropSprite,
   } = __M;
 
   const S = TILE.size;
@@ -4420,6 +5281,15 @@ const __M = Object.create(null);
     }
 
     drawActor(ctx, a) {
+      if (a.kind === undefined) {   // 실내 사람
+        drawFromSheet(ctx, npcSheet(a.seed), a.x, a.y, a.dir, 0);
+        return;
+      }
+      if (a.kind === 'prop') {   // 길 위 사건의 흔적
+        const sprite = eventPropSprite(a.icon);
+        ctx.drawImage(sprite, Math.round(a.x - S / 2), Math.round(a.y - sprite.height + 8));
+        return;
+      }
       const sheet = a.kind === 'cat' ? null : npcSheet(a.seed);
       if (!sheet) {
         ctx.drawImage(catSprite(a.seed % 3), Math.round(a.x - 7), Math.round(a.y - 10));
@@ -4471,7 +5341,14 @@ const __M = Object.create(null);
         ctx.drawImage(gizmoSprite(g.icon, state.game.used.has(g.id)), g.tx * S, g.ty * S - 4);
       }
 
-      this.drawPlayer(ctx, state.player);
+      // 실내 사람들과 플레이어를 발밑 높이 순으로
+      const inside = [{ base: state.player.y, draw: () => this.drawPlayer(ctx, state.player) }];
+      for (const person of state.indoorPeople) {
+        if (!it.visibleAt(person.tx, person.ty)) continue;   // 어두운 방 안은 안 보인다
+        inside.push({ base: person.y, draw: () => this.drawActor(ctx, person) });
+      }
+      inside.sort((a, b) => a.base - b.base);
+      for (const item of inside) item.draw();
 
       // 방 이름 — 방 한가운데 옅게
       ctx.font = `${8}px ${'monospace'}`;
@@ -4662,7 +5539,7 @@ const __M = Object.create(null);
     if (state.showMinimap && state.minimap && state.mode === 'outdoor') drawMinimap(ctx, state, H, W);
 
     // ── 아래 가운데: 상호작용 안내 ────────────────────────────
-    if (state.prompt) {
+    if (state.prompt && !state.dialogue) {   // 말하는 중에는 안내를 감춘다
       const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
       const w = textWidth(ctx, text, 14) + 36;
       panel(ctx, (W - w) / 2, H - 76, w, 34);
@@ -4745,7 +5622,7 @@ const __M = Object.create(null);
     const lines = touch ? [
       ['이동', '왼쪽 화면을 끌기'],
       ['달리기', '많이 밀거나 달리기 버튼'],
-      ['들어가기 · 만지기', '만지기 버튼'],
+      ['들어가기 · 만지기 · 말 걸기', '만지기 버튼'],
       ['층 이동', '계단·엘리베이터 위에서 만지기'],
       ['지도', '지도 버튼 (지도를 눌러 목적지 표시)'],
       ['전체화면', '오른쪽 아래 ⛶'],
@@ -4753,7 +5630,7 @@ const __M = Object.create(null);
     ] : [
       ['이동', '방향키 · WASD'],
       ['달리기', 'Shift'],
-      ['들어가기 · 만지기', 'Space · Enter · E'],
+      ['들어가기 · 만지기 · 말 걸기', 'Space · Enter · E'],
       ['층 이동', '계단이나 엘리베이터 위에서 Space'],
       ['전체화면', 'F'],
       ['미니맵', 'M'],
@@ -5003,6 +5880,22 @@ const __M = Object.create(null);
         '구래에서 양촌까지 손대지 않은 것이 없었다.',
         '공단 정문 경비가 물었다. "무슨 일 하시는 분이세요?"',
         '아직 아무 일도 시작하지 않았다.'],
+    },
+    {
+      id: 'E29', title: '소문난 아침', tag: 'good', when: 'goal',
+      hint: '길에서 만난 사람들과 여덟 번 넘게 말을 섞으면',
+      test: (s) => s.count('talked') >= 8,
+      lines: ['구래역 앞 자판기부터 양촌 정문까지, 만나는 사람마다 말을 걸었다.',
+        '누구는 길을 알려 줬고 누구는 자기 얘기를 했다.',
+        '첫 출근인데 아는 얼굴이 벌써 여덟이다.'],
+    },
+    {
+      id: 'E30', title: '목격자', tag: 'odd', when: 'goal',
+      hint: '오늘 벌어진 일을 여섯 가지 넘게 보면',
+      test: (s) => s.count('seen_event') >= 6,
+      lines: ['이사, 도로 공사, 멈춘 라인, 시식 코너, 잃어버린 강아지 전단.',
+        '하루치 사건을 다 보고 다녔다.',
+        '공단에 도착하자 아무 일도 일어나지 않았다. 그게 제일 이상했다.'],
     },
     {
       id: 'E07', title: '아무것도 만지지 않았다', tag: 'true', when: 'goal',
@@ -5715,6 +6608,77 @@ const __M = Object.create(null);
   __M.drawWorldMap = drawWorldMap; __M.pickOnMap = pickOnMap; __M.buildMapMarks = buildMapMarks;
 })();
 
+// ── ui/dialogue.js ─────────────────────────────
+(function () {
+  // 대화창. 사람에게 말을 걸면 아래에 뜬다. Space 로 다음 줄, 끝나면 닫힌다.
+
+  const { UI } = __M;
+  const { UI_COLOR } = __M;
+  const { drawText, textWidth, viewSize } = __M;
+  const { panel } = __M;
+
+  function drawDialogue(ctx, state) {
+    const d = state.dialogue;
+    if (!d) return;
+    const { w: W, h: H } = viewSize(ctx);
+
+    const boxW = Math.min(560, W - 40);
+    const boxH = 96;
+    const x = (W - boxW) / 2;
+    const y = H - boxH - (state.isTouch ? 120 : 60);
+
+    panel(ctx, x, y, boxW, boxH);
+    // 말하는 사람
+    ctx.fillStyle = UI_COLOR.accent;
+    ctx.fillRect(x, y, 3, boxH);
+    drawText(ctx, d.name, x + 16, y + 26, { size: 13, color: UI_COLOR.accent });
+
+    // 말줄임 없이 두 줄까지 접어 준다
+    const line = d.lines[d.index] || '';
+    const maxW = boxW - 32;
+    const rows = wrap(ctx, line, maxW, 14);
+    rows.slice(0, 2).forEach((row, i) => {
+      drawText(ctx, row, x + 16, y + 52 + i * 20, { size: 14 });
+    });
+
+    const more = d.index < d.lines.length - 1;
+    drawText(ctx, more ? (state.isTouch ? '탭 ▶' : 'Space ▶') : (state.isTouch ? '탭 닫기' : 'Space 닫기'),
+      x + boxW - 16, y + boxH - 12, { size: 11, align: 'right', color: UI_COLOR.textDim });
+  }
+
+  // 글자 폭에 맞춰 줄바꿈
+  function wrap(ctx, text, maxW, size) {
+    if (textWidth(ctx, text, size) <= maxW) return [text];
+    const rows = [];
+    let cur = '';
+    for (const ch of text) {
+      if (textWidth(ctx, cur + ch, size) > maxW) { rows.push(cur); cur = ''; }
+      cur += ch;
+    }
+    if (cur) rows.push(cur);
+    return rows;
+  }
+
+  // 대화 시작
+  function startDialogue(state, name, lines) {
+    const list = (lines && lines.length) ? lines : ['...'];
+    state.dialogue = { name, lines: list, index: 0 };
+  }
+
+  // 다음 줄로. 끝이면 닫는다.
+  function advanceDialogue(state) {
+    if (!state.dialogue) return false;
+    if (state.dialogue.index < state.dialogue.lines.length - 1) {
+      state.dialogue.index++;
+      return true;
+    }
+    state.dialogue = null;
+    return false;
+  }
+
+  __M.drawDialogue = drawDialogue; __M.startDialogue = startDialogue; __M.advanceDialogue = advanceDialogue;
+})();
+
 // ── ui/fullscreen.js ─────────────────────────────
 (function () {
   // 전체화면. 브라우저마다 이름이 조금씩 달라서 한 겹 감싼다.
@@ -5908,12 +6872,13 @@ const __M = Object.create(null);
   // 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
 
   const {
-    TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED,
+    TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE,
   } = __M;
   const { WORLD_PX_W, WORLD_PX_H, project, pathBounds } = __M;
   const { buildBuildings, doorOutside, floorLabel, floorUse } = __M;
   const { WorldMap, buildOverview } = __M;
   const { makeInterior, floorList } = __M;
+  const { pickIndoorEvent, applyEventProps, makeIndoorPeople } = __M;
   const { Actors } = __M;
   const { Traffic } = __M;
   const { Camera } = __M;
@@ -5923,6 +6888,7 @@ const __M = Object.create(null);
   const { drawHud, bakeOverview, panel } = __M;
   const { drawEnding, drawGallery } = __M;
   const { drawWorldMap, buildMapMarks, pickOnMap } = __M;
+  const { drawDialogue, startDialogue, advanceDialogue } = __M;
   const { toggleFullscreen, onFullscreenChange } = __M;
   const { TouchControls, isTouchDevice } = __M;
   const { GameState } = __M;
@@ -5936,6 +6902,7 @@ const __M = Object.create(null);
     prompt: '', toasts: [],
     showHelp: true, showMinimap: true, showGallery: false, showWorldMap: false,
     interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
+    indoorPeople: [], indoorEvent: null, dialogue: null,
     picker: null, placeName: '', startPos: { x: 0, y: 0 },
   };
 
@@ -6019,7 +6986,7 @@ const __M = Object.create(null);
     if (isTouchDevice()) {
       state.isTouch = true;
       touch = new TouchControls({
-        interact: () => interact(),
+        interact: () => { if (state.dialogue) advanceDialogue(state); else interact(); },
         worldmap: () => { state.showWorldMap = !state.showWorldMap; },
         help: () => { state.showHelp = !state.showHelp; },
       });
@@ -6092,6 +7059,7 @@ const __M = Object.create(null);
 
   // 열려 있는 화면(도움말·지도·층 선택·결말)에서의 터치 처리
   function handleTouchUi(x, y) {
+    if (state.dialogue) { advanceDialogue(state); return true; }
     if (state.showHelp) { state.showHelp = false; return true; }
     if (state.game.ending) { restart(); return true; }
     if (state.showGallery) { state.showGallery = false; return true; }
@@ -6173,7 +7141,11 @@ const __M = Object.create(null);
       return;
     }
 
-    if (KEYS.interact.includes(e.code)) { interact(); e.preventDefault(); }
+    if (KEYS.interact.includes(e.code)) {
+      if (state.dialogue) advanceDialogue(state);
+      else interact();
+      e.preventDefault();
+    }
   }
 
   function axis(negKeys, posKeys) {
@@ -6196,6 +7168,7 @@ const __M = Object.create(null);
     const g = state.game;
     if (g.ending) return;
     if (state.showHelp || state.showGallery || state.picker || state.showWorldMap) return;
+    if (state.dialogue) return;   // 말하는 동안에는 멈춘다
 
     g.tick(dt);
     if (state.exitCooldown > 0) state.exitCooldown -= dt;
@@ -6215,6 +7188,7 @@ const __M = Object.create(null);
       });
       cam.follow(state.player.x, state.player.y, dt);
       updatePlaceName();
+      noticeOutdoorEvent();
       checkGoal();
     } else {
       cam.follow(state.player.x, state.player.y, dt,
@@ -6284,6 +7258,10 @@ const __M = Object.create(null);
         return { type: 'gizmo', gizmo: g, label: g.name };
       }
     }
+    // 길에서 만난 사람
+    const person = actors.nearestPerson(p.x, p.y, LIFE.talkRadius);
+    if (person) return { type: 'talk', person, label: person.role || '주민' };
+
     // 고양이
     const cat = actors.nearestCat(p.x, p.y, GAME.petRadius);
     if (cat && !state.game.used.has('cat:' + cat.id)) {
@@ -6320,6 +7298,14 @@ const __M = Object.create(null);
       }
     }
 
+    // 옆에 사람이 있으면 말을 걸 수 있다 (어두운 방 안 사람은 안 보인다)
+    for (const person of state.indoorPeople) {
+      if (!it.visibleAt(person.tx, person.ty)) continue;
+      if (Math.hypot(person.x - p.x, person.y - p.y) < LIFE.talkRadius) {
+        return { type: 'talk', person, label: person.role };
+      }
+    }
+
     const here = it.tileAt(tx, ty);
     if (here === IN.EXIT) return { type: 'exit', label: '나가기' };
     if (here === IN.STAIR_UP) return { type: 'stair', delta: 1, label: '올라가기' };
@@ -6332,7 +7318,8 @@ const __M = Object.create(null);
     const t = state.mode === 'outdoor' ? nearestOutdoorTarget() : nearestInteriorTarget();
     state.target = t;
     if (!t) { state.prompt = ''; return; }
-    const verb = t.type === 'door' ? '문 열기'
+    const verb = t.type === 'talk' ? '말 걸기'
+      : t.type === 'door' ? '문 열기'
       : t.type === 'enter' ? '들어가기'
       : t.type === 'exit' ? '나가기'
       : t.type === 'cat' ? '쓰다듬기'
@@ -6352,8 +7339,15 @@ const __M = Object.create(null);
       case 'elevator': return openPicker();
       case 'cat': return petCat(t.cat);
       case 'door': return openDoor(t);
+      case 'talk': return talkTo(t.person);
       case 'gizmo': return useGizmo(t.gizmo);
     }
+  }
+
+  // 사람에게 말 걸기
+  function talkTo(person) {
+    startDialogue(state, person.role || '주민', person.lines);
+    state.game.bump('talked');
   }
 
   // 문을 열면 그 방이 보인다
@@ -6404,6 +7398,14 @@ const __M = Object.create(null);
   function setFloor(b, floor, place) {
     state.floor = floor;
     state.interior = makeInterior(b, floor);
+    // 오늘 이 층에 무슨 일이 있는가
+    state.indoorEvent = pickIndoorEvent(b, floor);
+    applyEventProps(state.interior, state.indoorEvent);
+    state.indoorPeople = makeIndoorPeople(b, floor, state.interior, state.indoorEvent);
+    if (state.indoorEvent && state.indoorEvent.notice) {
+      toast(state.indoorEvent.notice);
+      state.game.bump('seen_event');
+    }
     state.interiorGizmos = (indoorIndex.get(`${b.name}|${floor}`) || []).map((g, i) => {
       const slot = state.interior.slots[(g.at.slot + i) % Math.max(1, state.interior.slots.length)]
         || state.interior.spawn;
@@ -6457,6 +7459,8 @@ const __M = Object.create(null);
     state.player.y = (out.y + 0.7) * S;
     state.interior = null;
     state.interiorGizmos = [];
+    state.indoorPeople = [];
+    state.indoorEvent = null;
     state.floor = 1;
     state.exitCooldown = INTERIOR.exitPause;
     cam.snap(state.player.x, state.player.y);
@@ -6481,6 +7485,18 @@ const __M = Object.create(null);
   }
 
   // ── 결말 ────────────────────────────────────────────────────────────────
+  // 길에서 벌어지는 일이 눈에 들어오면 한 번 알려 준다
+  const seenOutdoorEvents = new Set();
+  function noticeOutdoorEvent() {
+    const near = actors.nearestEvent(state.player.x, state.player.y, LIFE.noticeRadius);
+    if (!near || seenOutdoorEvents.has(near.key)) return;
+    seenOutdoorEvents.add(near.key);
+    if (near.event.notice) {
+      toast(near.event.notice);
+      state.game.bump('seen_event');
+    }
+  }
+
   function updatePlaceName() {
     const tx = Math.floor(state.player.x / S), ty = Math.floor(state.player.y / S);
     state.placeName = map.regionNameAt(tx, ty) || '김포 들녘';
@@ -6544,6 +7560,7 @@ const __M = Object.create(null);
     }
 
     drawHud(ctx, state);
+    drawDialogue(ctx, state);
     if (state.picker) drawPicker();
     if (touch && !state.showWorldMap && !state.showGallery && !state.game.ending) {
       touch.draw(ctx, window.innerWidth, window.innerHeight);
