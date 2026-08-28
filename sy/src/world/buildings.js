@@ -262,12 +262,68 @@ export function buildBuildings() {
     makeBuilding(spec, roads, index, placed);
   }
 
+  // 문 앞이 막힌 건물 고치기 — 다른 건물이 나중에 붙어 문을 막는 일이 있다
+  fixBlockedDoors(placed, index);
+
   // 출입구 → 건물 찾기
   const doorIndex = new Map();
   for (const b of placed) doorIndex.set(b.door.y * 1000000 + b.door.x, b);
 
   return { list: placed, index, doorIndex, roads,
     generatedRoads: districts.roads, areas: districts.areas };
+}
+
+// 그 칸을 어떤 건물이 차지하고 있는가
+function occupied(index, x, y, self) {
+  for (const b of index.query(x, y, x, y)) {
+    if (b === self) continue;
+    if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return true;
+  }
+  return false;
+}
+
+// 문 앞 한 칸이 비어 있는가
+function doorIsUsable(b, index) {
+  const out = doorOutside(b);
+  return !occupied(index, out.x, out.y, b);
+}
+
+// 문 앞이 막힌 건물은 문을 옮긴다.
+// 남쪽 벽을 따라 옮겨 보고, 그래도 안 되면 다른 벽으로 낸다.
+// (문이 막히면 그 안에 들어갔다가 갇힌다)
+export function fixBlockedDoors(placed, index) {
+  let moved = 0, hopeless = 0;
+  for (const b of placed) {
+    if (doorIsUsable(b, index)) continue;
+    let fixed = false;
+    // 1) 남쪽 벽의 다른 자리
+    for (let x = b.x; x < b.x + b.w && !fixed; x++) {
+      if (occupied(index, x, b.y + b.h, b)) continue;
+      b.door = { x, y: b.y + b.h - 1, dir: 'S' };
+      fixed = true;
+    }
+    // 2) 그래도 없으면 옆이나 뒤로
+    const sides = [
+      { dir: 'E', tiles: () => range(b.y, b.h).map((y) => ({ x: b.x + b.w - 1, y, ox: b.x + b.w, oy: y })) },
+      { dir: 'W', tiles: () => range(b.y, b.h).map((y) => ({ x: b.x, y, ox: b.x - 1, oy: y })) },
+      { dir: 'N', tiles: () => range(b.x, b.w).map((x) => ({ x, y: b.y, ox: x, oy: b.y - 1 })) },
+    ];
+    for (const side of sides) {
+      if (fixed) break;
+      for (const t of side.tiles()) {
+        if (occupied(index, t.ox, t.oy, b)) continue;
+        b.door = { x: t.x, y: t.y, dir: side.dir };
+        fixed = true;
+        break;
+      }
+    }
+    if (fixed) moved++; else hopeless++;
+  }
+  return { moved, hopeless };
+}
+
+function range(start, count) {
+  return Array.from({ length: count }, (_, i) => start + i);
 }
 
 // 타일 한 칸을 차지한 건물 (없으면 null)

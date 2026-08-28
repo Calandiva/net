@@ -2,7 +2,7 @@
 // 세계를 만드는 일은 world/ 가, 그리는 일은 render/ 가, 결말 판정은 game/ 이 한다.
 
 import {
-  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE,
+  TILE, PLAYER, CAMERA, RENDER, KEYS, UI, GAME, BUILDING, INTERIOR, IN, SEED, LIFE, PATHING,
 } from './config.js';
 import { WORLD_PX_W, WORLD_PX_H, project, pathBounds } from './world/geo.js';
 import { buildBuildings, doorOutside, floorLabel, floorUse } from './world/buildings.js';
@@ -10,6 +10,7 @@ import { WorldMap, buildOverview } from './world/map.js';
 import { makeInterior, floorList } from './world/interior.js';
 import { pickIndoorEvent, applyEventProps, makeIndoorPeople } from './world/indoor.js';
 import { Actors } from './world/actors.js';
+import { findPath } from './world/pathing.js';
 import { Traffic } from './world/traffic.js';
 import { Camera } from './render/camera.js';
 import { Scene } from './render/scene.js';
@@ -34,6 +35,8 @@ const state = {
   interior: null, interiorGizmos: [], floor: 1, exitCooldown: 0,
   indoorPeople: [], indoorEvent: null, dialogue: null,
   picker: null, placeName: '', startPos: { x: 0, y: 0 },
+  minimapZoom: UI.minimapZoomDefault,   // 미니맵 축척
+  autoPath: null,                        // 자동 이동 중이면 {tiles, index, goal, label}
 };
 
 const keys = new Set();
@@ -82,7 +85,8 @@ function init() {
   const startTile = startBuilding
     ? doorOutside(startBuilding)
     : nearestWalkable(...project([PLAYER.startLon, PLAYER.startLat]).map(Math.round));
-  const start = nearestWalkable(startTile.x, startTile.y);
+  // 문 앞이라도 좁은 틈이면 갇힌다 — 넉넉히 돌아다닐 수 있는 자리로 잡는다
+  const start = map.openSpot(startTile.x, startTile.y, PLAYER.safeArea);
   state.startPos = { x: start.x * S + S / 2, y: start.y * S + S / 2 };
   state.player.x = state.startPos.x;
   state.player.y = state.startPos.y;
@@ -98,19 +102,20 @@ function init() {
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
-  canvas.addEventListener('pointerdown', (e) => {
-    if (state.showHelp) { state.showHelp = false; return; }
-    if (!state.showWorldMap && hitMinimap(e)) { state.showWorldMap = true; return; }
-    if (state.showWorldMap) {
-      const rect = canvas.getBoundingClientRect();
-      const hit = pickOnMap(state, e.clientX - rect.left, e.clientY - rect.top);
-      if (hit) {
-        state.waypoint = hit;
-        toast(`목적지: ${hit.label}`);
-      }
-      return;
-    }
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', (e) => {
+    if (touch && e.pointerType !== 'mouse') touch.onMove(e.pointerId, ...pointerPos(e));
   });
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(type, (e) => { if (touch) touch.onUp(e.pointerId); });
+  }
+  // 미니맵 위에서 휠을 굴리면 축척이 바뀐다
+  canvas.addEventListener('wheel', (e) => {
+    const [x, y] = pointerPos(e);
+    if (!inRect(state.minimapRect, x, y)) return;
+    zoomMinimap(e.deltaY < 0 ? 1 : -1);
+    e.preventDefault();
+  }, { passive: false });
 
   // 모바일이면 터치 조작을 붙인다 (PC 는 키보드 그대로)
   if (isTouchDevice()) {
@@ -119,14 +124,15 @@ function init() {
       interact: () => { if (state.dialogue) advanceDialogue(state); else interact(); },
       worldmap: () => { state.showWorldMap = !state.showWorldMap; },
       help: () => { state.showHelp = !state.showHelp; },
+      fullscreen: () => toggleFullscreen(document.documentElement),
     });
     state.touch = touch;
     cam.setZoom(3, window.innerWidth, window.innerHeight);   // 작은 화면에서는 더 크게
-    bindTouchEvents();
   }
 
   // 전체화면 버튼 (키보드 없는 환경용)
   const fsButton = document.getElementById('fs');
+  if (fsButton && state.isTouch) fsButton.style.display = 'none';   // 터치에서는 캔버스 버튼을 쓴다
   if (fsButton) {
     fsButton.addEventListener('click', () => toggleFullscreen(document.documentElement));
   }
@@ -153,50 +159,70 @@ function nearestWalkable(tx, ty) {
   return { x: tx, y: ty };
 }
 
-// 미니맵을 눌렀는가 (누르면 전체지도가 열린다)
-function hitMinimap(e) {
-  const r = state.minimapRect;
-  if (!r || !state.showMinimap || state.mode !== 'outdoor') return false;
+// 화면 좌표 (캔버스 기준)
+function pointerPos(e) {
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left, y = e.clientY - rect.top;
-  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  return [e.clientX - rect.left, e.clientY - rect.top];
 }
 
-// 터치 입력 — 화면을 반으로 나눠 왼쪽은 이동, 오른쪽은 버튼
-function bindTouchEvents() {
-  const pos = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    return [e.clientX - rect.left, e.clientY - rect.top];
-  };
-  canvas.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
-    const [x, y] = pos(e);
-    // 대화창이 열려 있으면 그쪽이 먼저
-    if (handleTouchUi(x, y)) { e.preventDefault(); return; }
-    if (hitMinimap(e)) { state.showWorldMap = true; e.preventDefault(); return; }
+function inRect(r, x, y) {
+  return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+// 미니맵을 눌렀는가 (바깥에서 미니맵이 켜져 있을 때만)
+function hitMinimap(x, y) {
+  if (!state.showMinimap || state.mode !== 'outdoor') return false;
+  return inRect(state.minimapRect, x, y);
+}
+
+// 미니맵 축척 — dir 이 +1 이면 가깝게, -1 이면 멀리
+function zoomMinimap(dir) {
+  const zooms = UI.minimapZooms;
+  const i = Math.max(0, zooms.indexOf(state.minimapZoom));
+  const next = Math.max(0, Math.min(zooms.length - 1, i + dir));
+  if (zooms[next] === state.minimapZoom) return;
+  state.minimapZoom = zooms[next];
+  const spanM = (UI.minimapSize / state.minimapZoom) * UI.minimapScale * 2.5;
+  toast(`미니맵 축척 ×${state.minimapZoom} (가로 ${Math.round(spanM)}m)`);
+}
+
+// 포인터 하나로 마우스와 터치를 함께 받는다.
+// 순서: 열린 창 → 미니맵 축척 버튼 → 미니맵 → 터치 조작.
+function onPointerDown(e) {
+  const [x, y] = pointerPos(e);
+  const isTouchPointer = e.pointerType !== 'mouse';
+
+  if (handleUiPointer(x, y)) { e.preventDefault(); return; }
+
+  if (state.mode === 'outdoor' && state.showMinimap) {
+    const z = state.minimapZoomRects;
+    if (z && inRect(z.in, x, y)) { zoomMinimap(1); e.preventDefault(); return; }
+    if (z && inRect(z.out, x, y)) { zoomMinimap(-1); e.preventDefault(); return; }
+    if (hitMinimap(x, y)) { state.showWorldMap = true; e.preventDefault(); return; }
+  }
+
+  if (touch && isTouchPointer) {
     touch.onDown(e.pointerId, x, y, window.innerWidth);
     e.preventDefault();
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'mouse') return;
-    const [x, y] = pos(e);
-    touch.onMove(e.pointerId, x, y);
-  });
-  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
-    canvas.addEventListener(type, (e) => touch.onUp(e.pointerId));
   }
 }
 
-// 열려 있는 화면(도움말·지도·층 선택·결말)에서의 터치 처리
-function handleTouchUi(x, y) {
+// 열려 있는 화면(도움말·지도·층 선택·결말)에서의 클릭·터치 처리.
+// 처리했으면 true — 그러면 이동 조작으로 넘어가지 않는다.
+function handleUiPointer(x, y) {
   if (state.dialogue) { advanceDialogue(state); return true; }
   if (state.showHelp) { state.showHelp = false; return true; }
   if (state.game.ending) { restart(); return true; }
   if (state.showGallery) { state.showGallery = false; return true; }
   if (state.showWorldMap) {
     const hit = pickOnMap(state, x, y);
-    if (hit) { state.waypoint = hit; toast(`목적지: ${hit.label}`); }
-    else state.showWorldMap = false;
+    if (hit) {
+      state.waypoint = hit;
+      state.showWorldMap = false;      // 지도를 닫아야 걸어가는 게 보인다
+      startAutoWalk(hit);
+    } else {
+      state.showWorldMap = false;
+    }
     return true;
   }
   if (state.picker) {
@@ -245,6 +271,8 @@ function onKeyDown(e) {
     toast(`목적지: ${GAME.goalName}`);
     return;
   }
+  if (KEYS.minimapIn.includes(e.code)) { zoomMinimap(1); return; }
+  if (KEYS.minimapOut.includes(e.code)) { zoomMinimap(-1); return; }
   if (KEYS.zoomIn.includes(e.code)) { cam.setZoom(cam.zoom + 1, window.innerWidth, window.innerHeight); return; }
   if (KEYS.zoomOut.includes(e.code)) { cam.setZoom(cam.zoom - 1, window.innerWidth, window.innerHeight); return; }
   if (e.code === 'Escape') {
@@ -336,6 +364,73 @@ function update(dt) {
   state.toasts = state.toasts.filter((t) => t.life > 0);
 }
 
+let stuckTime = 0;   // 제자리걸음이 이어진 시간
+
+// ── 자동 이동 ───────────────────────────────────────────────────────────
+// 지도에서 찍은 곳까지 알아서 걸어간다. 길은 조금씩 끊어서 찾는다.
+function startAutoWalk(target) {
+  if (state.mode !== 'outdoor') {
+    toast('밖으로 나가야 걸어갈 수 있다.');
+    return;
+  }
+  state.autoPath = {
+    goal: { x: Math.round(target.tx), y: Math.round(target.ty) },
+    label: target.label || '표시한 곳',
+    tiles: [], index: 0, age: PATHING.replanSeconds, still: 0, retries: 0,
+  };
+  toast(`${state.autoPath.label}(으)로 자동 이동 — 움직이면 멈춘다`);
+}
+
+function stopAutoWalk(reason) {
+  if (!state.autoPath) return;
+  if (reason) toast(reason);
+  state.autoPath = null;
+}
+
+// 자동 이동이 갈 방향을 낸다. 갈 데가 없으면 null.
+function autoWalkDir(dt) {
+  const auto = state.autoPath;
+  const p = state.player;
+  const here = { x: Math.floor(p.x / S), y: Math.floor(p.y / S) };
+  const distTiles = Math.hypot(auto.goal.x - here.x, auto.goal.y - here.y);
+  if (distTiles <= PATHING.arriveTiles) {
+    stopAutoWalk(`${auto.label} 도착`);
+    return null;
+  }
+
+  auto.age += dt;
+  // 길이 다 떨어졌거나, 오래됐거나, 제자리면 다시 찾는다
+  if (auto.index >= auto.tiles.length || auto.age >= PATHING.replanSeconds
+      || auto.still > PATHING.stuckSeconds) {
+    auto.tiles = findPath(map, here, auto.goal);
+    auto.index = 0;
+    auto.age = 0;
+    auto.still = 0;
+    if (!auto.tiles.length) {
+      auto.retries++;
+      if (auto.retries >= PATHING.maxRetries) {
+        stopAutoWalk('그쪽으로는 길이 없어 멈췄다.');
+        return null;
+      }
+      return null;
+    }
+    auto.retries = 0;
+  }
+
+  // 다음 지점까지 걸어간다
+  let target = auto.tiles[auto.index];
+  let tx = (target.x + 0.5) * S, ty = (target.y + 0.5) * S;
+  while (Math.hypot(tx - p.x, ty - p.y) < PATHING.stepTiles * S
+      && auto.index < auto.tiles.length - 1) {
+    auto.index++;
+    target = auto.tiles[auto.index];
+    tx = (target.x + 0.5) * S; ty = (target.y + 0.5) * S;
+  }
+  const dx = tx - p.x, dy = ty - p.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: dx / len, y: dy / len };
+}
+
 function movePlayer(dt) {
   const p = state.player;
   let dx = axis(KEYS.left, KEYS.right);
@@ -344,8 +439,14 @@ function movePlayer(dt) {
     dx = touch.axis.x;
     dy = touch.axis.y;
   }
+  // 직접 조작하면 자동 이동은 그 자리에서 멈춘다
+  if (state.autoPath && (dx !== 0 || dy !== 0)) stopAutoWalk('자동 이동을 멈췄다.');
+  if (state.autoPath) {
+    const dir = autoWalkDir(dt);
+    if (dir) { dx = dir.x; dy = dir.y; }
+  }
   p.moving = dx !== 0 || dy !== 0;
-  if (!p.moving) return;
+  if (!p.moving) { stuckTime = 0; return; }
 
   const running = KEYS.run.some((k) => keys.has(k)) || (touch && touch.running);
   const speed = PLAYER.walkSpeed * (running ? PLAYER.runMultiplier : 1);
@@ -357,8 +458,77 @@ function movePlayer(dt) {
 
   p.anim += dt * (running ? 1.6 : 1);
 
+  const beforeX = p.x, beforeY = p.y;
   if (!blocked(p.x + vx, p.y)) p.x += vx;
   if (!blocked(p.x, p.y + vy)) p.y += vy;
+
+  // 갇힘 감시 — 가려는데 제자리면 빼 준다
+  const gone = Math.hypot(p.x - beforeX, p.y - beforeY);
+  const still = gone <= PLAYER.stuckEpsilon * dt;
+  stuckTime = still ? stuckTime + dt : 0;
+  if (state.autoPath) state.autoPath.still = still ? state.autoPath.still + dt : 0;
+  if (stuckTime > PLAYER.stuckSeconds) { stuckTime = 0; checkTrapped(); }
+}
+
+// 제자리걸음이 길어졌다 — 정말 갇힌 것인지 보고, 갇혔을 때만 빼 준다.
+// (벽을 향해 걷고 있을 뿐인데 옮겨 버리면 그게 더 이상하다)
+function checkTrapped() {
+  const p = state.player;
+  if (state.mode === 'interior') {
+    const it = state.interior;
+    const tx = Math.floor(p.x / S), ty = Math.floor(p.y / S);
+    // 실내는 좁으니 몇 칸만 움직일 수 있어도 갇힌 것으로 본다
+    if (interiorOpenArea(it, tx, ty, 6) >= 6) return;
+    unstick();
+    return;
+  }
+  const tx = Math.floor(p.x / S), ty = Math.floor(p.y / S);
+  if (map.openArea(tx, ty, PLAYER.safeArea) >= PLAYER.safeArea) return;
+  unstick();
+}
+
+// 실내에서 걸어 다닐 수 있는 칸 수 (limit 까지만)
+function interiorOpenArea(it, tx, ty, limit) {
+  const seen = new Set([ty * 1000 + tx]);
+  const queue = [{ x: tx, y: ty }];
+  let count = 0;
+  for (let i = 0; i < queue.length && count < limit; i++) {
+    const q = queue[i];
+    count++;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = q.x + dx, ny = q.y + dy, key = ny * 1000 + nx;
+      if (seen.has(key) || it.isSolid(nx, ny)) continue;
+      seen.add(key);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return count;
+}
+
+// 갇혔을 때 빠져나갈 자리로 옮긴다.
+// 실내면 문 앞으로, 바깥이면 가까운 넓은 자리로.
+function unstick() {
+  const p = state.player;
+  stopAutoWalk();
+  if (state.mode === 'interior') {
+    const sp = state.interior.spawn;
+    p.x = (sp.x + 0.5) * S; p.y = (sp.y + 0.5) * S;
+    cam.snap(p.x, p.y);
+    toast('길이 막혀 문 앞으로 돌아왔다.');
+    return;
+  }
+  const spot = map.openSpot(Math.floor(p.x / S), Math.floor(p.y / S), PLAYER.safeArea);
+  p.x = (spot.x + 0.5) * S; p.y = (spot.y + 0.5) * S;
+  cam.snap(p.x, p.y);
+  toast('좁은 데 끼어서 길가로 나왔다.');
+}
+
+// 바깥 좌표를 안전한 칸에 놓는다 (갇히는 자리로는 절대 내려놓지 않는다)
+function placeOutdoors(tx, ty) {
+  const spot = map.openSpot(tx, ty, PLAYER.safeArea);
+  state.player.x = (spot.x + 0.5) * S;
+  state.player.y = (spot.y + 0.5) * S;
+  cam.snap(state.player.x, state.player.y);
 }
 
 // 발밑 상자로 충돌을 본다
@@ -460,6 +630,9 @@ function updatePrompt() {
 }
 
 function interact() {
+  // 자동 이동 중이면 먼저 선다 (걸어가면서 문을 여는 일은 없다)
+  if (state.autoPath) { stopAutoWalk('자동 이동을 멈췄다.'); return; }
+
   const t = state.target;
   if (!t) return;
   switch (t.type) {
@@ -517,6 +690,7 @@ function toast(text) {
 
 // ── 건물 출입 · 층 이동 ─────────────────────────────────────────────────
 function enterBuilding(b) {
+  stopAutoWalk();
   state.interiorBuilding = b;
   const floors = floorList(b);
   setFloor(b, floors.includes(1) ? 1 : floors[0], 'spawn');
@@ -582,22 +756,22 @@ function openPicker() {
 }
 
 function exitBuilding() {
+  stopAutoWalk();
   const b = state.interiorBuilding;
   const out = doorOutside(b);
   state.mode = 'outdoor';
-  state.player.x = (out.x + 0.5) * S;
-  state.player.y = (out.y + 0.7) * S;
   state.interior = null;
   state.interiorGizmos = [];
   state.indoorPeople = [];
   state.indoorEvent = null;
   state.floor = 1;
   state.exitCooldown = INTERIOR.exitPause;
-  cam.snap(state.player.x, state.player.y);
+  placeOutdoors(out.x, out.y);
 }
 
 // 지하철로 다른 역까지
 function rideTo(stationName) {
+  stopAutoWalk();
   const target = buildings.list.find((b) => b.name === stationName);
   if (!target) return;
   const out = doorOutside(target);
@@ -606,11 +780,9 @@ function rideTo(stationName) {
   state.interiorGizmos = [];
   state.interiorBuilding = null;
   state.floor = 1;
-  state.player.x = (out.x + 0.5) * S;
-  state.player.y = (out.y + 0.7) * S;
   state.exitCooldown = INTERIOR.exitPause;
   state.game.clock += 4 * 60; // 4분
-  cam.snap(state.player.x, state.player.y);
+  placeOutdoors(out.x, out.y);
   toast(`${stationName} 도착`);
 }
 
@@ -662,6 +834,7 @@ function finish(where) {
 }
 
 function restart() {
+  stopAutoWalk();
   state.game = new GameState();
   state.mode = 'outdoor';
   state.interior = null;

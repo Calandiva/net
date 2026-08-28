@@ -59,15 +59,16 @@ export function drawHud(ctx, state) {
   if (state.prompt && !state.dialogue) {   // 말하는 중에는 안내를 감춘다
     const text = state.isTouch ? state.prompt.replace('Space  ', '') : state.prompt;
     const w = textWidth(ctx, text, 14) + 36;
-    panel(ctx, (W - w) / 2, H - 76, w, 34);
-    drawText(ctx, text, W / 2, H - 54, { size: 14, align: 'center' });
+    const py = state.isTouch ? H - 176 : H - 76;   // 터치 버튼과 겹치지 않게 위로
+    panel(ctx, (W - w) / 2, py, w, 34);
+    drawText(ctx, text, W / 2, py + 22, { size: 14, align: 'center' });
   }
 
   // ── 목적지 표시 ───────────────────────────────────────────
   drawWaypointMarker(ctx, state, W, H);
 
   // ── 알림 ─────────────────────────────────────────────────
-  let y = H - 110;
+  let y = state.isTouch ? H - 210 : H - 110;
   for (const t of state.toasts) {
     const alpha = Math.min(1, t.life / 0.5);
     ctx.globalAlpha = alpha;
@@ -80,7 +81,8 @@ export function drawHud(ctx, state) {
 
   // ── 오른쪽 아래: 조작 힌트 ────────────────────────────────
   if (W >= 640) {
-    drawText(ctx, 'H 도움말 · Tab 전체지도 · M 미니맵 · F 전체화면 · L 엔딩', W - 58, H - 16,
+    drawText(ctx, 'H 도움말 · Tab 전체지도(눌러서 자동 이동) · [ ] 축척 · M 미니맵 · F 전체화면 · L 엔딩',
+      W - 58, H - 16,
       { size: 11, align: 'right', color: 'rgba(255,255,255,0.5)', shadow: false });
   }
 
@@ -89,17 +91,18 @@ export function drawHud(ctx, state) {
 
 function drawMinimap(ctx, state, H, W) {
   const size = state.isTouch ? Math.round(UI.minimapSize * 0.8) : UI.minimapSize;
-  // 터치 화면에서는 조이스틱 자리를 비켜 오른쪽 위에 붙인다
+  // 터치 화면에서는 조이스틱·버튼 자리를 비켜 오른쪽 위에 붙인다
   const x = state.isTouch ? W - size - 12 : 12;
-  const y = state.isTouch ? 56 : H - size - 12;
+  const y = state.isTouch ? 52 : H - size - 30;
   state.minimapRect = { x, y, w: size, h: size };   // 눌러서 전체지도를 열 수 있게
   panel(ctx, x - 4, y - 4, size + 8, size + 8);
 
   const mm = state.minimap;
   const scale = UI.minimapScale;
-  // 플레이어 주변만 잘라서 보여 준다
+  const zoom = state.minimapZoom || UI.minimapZoomDefault;
+  // 플레이어 주변만 잘라서 보여 준다 (배율이 클수록 좁게 = 가깝게)
   const pxT = state.player.x / S / scale, pyT = state.player.y / S / scale;
-  const half = size / 2 / 2; // 2배 확대
+  const half = size / 2 / zoom;
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, size, size);
@@ -107,18 +110,28 @@ function drawMinimap(ctx, state, H, W) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(mm, pxT - half, pyT - half, half * 2, half * 2, x, y, size, size);
 
+  const cxp = x + size / 2, cyp = y + size / 2;
   // 목적지 방향 표시
-  const gx = state.goalPoint.x / S / scale, gy = state.goalPoint.y / S / scale;
+  const wp = state.waypoint;
+  const gx = wp ? wp.tx / scale : pxT, gy = wp ? wp.ty / scale : pyT;
   const dx = gx - pxT, dy = gy - pyT;
   const inView = Math.abs(dx) < half && Math.abs(dy) < half;
-  const cxp = x + size / 2, cyp = y + size / 2;
   ctx.fillStyle = UI_COLOR.accent;
   if (inView) {
-    ctx.fillRect(cxp + dx * 2 - 3, cyp + dy * 2 - 3, 6, 6);
+    ctx.fillRect(cxp + dx * zoom - 3, cyp + dy * zoom - 3, 6, 6);
   } else {
     const ang = Math.atan2(dy, dx);
     ctx.fillRect(cxp + Math.cos(ang) * (size / 2 - 8) - 3,
       cyp + Math.sin(ang) * (size / 2 - 8) - 3, 6, 6);
+  }
+  // 자동 이동 중이면 남은 길을 점으로 흘려 준다
+  if (state.autoPath) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    for (let i = state.autoPath.index; i < state.autoPath.tiles.length; i += 6) {
+      const t = state.autoPath.tiles[i];
+      ctx.fillRect(cxp + (t.x / scale - pxT) * zoom - 1,
+        cyp + (t.y / scale - pyT) * zoom - 1, 2, 2);
+    }
   }
   // 나
   ctx.fillStyle = UI_COLOR.player;
@@ -127,8 +140,28 @@ function drawMinimap(ctx, state, H, W) {
 
   ctx.strokeStyle = UI_COLOR.minimapEdge;
   ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-  drawText(ctx, state.isTouch ? '눌러서 전체지도' : '클릭 · Tab 전체지도',
-    x + size / 2, y + size + 14,
+
+  // 축척 버튼 (＋ 가깝게 · － 멀리). 눌린 자리를 남겨 두고 main.js 가 받는다.
+  const bs = state.isTouch ? 26 : 20;
+  const bx = x + size - bs - 3, byTop = y + 3;
+  state.minimapZoomRects = {
+    in: { x: bx, y: byTop, w: bs, h: bs },
+    out: { x: bx, y: byTop + bs + 4, w: bs, h: bs },
+  };
+  for (const [label, r] of [['+', state.minimapZoomRects.in], ['−', state.minimapZoomRects.out]]) {
+    ctx.fillStyle = 'rgba(16, 15, 20, 0.72)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = UI_COLOR.panelEdge;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    drawText(ctx, label, r.x + r.w / 2, r.y + r.h / 2 + 5,
+      { size: 14, align: 'center', color: UI_COLOR.text });
+  }
+
+  // 지금 보고 있는 범위 (축척) — 지도 밑에 한 줄로
+  const spanM = (size / zoom) * scale * GEO.metersPerTile;
+  const spanText = spanM >= 1000 ? `${(spanM / 1000).toFixed(1)}km` : `${Math.round(spanM / 10) * 10}m`;
+  drawText(ctx, `가로 ${spanText} · ${state.isTouch ? '눌러 지도' : '클릭 지도 · [ ] 축척'}`,
+    x + size / 2, y + size + 15,
     { size: 10, align: 'center', color: UI_COLOR.textDim });
 }
 
@@ -141,7 +174,10 @@ function drawHelp(ctx, W, H, touch) {
     ['달리기', '많이 밀거나 달리기 버튼'],
     ['들어가기 · 만지기 · 말 걸기', '만지기 버튼'],
     ['층 이동', '계단·엘리베이터 위에서 만지기'],
-    ['지도', '지도 버튼 (지도를 눌러 목적지 표시)'],
+    ['전체지도 열기', '오른쪽 위 미니맵 누르기 · 지도 버튼'],
+    ['자동 이동', '지도에서 갈 곳 누르기'],
+    ['자동 이동 멈추기', '조이스틱을 한 번 끌기'],
+    ['미니맵 축척', '미니맵의 ＋ － 버튼'],
     ['전체화면', '오른쪽 아래 ⛶'],
     ['닫기 · 다시 시작', '화면 아무 곳이나 누르기'],
   ] : [
@@ -152,6 +188,9 @@ function drawHelp(ctx, W, H, touch) {
     ['전체화면', 'F'],
     ['미니맵', 'M'],
     ['전체지도', 'Tab'],
+    ['자동 이동', '전체지도나 미니맵에서 갈 곳 클릭'],
+    ['자동 이동 멈추기', '방향키를 누르거나 Space'],
+    ['미니맵 축척', '[ 멀리 · ] 가깝게'],
     ['엔딩 목록', 'L'],
     ['목적지 되돌리기', 'G'],
     ['확대 · 축소', '+ · -'],

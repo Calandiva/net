@@ -31,16 +31,24 @@ export class TouchControls {
 
   get running() { return this.runLock || this.pushed > RUN_THRESHOLD; }
 
-  // 화면 크기에 맞춰 버튼 자리를 잡는다
+  // 화면 크기에 맞춰 버튼 자리를 잡는다.
+  // 반지름을 더한 값보다 중심 사이가 늘 멀도록 잡아 서로 겹치지 않게 한다.
   layout(W, H) {
-    const m = 22, gap = 12;
-    const bx = W - m - BUTTON;
-    const by = H - m - BUTTON;
+    const m = 20, gap = 14;
+    const rBig = BUTTON * 0.78;      // 만지기
+    const rSmall = BUTTON * 0.52;    // 달리기 · 지도
+    const cx = W - m - rBig;         // 만지기 버튼 중심
+    const cy = H - m - rBig - 8;
+    // 작은 버튼은 만지기 왼쪽 위에 사선으로 — 큰 버튼과 겹치지 않는 거리
+    const d = rBig + rSmall + gap;
     this.buttons = [
-      { id: 'interact', label: '만지기', x: bx - BUTTON - gap, y: by - 20, r: BUTTON * 0.78 },
-      { id: 'run', label: '달리기', x: bx, y: by - BUTTON - gap - 20, r: BUTTON * 0.55 },
-      { id: 'worldmap', label: '지도', x: bx, y: by - 20, r: BUTTON * 0.55 },
-      { id: 'help', label: '?', x: m + 34, y: m + 34, r: 26 },
+      { id: 'interact', label: '만지기', x: cx, y: cy, r: rBig },
+      { id: 'run', label: '달리기', x: cx - d * 0.42, y: cy - d * 0.9, r: rSmall },
+      { id: 'worldmap', label: '지도', x: cx - d * 0.96, y: cy - d * 0.28, r: rSmall },
+      // 도움말은 왼쪽 위 시계판(높이 54) 아래에 둔다
+      { id: 'help', label: '?', x: m + 22, y: 12 + 54 + 12 + 22, r: 24 },
+      // 전체화면은 오른쪽, 미니맵 아래 (DOM 버튼은 터치에서 감춘다 — 만지기와 겹쳤다)
+      { id: 'fs', label: '⛶', x: W - m - 22, y: 12 + 54 + 12 + 130, r: 24 },
     ];
   }
 
@@ -60,6 +68,7 @@ export class TouchControls {
       else if (button.id === 'run') this.runLock = !this.runLock;
       else if (button.id === 'worldmap') this.hooks.worldmap();
       else if (button.id === 'help') this.hooks.help();
+      else if (button.id === 'fs') this.hooks.fullscreen();
       return true;
     }
     if (x < W * 0.55 && !this.stick) {
@@ -119,7 +128,7 @@ export class TouchControls {
       ctx.fillStyle = UI_COLOR.text;
       circle(ctx, 96, H - 96, STICK_RADIUS * 0.66, false, true);
       ctx.globalAlpha = 0.5;
-      drawText(ctx, '왼쪽을 끌어 이동', 96, H - 22,
+      drawText(ctx, '왼쪽을 끌어 이동 · 달리려면 끝까지', 96, H - 22,
         { size: 11, align: 'center', color: UI_COLOR.textDim, shadow: false });
     }
 

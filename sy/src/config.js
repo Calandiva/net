@@ -102,6 +102,9 @@ export const PLAYER = {
   drawWidth: 14,
   drawHeight: 20,
   animFps: 7,
+  stuckSeconds: 1.4,     // 움직이려는데 이만큼 제자리면 갇힌 것으로 본다
+  stuckEpsilon: 18,      // 제자리 판정 기준(초당 픽셀) — 걷는 속도보다 한참 느리면 못 가는 것
+  safeArea: 80,          // 갇힘 판정 — 이만큼(타일) 돌아다닐 수 있어야 안전하다
   startPlace: '구래역',  // 이 건물 출입구 앞에서 시작한다
   startLon: 126.6285,    // 그 건물을 못 찾았을 때 쓰는 좌표
   startLat: 37.6437,
@@ -139,6 +142,7 @@ export const BUILDING = {
   wallHeightMax: 46,
   doorProbeRadius: 40,   // 출입구 방향을 정할 때 도로를 찾는 반경(타일)
   enterRadius: 27,       // 출입구에 이만큼(픽셀) 다가가면 진입 가능
+  doorApron: 2,          // 문 앞 이만큼(타일)은 소품 없이 비운다 (갇힘 방지)
 };
 
 // 건물 종류. 색·실내 구성·이름 규칙이 여기에 묶인다.
@@ -223,7 +227,27 @@ export const UI = {
   hudSize: 12,
   minimapSize: 148,   // 미니맵 한 변(px)
   minimapScale: 10,   // 미니맵 픽셀 1개가 담는 타일 수
+  minimapZooms: [1, 2, 4, 8],  // 미니맵 확대 배율 (축척 조절)
+  minimapZoomDefault: 2,       // 처음 배율 — minimapZooms 의 값
   toastSeconds: 2.6,
+};
+
+// ── 자동 이동(길찾기) ───────────────────────────────────────────────────
+// 지도를 눌러 목적지를 찍으면 이만큼씩 끊어서 걸어간다.
+export const PATHING = {
+  window: 90,            // 한 번에 살펴보는 반경(타일)
+  maxNodes: 12000,       // A* 가 펼쳐 보는 칸 수 상한 (프레임이 끊기지 않게)
+  heuristicWeight: 1.15, // 1보다 크면 조금 빨리, 조금 덜 최적으로 찾는다
+  arriveTiles: 1.2,      // 목적지에 이만큼 가까우면 도착
+  stepTiles: 0.42,       // 다음 지점에 이만큼 가까우면 그 다음으로
+  replanSeconds: 2.2,    // 이 시간마다 길을 다시 찾는다
+  stuckSeconds: 1.2,     // 자동 이동 중 제자리면 다시 찾는다
+  maxRetries: 4,         // 이만큼 다시 찾아도 못 가면 포기한다
+  groundCost: {          // 지면별 가산 비용 (길로 다니게)
+    0: 1.2,              // 논밭
+    1: 0.5,              // 풀밭
+    8: 0.8,              // 모래
+  },
 };
 
 // ── 조작 ────────────────────────────────────────────────────────────────
@@ -240,6 +264,8 @@ export const KEYS = {
   help: ['KeyH', 'Slash'],
   zoomIn: ['Equal', 'NumpadAdd'],
   zoomOut: ['Minus', 'NumpadSubtract'],
+  minimapIn: ['BracketRight', 'Period'],    // 미니맵 축척 — 가깝게
+  minimapOut: ['BracketLeft', 'Comma'],     // 미니맵 축척 — 멀리
 };
 
 // ── 게임 규칙 ───────────────────────────────────────────────────────────

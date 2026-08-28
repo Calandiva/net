@@ -2,18 +2,29 @@
 // 5백만 칸짜리 지도를 한 번에 만들지 않는 이유가 이것이다 (로딩 최소화).
 
 import {
-  SEED, TILE, GROUND, GROUND_SOLID, PROP, PROP_SOLID, PROP_RULES, GEO,
+  SEED, TILE, GROUND, GROUND_SOLID, PROP, PROP_SOLID, PROP_RULES, GEO, BUILDING,
 } from '../config.js';
 import { WORLD_W, WORLD_H, projectPath, pathBounds, pointInPath, distToSegment, metersToTiles }
   from './geo.js';
 import { GridIndex } from './spatial.js';
+import { doorOutside } from './buildings.js';
 import { noiseAt, fbm, seedOf } from '../util/rng.js';
 import { MAP_KIND } from '../render/palette.js';
 import { REGIONS, WATERWAYS } from './data/regions.js';
 
 const CH = TILE.chunk;
+const NEIGHBORS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const CROSSWALK_SPACING = 46;  // 횡단보도 간격 (타일)
 const CROSSWALK_HALF = 1.6;    // 횡단보도 폭의 절반 (타일)
+
+// 그 칸이 (자기 자신 말고) 다른 건물에 덮여 있는가
+function buildingCovers(list, x, y, self) {
+  for (const b of list) {
+    if (b === self) continue;
+    if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return true;
+  }
+  return false;
+}
 
 const groundSolid = new Set(GROUND_SOLID);
 const propSolid = new Set(PROP_SOLID);
@@ -268,6 +279,24 @@ export class WorldMap {
       if (dx >= 0 && dx < CH && dy >= 0 && dy < CH) solid[dy * CH + dx] = 0;
     }
 
+    // 6-1) 문 앞은 비워 둔다 — 나무나 화단이 문을 막으면 안에 갇힌다.
+    //      건물 루프가 끝난 뒤에 해야 나중에 놓인 건물에 다시 덮이지 않는다.
+    const nearby = this.buildings.index.query(ox - 4, oy - 4, ox + CH + 4, oy + CH + 4);
+    for (const b of nearby) {
+      const out = doorOutside(b);
+      for (let step = 0; step < BUILDING.doorApron; step++) {
+        const ax = out.x + (b.door.dir === 'E' ? step : b.door.dir === 'W' ? -step : 0);
+        const ay = out.y + (b.door.dir === 'S' ? step : b.door.dir === 'N' ? -step : 0);
+        const px = ax - ox, py = ay - oy;
+        if (px < 0 || px >= CH || py < 0 || py >= CH) continue;
+        const i = py * CH + px;
+        // 다른 건물 안이면 손대지 않는다 (그런 문은 buildings.js 가 옮긴다)
+        if (buildingCovers(nearby, ax, ay, b)) break;
+        prop[i] = PROP.NONE;
+        if (groundSolid.has(ground[i])) ground[i] = GROUND.SIDEWALK;
+      }
+    }
+
     // 7) 충돌 정리
     for (let i = 0; i < n; i++) {
       if (groundSolid.has(ground[i]) || propSolid.has(prop[i])) solid[i] = 1;
@@ -297,6 +326,44 @@ export class WorldMap {
     if (!this.inBounds(tx, ty)) return true;   // 지도 밖은 벽
     const c = this.chunk(Math.floor(tx / CH), Math.floor(ty / CH));
     return c.solid[(ty - c.cy * CH) * CH + (tx - c.cx * CH)] === 1;
+  }
+
+  // 여기서 걸어서 갈 수 있는 칸이 몇 개인가 (limit 까지만 센다).
+  // 갇혔는지 알아보는 용도라 넓으면 바로 끊는다.
+  openArea(tx, ty, limit) {
+    if (this.isSolid(tx, ty)) return 0;
+    const seen = new Set([ty * 100000 + tx]);
+    const queue = [tx, ty];
+    let count = 0;
+    for (let i = 0; i < queue.length && count < limit; i += 2) {
+      const x = queue[i], y = queue[i + 1];
+      count++;
+      for (const [dx, dy] of NEIGHBORS) {
+        const nx = x + dx, ny = y + dy;
+        const key = ny * 100000 + nx;
+        if (seen.has(key) || this.isSolid(nx, ny)) continue;
+        seen.add(key);
+        queue.push(nx, ny);
+      }
+    }
+    return count;
+  }
+
+  // 갇히지 않을 만큼 넓은 자리를 가까운 데서 찾는다.
+  // (문 앞이 막혔거나 소품에 끼었을 때 여기로 옮긴다)
+  openSpot(tx, ty, need = 60, radius = 24) {
+    if (this.openArea(tx, ty, need) >= need) return { x: tx, y: ty };
+    for (let r = 1; r <= radius; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          const x = tx + dx, y = ty + dy;
+          if (this.isSolid(x, y)) continue;
+          if (this.openArea(x, y, need) >= need) return { x, y };
+        }
+      }
+    }
+    return { x: tx, y: ty };
   }
 
   groundAt(tx, ty) {

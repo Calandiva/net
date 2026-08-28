@@ -35,6 +35,7 @@ MODULES = [
     'world/blocks.js',
     'world/buildings.js',
     'world/map.js',
+    'world/pathing.js',
     'world/interior.js',
     'world/indoor.js',
     'world/actors.js',

@@ -95,6 +95,7 @@ function collectSpots(interior) {
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       if (tiles[y * w + x] !== IN.FLOOR) continue;
+      if (!interior.canReach(x, y)) continue;   // 못 가는 자리에는 세우지 않는다
       const idx = interior.roomIndexAt(x, y);
       const spot = { x, y, room: idx };
       if (near(x, y, IN.COUNTER)) spots.counter.push(spot);

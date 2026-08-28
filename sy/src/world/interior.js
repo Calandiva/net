@@ -114,17 +114,51 @@ export function makeInterior(b, floor) {
     if (!room.door) room.seen = true;
   });
 
-  // 상호작용 물건을 놓을 자리 — 벽에 붙은 빈 바닥
+  // 들어와서 실제로 걸어 닿을 수 있는 칸 (닫힌 문은 열 수 있으니 지나갈 수 있다고 본다).
+  // 승강장 선로 건너편처럼 못 가는 자리에 물건을 놓으면 지하철을 못 탄다 — 그걸 막는다.
+  const reach = new Uint8Array(w * h);
+  {
+    const queue = [spawn.x, spawn.y];
+    reach[at(spawn.x, spawn.y)] = 1;
+    for (let i = 0; i < queue.length; i += 2) {
+      const x = queue[i], y = queue[i + 1];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const k = at(nx, ny);
+        if (reach[k]) continue;
+        const t = tiles[k];
+        if (solidSet.has(t) && t !== IN.DOOR) continue;   // 문은 열면 된다
+        reach[k] = 1;
+        queue.push(nx, ny);
+      }
+    }
+  }
+
+  // 상호작용 물건을 놓을 자리 — 벽에 붙은, 걸어갈 수 있는 빈 바닥
   const slots = [];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
-      if (tiles[at(x, y)] !== IN.FLOOR) continue;
+      if (tiles[at(x, y)] !== IN.FLOOR || !reach[at(x, y)]) continue;
       if (get(x, y - 1) === IN.WALL || get(x, y - 1) === IN.WINDOW) slots.push({ x, y });
+    }
+  }
+  // 벽에 붙은 자리가 모자라면 걸어갈 수 있는 아무 빈 바닥이나 쓴다
+  if (slots.length < 8) {
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (tiles[at(x, y)] === IN.FLOOR && reach[at(x, y)]) slots.push({ x, y });
+      }
     }
   }
 
   return {
     building: b, floor, w, h, tiles, rooms, spawn, exit, stairs, slots, layout, roomAt,
+    // 문을 열면 걸어 닿을 수 있는 칸인가 (사람·물건을 여기에만 놓는다)
+    canReach(x, y) {
+      if (x < 0 || y < 0 || x >= w || y >= h) return false;
+      return reach[y * w + x] === 1;
+    },
     // 이 칸이 지금 보이는가 (문을 안 연 방은 어둡다)
     visibleAt(x, y) {
       if (x < 0 || y < 0 || x >= w || y >= h) return false;
